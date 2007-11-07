@@ -1,17 +1,16 @@
-void compute_bounds(int* global_start, int* global_stop)
+void compute_bounds(int *start, int *stop)
 {
-	int start = *global_start;
-	int stop = *global_stop;
-	int slice = (stop - start) / SPE_threads;
-	int rem = (stop - start) % SPE_threads;
+	int total_chunks = (*stop - *start) / buff_size;
+	int thread_chunks = total_chunks / SPE_threads;
+	int rem = (*stop - *start) % SPE_threads; 
 
 	if (SPE_id == SPE_threads - 1) {
-		*global_start = start + (SPE_id * slice);
-		*global_stop = start + ((SPE_id + 1) * slice) + rem;
+		*start = *start + (SPE_id * thread_chunks * buff_size);
+		*stop = *start + ((thread_chunks + rem) * buff_size);
 	}
 	else {
-		*global_start = start + (SPE_id * slice);
-		*global_stop = start + ((SPE_id + 1) * slice);
+		*start = *start + (SPE_id * thread_chunks * buff_size);
+		*stop = *start + (thread_chunks * buff_size);
 	}
 }
 

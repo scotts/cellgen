@@ -48,7 +48,7 @@ const string mmgp_reduction		= "MMGP_reduction(VAR, " + loop_hook + ");\n";
 const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
 const string program_name_hook		= "PROGRAM_NAME";
-const string buffer_hook		= "BUFFER_USE";
+const string buffer_hook		= "BUFFER_SIZE";
 
 #include "c_grammar.h"
 #include "parse_tree.h"
@@ -132,7 +132,7 @@ struct make_buffer_declarations {
 			<< "mfc_get(" 
 				<< sv->buff_name() << "[" << sv->index_name() << "], " 
 				<< sv->name() << " + SPE_start,"
-				<< "sizeof(" << sv->buff_type() << ")*" << buff_size << ", "
+				<< "sizeof(" << sv->buff_type() << ")*" << buff_size.actual() << ", "
 				<< sv->index_name() << ", 0, 0); \n" 
 			<< sv->orig_name() << " = " << sv->buff_name() << "[" << sv->index_name() << "];" << endl;
 	}
@@ -144,11 +144,11 @@ struct i_dma {
 	void operator()(const shared_variable* sv)
 	{
 		str = str +
-			"if(!(__i__ %" + buff_size + ")) {\n" +
+			"if(!(__i__ %" + buff_size.actual() + ")) {\n" +
 				"__dblbf = !__dblbf; \n" + 
 				"mfc_get(" + 
 				sv->buff_name() + "[__dblbf], " +
-				sv->name() + buff_size + ", " +
+				sv->name() + buff_size.actual() + ", " +
 				"__dblbf, 0, 0); \n" +
 				"MMGP_SPE_dma_wait(!__dblbf); \n" +
 				sv->orig_name() + " = " + sv->buff_name() + "[!__dblbf]; \n" +
@@ -752,7 +752,8 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& main_pro
 	ofstream file(name.c_str());
 	open_check(file, name);
 
-	file << spe_dec.str();
+	string str = regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
+	file << str;
 	print_buffers(file, regions);	
 
 	sslist_t cases;

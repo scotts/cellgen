@@ -9,8 +9,6 @@ using namespace std;
 #include <boost/spirit/symbols.hpp>
 using namespace boost::spirit;
 
-const string buff_size = "16";
-
 class c_variable {
 	string _type;
 	string _name;
@@ -34,6 +32,21 @@ public:
 		return ss.str();
 	}
 };
+
+class const_c_variable: public c_variable {
+public:
+	const_c_variable(const string& t, const string& l, const string& a):
+		c_variable("const " + t, l, a)
+		{}
+	virtual string declare() const
+	{
+		stringstream ss;
+		ss << type() << " " << name() << " = " << actual() << ";";
+		return ss.str();
+	}
+};
+
+const const_c_variable buff_size("int", "buff_size", "16");
 
 class shared_variable: public c_variable {
 	string _addr;
@@ -78,7 +91,7 @@ public:
 	{
 		stringstream ss;
 		ss	<< buff_type() << " " << orig_name() << _buff 
-			<< "[2][" + buff_size + "] __attribute__((aligned(128)))";
+			<< "[2][" + buff_size.actual() + "] __attribute__((aligned(128)))";
 		return ss.str();
 	}
 
@@ -92,6 +105,7 @@ typedef list<const c_variable*>		cvarlist_t;
 typedef list<const shared_variable*>	sharedlist_t;
 typedef symbols<const c_variable*>	symtbl_t;
 typedef symbols<const shared_variable*> sharedtbl_t;
+
 
 #endif // VARIABLE_H
 

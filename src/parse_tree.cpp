@@ -129,11 +129,11 @@ void expression_statement(tree_node_t& node, const string indent, const sharedtb
 struct postfix_op {
 	const string indent;
 	const sharedtbl_t& shared;
-	symtbl_t& cond;
+	const symtbl_t& cond;
 	bool found_shared;
 	string shared_ident;
 	string cond_ident;
-	postfix_op(const string i, const sharedtbl_t& s, symtbl_t& c):
+	postfix_op(const string i, const sharedtbl_t& s, const symtbl_t& c):
 		indent(i), shared(s), cond(c), 
 		found_shared(false)
 		{}
@@ -144,7 +144,7 @@ struct postfix_op {
 			if (found_shared) {
 				if (find(cond, ident.c_str())) {
 					cond_ident = ident;
-					node.value.value(ident + " % " + buff_size);
+					node.value.value(ident + " % " + buff_size.actual());
 				}
 			}
 			else {
@@ -163,10 +163,10 @@ struct postfix_op {
 struct exprstmnt_op {
 	const string indent;
 	const sharedtbl_t& shared;
-	symtbl_t& cond;
-	string shared_ident;
+	const symtbl_t& cond;
+	list<string> shared_idents;
 	string cond_ident;
-	exprstmnt_op(const string i, const sharedtbl_t& s, symtbl_t& c):
+	exprstmnt_op(const string i, const sharedtbl_t& s, const symtbl_t& c):
 		indent(i), shared(s), cond(c)
 		{}
 	void operator()(tree_node_t& node)
@@ -174,8 +174,11 @@ struct exprstmnt_op {
 		if (node.value.id() == ids::postfix_expression) {
 			postfix_op p(indent + "  ", shared, cond);
 			fmap(&p, node.children);
-			shared_ident = p.shared_ident;
-			cond_ident = p.cond_ident;
+
+			if (p.found_shared) {
+				shared_idents.push_back(p.shared_ident);
+				cond_ident = p.cond_ident; // not necessary to record every time, not worth coding around
+			}
 		}
 		else {
 			fmap(this, node.children);
@@ -183,10 +186,41 @@ struct exprstmnt_op {
 	}
 };
 
+struct gen_wait {
+	tree_node_t& node;
+	map<const shared_variable*, bool>& first;
+	const sharedtbl_t& shared;
+	const string& cond_ident;
+	gen_wait(tree_node_t& n, map<const shared_variable*, bool>& f,
+			const sharedtbl_t& s, const string& c): 
+		node(n), first(f), shared(s), cond_ident(c) 
+		{}
+	void operator()(const string& shared_ident)
+	{
+		const shared_variable* sv = *(find(shared, shared_ident.c_str()));
+		if (!first[sv]) {
+			string use(node.value.begin(), node.value.end());
+			use += node.value.value();
+			node.value.value(
+					"if (!(" + cond_ident + "%" + buff_size.actual() + ")) {\n" +
+						sv->index_name() + "= !" + sv->index_name() + 
+						";\n mfc_get("
+							+ sv->buff_name() + "[" + sv->index_name() + "]," 
+							+ sv->name() + "+(" + cond_ident + "+" + buff_size.actual() + ")," 
+							+ "sizeof(" + sv->buff_type() + ") *" + buff_size.actual() + ","
+							+ sv->index_name() + ", 0, 0);\n"
+						+ sv->orig_name() + "=" + sv->buff_name() + "[!" + sv->index_name() + "];\n"
+						+ "MMGP_SPE_dma_wait(!" + sv->index_name() + ");\n }\n"
+					+ use);
+			first[sv] = true;
+		}
+	}
+};
+
 struct for_compound_op {
 	const string indent;
 	const sharedtbl_t& shared; 
-	symtbl_t& cond;
+	const symtbl_t& cond;
 	map<const shared_variable*, bool> first;
 	for_compound_op(const string i, const sharedtbl_t& s, symtbl_t& c): 
 		indent(i), shared(s), cond(c)
@@ -196,22 +230,7 @@ struct for_compound_op {
 		if (node.value.id() == ids::expression_statement) {
 			exprstmnt_op e(indent + "  ", shared, cond);
 			fmap(&e, node.children);
-			if (e.shared_ident != "") {
-				const shared_variable* sv = *(find(shared, e.shared_ident.c_str()));
-				if (!first[sv]) {
-					string use(node.value.begin(), node.value.end());
-					node.value.value(
-							sv->index_name() + "= !" + sv->index_name() + 
-							";\n mfc_get("
-								+ sv->buff_name() + "[" + sv->index_name() + "]," 
-								+ sv->name() + "+" + e.cond_ident + "+" + buff_size + "," 
-								+ "sizeof(" + sv->buff_type() + ") *" + buff_size + ","
-								+ sv->index_name() + ", 0, 0);\n"
-							+ sv->orig_name() + "=" + sv->buff_name() + "[!" + sv->index_name() + "];\n"
-							+ use);
-					first[sv] = true;
-				}
-			}
+			fmap(gen_wait(node, first, shared, e.cond_ident), e.shared_idents);
 		}
 		else {
 			fmap(this, node.children);

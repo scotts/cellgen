@@ -5,5 +5,5 @@
 
 #define TERMINATE 0
 
-int __dblbf = 0;
+BUFFER_SIZE
 
