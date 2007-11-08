@@ -590,7 +590,7 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 		}
 	}
 
-	//fmap(astout(0, ""), p->trees);
+	fmap(astout(0, ""), p->trees);
 }
 
 void parse_spe(stringstream& declarations, 
@@ -739,11 +739,11 @@ void print_pass_struct(spelist_t& regions)
 	stringstream pass;
 	parse_generic(pass, pass_struct_iname);
 
-	string str = pass.str();
-	fmap(make_pass_struct(str), regions);
-	string final_pass = regex_replace(str, regex(pass_struct_hook), "");
+	string p = pass.str();
+	fmap(make_pass_struct(p), regions);
+	string final_p = regex_replace(p, regex(pass_struct_hook), "");
 
-	out << final_pass;
+	out << final_p;
 }
 
 void print_spe(const string& name, stringstream& spe_dec, stringstream& main_pro, 
@@ -752,8 +752,7 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& main_pro
 	ofstream file(name.c_str());
 	open_check(file, name);
 
-	string str = regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-	file << str;
+	file << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
 	print_buffers(file, regions);	
 
 	sslist_t cases;
