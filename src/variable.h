@@ -101,10 +101,10 @@ public:
 	}
 };
 
-typedef list<const c_variable*>		cvarlist_t;
-typedef list<const shared_variable*>	sharedlist_t;
-typedef symbols<const c_variable*>	symtbl_t;
-typedef symbols<const shared_variable*> sharedtbl_t;
+typedef list<const c_variable*>			cvarlist_t;
+typedef list<const shared_variable*>		sharedlist_t;
+typedef map<string, const c_variable*>		symtbl_t;
+typedef map<string, const shared_variable*>	sharedtbl_t;
 
 
 #endif // VARIABLE_H

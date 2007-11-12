@@ -138,24 +138,6 @@ struct make_buffer_declarations {
 	}
 };
 
-struct i_dma {
-	string& str;
-	i_dma(string& s): str(s) {}
-	void operator()(const shared_variable* sv)
-	{
-		str = str +
-			"if(!(__i__ %" + buff_size.actual() + ")) {\n" +
-				"__dblbf = !__dblbf; \n" + 
-				"mfc_get(" + 
-				sv->buff_name() + "[__dblbf], " +
-				sv->name() + buff_size.actual() + ", " +
-				"__dblbf, 0, 0); \n" +
-				"MMGP_SPE_dma_wait(!__dblbf); \n" +
-				sv->orig_name() + " = " + sv->buff_name() + "[!__dblbf]; \n" +
-			"} \n";
-	}
-};
-
 struct add_declarations {
 	const string& declarations;
 	add_declarations(const string& d): declarations(d) {}
@@ -228,9 +210,6 @@ void print_loops(ostream& out, spelist_t& regions, sslist_t& cases)
 		fmap(add_declarations(decs.str()), (*r)->ast()->children);
 		fmap(codeout(out), (*r)->ast()->children);
 
-		string temp;
-		fmap(i_dma(temp), (*r)->shared());
-
 		*case_ss << "); " << mmgp_spe_stop << "break;" << endl;
 		cases.push_back(case_ss);
 	}
@@ -244,9 +223,9 @@ void print_cases(ofstream& out, sslist_t& list)
 template <class T>
 struct vars_op {
 	list<const T*>*& vars;
-	const symbols<const T*>& tbl;
+	mutable map<string, const T*>& tbl;
 
-	vars_op(list<const T*>*& v, const symbols<const T*>& t): vars(v), tbl(t)
+	vars_op(list<const T*>*& v, map<string, const T*>& t): vars(v), tbl(t)
 	{
 		vars = new list<const T*>;	
 	}
@@ -263,7 +242,7 @@ struct vars_op {
 
 		const T* cv = new T(type, local, actual);
 		vars->push_back(cv);
-		tbl.add(local.c_str(), cv);
+		tbl[local] = cv;
 	}
 
 	list<const T*>* pickup()
@@ -359,7 +338,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	cvarlist_t*	priv_vars;
 	sharedlist_t*	shared_vars;
 
-	cellgen_grammar(sslist_t& ppe, spelist_t& regions, const sharedtbl_t& s, const symtbl_t& p):
+	cellgen_grammar(sslist_t& ppe, spelist_t& regions, sharedtbl_t& s, symtbl_t& p):
 		ppe_op(ppe),
 		loop_op(loop_pickup),
 		start_op(priv_vars, "SPE_start"),
@@ -560,7 +539,7 @@ struct astout {
 };
 
 void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regions, 
-		const sharedtbl_t& shared_tbl, const symtbl_t& private_tbl)
+		sharedtbl_t& shared_tbl, symtbl_t& private_tbl)
 {
 	fileiter_t first(src_name);
 	if (!first) {
@@ -590,7 +569,7 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 		}
 	}
 
-	fmap(astout(0, ""), p->trees);
+	//fmap(astout(0, ""), p->trees);
 }
 
 void parse_spe(stringstream& declarations, 

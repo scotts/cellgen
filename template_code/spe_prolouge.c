@@ -6,4 +6,5 @@
 #define TERMINATE 0
 
 BUFFER_SIZE
+const int out_tag = 2;
 

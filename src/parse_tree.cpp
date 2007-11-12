@@ -34,88 +34,12 @@ void for_each_rule(tree_node_t& node, F f)
 	}
 }
 
-void identifier(tree_node_t& node, const sharedtbl_t& shared)
-{
-	string ident(node.value.begin(), node.value.end());
-	if (node.value.id() == ids::identifier) {
-		//cout << ident;
-	}
-	else {
-		cerr << "error: ast processing, '" << ident << "' is not an identifier. " << endl;
-	}
-}
-
-void declaration_list(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void declaration(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void array_index(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void argument_expression_list(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void postfix_expression_helper(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void postfix_expression(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void statement_list(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void statement(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void relational_expression(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void assignment_expression(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void expression_helper(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void expression(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
-void expression_statement(tree_node_t& node, const sharedtbl_t& shared)
-{
-	fmap(call_rule(shared), node.children);
-}
-
 struct postfix_op {
 	const sharedtbl_t& shared;
 	const symtbl_t& cond;
 	bool found_shared;
 	string shared_ident;
-	string cond_ident;
+	string itervar;
 	postfix_op(const sharedtbl_t& s, const symtbl_t& c):
 		shared(s), cond(c), 
 		found_shared(false)
@@ -125,13 +49,13 @@ struct postfix_op {
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
 			if (found_shared) {
-				if (find(cond, ident.c_str())) {
-					cond_ident = ident;
-					node.value.value(ident + " % " + buff_size.actual());
+				if (cond.find(ident) != cond.end()) {
+					itervar = ident;
+					node.value.value("(" + ident + " % " + buff_size.actual() + ")");
 				}
 			}
 			else {
-				if (find(shared, ident.c_str())) {
+				if (shared.find(ident) != shared.end()) {
 					shared_ident = ident;
 					found_shared = true;
 				}
@@ -153,8 +77,8 @@ struct lhs_op {
 	{
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
-			if (find(shared, ident.c_str())) {
-				out.add(node.value.begin(), node.value.end());
+			if (shared.find(ident) != shared.end()) {
+				out[ident] = (shared.find(ident))->second;
 			}
 		}
 		else {
@@ -165,24 +89,16 @@ struct lhs_op {
 
 bool find_equals(tree_node_t& node)
 {
-	/*
-	 * TODO: Uh, IT.
-	if (node.value.id() == ASSIGNMENT) {
-		return true;
-	}
-	else {
-		return false;
-	}
-	*/
-	return false;
+	string str(node.value.begin(), node.value.end());
+	return str.find("=") != string::npos;
 }
 
 struct exprstmnt_op {
 	const sharedtbl_t& shared;
 	const symtbl_t& cond;
-	list<string> shared_idents;
-	string cond_ident;
 	sharedtbl_t& out;
+	list<string> shared_idents;
+	string itervar;
 	exprstmnt_op(const sharedtbl_t& s, const symtbl_t& c, sharedtbl_t& o):
 		shared(s), cond(c), out(o)
 		{}
@@ -204,7 +120,7 @@ struct exprstmnt_op {
 
 			if (p.found_shared) {
 				shared_idents.push_back(p.shared_ident);
-				cond_ident = p.cond_ident; // not necessary to record every time, not worth coding around
+				itervar = p.itervar;
 			}
 		}
 
@@ -216,23 +132,23 @@ struct gen_wait {
 	tree_node_t& node;
 	map<const shared_variable*, bool>& first;
 	const sharedtbl_t& shared;
-	const string& cond_ident;
+	const string& itervar;
 	gen_wait(tree_node_t& n, map<const shared_variable*, bool>& f,
-			const sharedtbl_t& s, const string& c): 
-		node(n), first(f), shared(s), cond_ident(c) 
+			const sharedtbl_t& s, const string& i): 
+		node(n), first(f), shared(s), itervar(i) 
 		{}
 	void operator()(const string& shared_ident)
 	{
-		const shared_variable* sv = *(find(shared, shared_ident.c_str()));
+		const shared_variable* sv = (shared.find(shared_ident))->second;
 		if (!first[sv]) {
 			string use(node.value.begin(), node.value.end());
 			use += node.value.value();
 			node.value.value(
-					"if (!(" + cond_ident + "%" + buff_size.actual() + ")) {\n" +
+					"if (!(" + itervar + "%" + buff_size.actual() + ")) {\n" +
 						sv->index_name() + "= !" + sv->index_name() + 
 						";\n mfc_get("
 							+ sv->buff_name() + "[" + sv->index_name() + "]," 
-							+ sv->name() + "+(" + cond_ident + "+" + buff_size.actual() + ")," 
+							+ sv->name() + "+(" + itervar + "+" + buff_size.actual() + ")," 
 							+ "sizeof(" + sv->buff_type() + ") *" + buff_size.actual() + ","
 							+ sv->index_name() + ", 0, 0);\n"
 						+ sv->orig_name() + "=" + sv->buff_name() + "[!" + sv->index_name() + "];\n"
@@ -246,21 +162,38 @@ struct gen_wait {
 struct for_compound_op {
 	const sharedtbl_t& shared; 
 	const symtbl_t& cond;
+	sharedtbl_t& out;
 	map<const shared_variable*, bool> first;
-	sharedtbl_t out;
-	for_compound_op(const sharedtbl_t& s, symtbl_t& c): 
-		shared(s), cond(c)
+	string itervar;
+	for_compound_op(const sharedtbl_t& s, symtbl_t& c, sharedtbl_t& o): 
+		shared(s), cond(c), out(o)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::expression_statement) {
 			exprstmnt_op e(shared, cond, out);
 			fmap(&e, node.children);
-			fmap(gen_wait(node, first, shared, e.cond_ident), e.shared_idents);
+			itervar = e.itervar;
+			fmap(gen_wait(node, first, shared, itervar), e.shared_idents);
 		}
 		else {
 			fmap(this, node.children);
 		}
+	}
+};
+
+struct gen_out {
+	tree_node_t& node;
+	const string& itervar;
+	gen_out(tree_node_t& n, const string& i): node(n), itervar(i) {}
+	void operator()(pair<string, const shared_variable*> p)
+	{
+		node.value.value("if (!((" + itervar + "+1) % " + buff_size.actual() + 
+					")) {\n MMGP_SPE_dma_wait(out_tag); \n mfc_put(" +
+					(p.second)->orig_name() + "," + (p.second)->name() + 
+					"+(" + itervar + "-" + buff_size.actual() + "+1), sizeof(" + 
+					(p.second)->buff_type() + ")*" + buff_size.actual() + 
+					", out_tag, 0, 0);\n }\n }");
 	}
 };
 
@@ -273,10 +206,14 @@ struct for_op {
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::identifier) {
-			cond.add(node.value.begin(), node.value.end());
+			string ident(node.value.begin(), node.value.end());
+			cond[ident] = NULL;
 		}
 		else if (node.value.id() == ids::compound) {
-			fmap(for_compound_op(shared, cond), node.children);
+			sharedtbl_t out;
+			for_compound_op f(shared, cond, out);
+			fmap(&f, node.children);
+			fmap(gen_out(node.children.back(), f.itervar), out);
 		}
 		else {
 			fmap(this, node.children);
@@ -314,15 +251,6 @@ void call_rule::operator()(tree_node_t& node)
 	ss >> id;
 
 	switch (id) {
-		case ids::identifier: 
-			identifier(node, shared); 
-			break;
-		case ids::declaration: 
-			declaration(node, shared); 
-			break;
-		case ids::array_index: 
-			array_index(node, shared); 
-			break;
 		case ids::for_loop: 
 			for_loop(node, shared); 
 			break;
@@ -331,39 +259,6 @@ void call_rule::operator()(tree_node_t& node)
 			break;
 		case ids::cell_region: 
 			cell_region(node, shared); 
-			break;
-		case ids::postfix_expression: 
-			postfix_expression(node, shared); 
-			break;
-		case ids::expression_statement: 
-			expression_statement(node, shared); 
-			break;
-		case ids::statement: 
-			statement(node, shared); 
-			break;
-		case ids::statement_list: 
-			statement_list(node, shared); 
-			break;
-		case ids::declaration_list: 
-			declaration_list(node, shared); 
-			break;
-		case ids::expression: 
-			expression(node, shared); 
-			break;
-		case ids::assignment_expression: 
-			assignment_expression(node, shared); 
-			break;
-		case ids::expression_helper: 
-			expression_helper(node, shared); 
-			break;
-		case ids::relational_expression: 
-			relational_expression(node, shared); 
-			break;
-		case ids::argument_expression_list: 
-			argument_expression_list(node, shared); 
-			break;
-		case ids::postfix_expression_helper: 
-			postfix_expression_helper(node, shared); 
 			break;
 	}
 }
