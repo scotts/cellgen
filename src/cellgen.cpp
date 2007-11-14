@@ -68,28 +68,29 @@ class spe_region {
 	sharedlist_t* _shared;
 	stringstream* _text;
 	tree_node_t* _ast;
+	cvarlist_t* _reductions;
+	string _reduction_op;
 
 public:
-	spe_region(cvarlist_t* v, sharedlist_t* d, stringstream* t):
-		_priv(v), _shared(d), _text(t) {}
-
-	cvarlist_t* priv() const
+	spe_region(
+		cvarlist_t* v, 
+		sharedlist_t* d, 
+		stringstream* t, 
+		cvarlist_t* r,
+		string o):
+		_priv(v), _shared(d), _text(t), _reductions(r), _reduction_op(o)
 	{
-		assert(_priv);
-		return _priv;
+		assert(v);
+		assert(d);
+		assert(t);
+		assert(r);
 	}
 
-	sharedlist_t* shared() const
-	{
-		assert(_shared);
-		return _shared;
-	}
-
-	stringstream* text() const
-	{
-		assert(_text);
-		return _text;
-	}
+	cvarlist_t*	priv()		const { return _priv; }
+	sharedlist_t*	shared()	const { return _shared; }
+	stringstream*	text()		const { return _text; }
+	cvarlist_t*	reductions()	const { return _reductions; }
+	string		reduction_op()	const { return _reduction_op; }
 
 	void ast(tree_node_t* a)
 	{
@@ -168,57 +169,50 @@ struct codeout {
 	}
 };
 
-void print_loops(ostream& out, spelist_t& regions, sslist_t& cases)
-{
-	int loop_num = 1;
-	for (spelist_t::iterator r = regions.begin(); r != regions.end(); ++r) {
+struct make_case_sig {
+	stringstream& file;
+	stringstream& casest;
+	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
+	void operator()(const c_variable* cv)
+	{
+		casest << "pass." << cv->name() << ",";
+		file << cv->declare() << ",";
+	}
+};
 
-		stringstream* case_ss = new stringstream;
-		*case_ss << "\t\t\tcase " << loop_num << ": " 
+struct print_region {
+	ostream& file;
+	sslist_t& cases;
+	int loop_num;
+	print_region(ostream& f, sslist_t& c): file(f), cases(c), loop_num(1) {}
+	void operator()(spe_region* region)
+	{
+		stringstream* casest = new stringstream;
+		*casest << "\t\t\tcase " << loop_num << ": " 
 			<< compute_bounds << "loop" << loop_num << "(" ; 
-		out << "void loop" << loop_num << "(";
+		file	<< "void loop" << loop_num << "(";
 		++loop_num;
 
-		// Can this be done more elegantly?
-		cvarlist_t::iterator v = (*r)->priv()->begin();
-		while (v != (*r)->priv()->end()) {
-			*case_ss << "pass." << (*v)->name();
-			out << (*v)->declare();
+		stringstream f;
+		stringstream c;
+		fmap(make_case_sig(f, c), region->priv());
+		fmap(make_case_sig(f, c), region->shared());
+		fmap(make_case_sig(f, c), region->reductions());
 
-			if (++v != (*r)->priv()->end()) {
-				out << ", ";
-				*case_ss << ", ";
-			}
-		}
-		sharedlist_t::iterator d = (*r)->shared()->begin();
-		while (d != (*r)->shared()->end()) {
-			if (d == (*r)->shared()->begin()) {
-				out << ", ";
-				*case_ss << ", ";
-			}
-			*case_ss << "pass." << (*d)->name();
-			out << (*d)->declare();
-			if (++d != (*r)->shared()->end()) {
-				out << ", ";
-				*case_ss << ", ";
-			}
-		}
+		// Remove extraneous ","
+		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
+		*casest << c.str().replace(c.str().find_last_of(","), strlen(","), "");
 
-		out << ")" << endl;
+		file << ")" << endl;
 		stringstream decs;
-		fmap(make_buffer_declarations(decs), (*r)->shared());
-		fmap(add_declarations(decs.str()), (*r)->ast()->children);
-		fmap(codeout(out), (*r)->ast()->children);
+		fmap(make_buffer_declarations(decs), region->shared());
+		fmap(add_declarations(decs.str()), region->ast()->children);
+		fmap(codeout(file), region->ast()->children);
 
-		*case_ss << "); " << mmgp_spe_stop << "break;" << endl;
-		cases.push_back(case_ss);
+		*casest << "); " << mmgp_spe_stop << "break;" << endl;
+		cases.push_back(casest);
 	}
-}
-
-void print_cases(ofstream& out, sslist_t& list)
-{
-	fmap(sstream_out(out), list);
-}
+};
 
 template <class T>
 struct vars_op {
@@ -250,6 +244,19 @@ struct vars_op {
 		list<const T*>* temp = vars;
 		vars = new list<const T*>;
 		return temp;
+	}
+};
+
+struct op_op {
+	mutable string op;
+	void operator()(fileiter_t first, const fileiter_t& last) const
+	{
+		stringstream ss;
+		while (first != last) {
+			ss << *first++;
+		}
+
+		op = ss.str();
 	}
 };
 
@@ -305,19 +312,29 @@ class create_spe_region {
 	assign_cvar&			stop_op;
 	vars_op<c_variable>&		priv_op;
 	vars_op<shared_variable>&	shared_op;
+	vars_op<c_variable>&		reduce_def_op;
+	op_op&				reduce_op_op;
 
 public:
-	create_spe_region(spelist_t& r, sstream_op& l, assign_cvar& start, 
-			assign_cvar& stop, vars_op<c_variable>& p, 
-			vars_op<shared_variable>& s):
+	create_spe_region(
+			spelist_t& r, 
+			sstream_op& l, 
+			assign_cvar& start, 
+			assign_cvar& stop, 
+			vars_op<c_variable>& p, 
+			vars_op<shared_variable>& s, 
+			vars_op<c_variable>& rd,
+			op_op& ro):
 		regions(r), loop_op(l), start_op(start), stop_op(stop),
-		priv_op(p), shared_op(s)
+		priv_op(p), shared_op(s), reduce_def_op(rd), reduce_op_op(ro)
 	{}
 	void operator()(fileiter_t first, const fileiter_t& last) const
 	{
 		spe_region* r = new spe_region(	priv_op.pickup(),
 						shared_op.pickup(),
-						loop_op.pickup);
+						loop_op.pickup,
+						reduce_def_op.pickup(),
+						reduce_op_op.op);
 		regions.push_back(r);
 	}
 };
@@ -332,31 +349,39 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	assign_cvar			stop_op;
 	vars_op<shared_variable>	shared_op;
 	vars_op<c_variable>		priv_op;
+	vars_op<c_variable>		reduce_def_op;
+	op_op				reduce_op_op;
 	create_spe_region		region_op;
 
 	stringstream*	loop_pickup;
 	cvarlist_t*	priv_vars;
 	sharedlist_t*	shared_vars;
+	cvarlist_t*	reduce_vars;
 
-	cellgen_grammar(sslist_t& ppe, spelist_t& regions, sharedtbl_t& s, symtbl_t& p):
+	cellgen_grammar(sslist_t& ppe, spelist_t& regions, sharedtbl_t& s, symtbl_t& p, symtbl_t& r):
 		ppe_op(ppe),
 		loop_op(loop_pickup),
 		start_op(priv_vars, "SPE_start"),
 		stop_op(priv_vars, "SPE_stop"),
 		shared_op(shared_vars, s),
 		priv_op(priv_vars, p),
+		reduce_def_op(reduce_vars, r),
 		region_op(regions,
 			loop_op, 
 			start_op, 
 			stop_op, 
 			priv_op, 
-			shared_op)
+			shared_op,
+			reduce_def_op,
+			reduce_op_op
+			)
 		{}
 
 	template <typename ScannerT>
 	struct definition {
 		rule<ScannerT> 
 			program, options, ppe_code, spe_code,
+			reduction, operation, reduce_list, reduce_dec, reduce_dec_f,
 			start_code, start_priv, stop_code, stop_priv,
 			priv_code, priv_list, priv_dec, priv_dec_f,
 			shared_code, shared_list, shared_dec, shared_dec_f;
@@ -388,6 +413,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 				priv_code 
 			| 	start_code
 			| 	stop_code
+			|	reduction
 			| 	shared_code;
 
 			start_code = 
@@ -420,6 +446,36 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 
 			priv_dec_f = no_node_d[
 					lexeme_d[ *(anychar_p - ',' - ')') ] 
+				];
+
+			reduction = 
+				no_node_d[strlit<>("reduction(")] 
+					>> operation[self.reduce_op_op] 
+					>> no_node_d[strlit<>(":")] 
+					>> reduce_list 
+				>> no_node_d[strlit<>(")")];
+
+			operation = no_node_d[
+				chlit<>('+')
+			|	chlit<>('-')
+			|	chlit<>('*')
+			|	chlit<>('&')
+			|	chlit<>('|')
+			|	strlit<>("&&")
+			|	strlit<>("||")
+			];
+
+			reduce_list =
+				reduce_dec >> no_node_d[chlit<>(',')] >> reduce_list
+			|	reduce_dec_f;
+
+			reduce_dec = no_node_d[
+					lexeme_d[ (*(anychar_p - ',' - ')')) ]
+					[self.reduce_def_op]
+				];
+
+			reduce_dec_f = no_node_d[
+					lexeme_d[ *(anychar_p - ',' - ')')]
 				];
 
 			shared_code =
@@ -539,7 +595,7 @@ struct astout {
 };
 
 void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regions, 
-		sharedtbl_t& shared_tbl, symtbl_t& private_tbl)
+		sharedtbl_t& shared_tbl, symtbl_t& private_tbl, symtbl_t& reduce_tbl)
 {
 	fileiter_t first(src_name);
 	if (!first) {
@@ -548,7 +604,7 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 	}
 	fileiter_t last = first.make_end();
 
-	cellgen_grammar cg(ppe_blocks, spe_regions, shared_tbl, private_tbl);
+	cellgen_grammar cg(ppe_blocks, spe_regions, shared_tbl, private_tbl, reduce_tbl);
 	tree_parse_info_t* p = new tree_parse_info_t(); // need to make sure the ast persists
 	*p = ast_parse<string_factory_t>(first, last, cg, skip);
 
@@ -629,8 +685,9 @@ public:
 
 	void operator()(const spe_region* r)
 	{
-		fmap(*this, r->priv());
-		fmap(*this, r->shared());
+		fmap(this, r->priv());
+		fmap(this, r->shared());
+		fmap(this, r->reductions());
 	}
 };
 
@@ -693,6 +750,7 @@ void print_ppe(const string& name, sslist_t& blocks, stringstream& pro, stringst
 			stringstream passes;
 			fmap(make_pass_assign(passes), (*r)->priv());
 			fmap(make_pass_assign(passes), (*r)->shared());
+			fmap(make_pass_assign(passes), (*r)->reductions());
 
 			string fork_str = regex_replace(ppe_fork.str(), regex(loop_hook), id_ss.str());
 			string passes_str = regex_replace(passes.str(), regex(loop_hook), id_ss.str());
@@ -703,11 +761,6 @@ void print_ppe(const string& name, sslist_t& blocks, stringstream& pro, stringst
 			++r;
 		}
 	}
-}
-
-void print_buffers(ostream& out, spelist_t& regions)
-{
-	fmap(make_buffer(out), regions);
 }
 
 void print_pass_struct(spelist_t& regions)
@@ -732,13 +785,13 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& main_pro
 	open_check(file, name);
 
 	file << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-	print_buffers(file, regions);	
+	fmap(make_buffer(file), regions);
 
 	sslist_t cases;
-	print_loops(file, regions, cases);
+	fmap(print_region(file, cases), regions);
 
 	file << main_pro.str() << spe_main_switch << endl;
-	print_cases(file, cases);
+	fmap(sstream_out(file), cases);
 	file << main_epi.str();
 }
 
@@ -787,11 +840,13 @@ int main(int argc, char* argv[])
 	spelist_t spe_regions;
 	sharedtbl_t shared_tbl;
 	symtbl_t private_tbl;
+	symtbl_t reduce_tbl;
 	parse_src(	src_name, 
 			ppe_src_blocks, 
 			spe_regions, 
 			shared_tbl, 
-			private_tbl);
+			private_tbl,
+			reduce_tbl);
 
 	stringstream ppe_fork;
 	parse_generic(ppe_fork, ppe_fork_iname);
