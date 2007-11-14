@@ -49,6 +49,7 @@ const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
 const string program_name_hook		= "PROGRAM_NAME";
 const string buffer_hook		= "BUFFER_SIZE";
+const string case_hook			= "CASES";
 
 #include "c_grammar.h"
 #include "parse_tree.h"
@@ -127,6 +128,7 @@ void open_check(const T& s, const string& name)
 
 struct make_buffer_declarations {
 	stringstream& ss;
+
 	make_buffer_declarations(stringstream& s): ss(s) {}
 	void operator()(const shared_variable* sv)
 	{
@@ -143,6 +145,7 @@ struct make_buffer_declarations {
 
 struct add_declarations {
 	const string& declarations;
+
 	add_declarations(const string& d): declarations(d) {}
 	void operator()(tree_node_t& node)
 	{
@@ -155,6 +158,7 @@ struct add_declarations {
 
 struct codeout {
 	ostream& out;
+
 	codeout(ostream& o): out(o) {}
 	void operator()(const tree_node_t& node)
 	{
@@ -174,6 +178,7 @@ struct codeout {
 struct make_case_sig {
 	stringstream& file;
 	stringstream& casest;
+
 	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
 	void operator()(const c_variable* cv)
 	{
@@ -186,6 +191,7 @@ struct print_region {
 	ostream& file;
 	sslist_t& cases;
 	int loop_num;
+
 	print_region(ostream& f, sslist_t& c): file(f), cases(c), loop_num(1) {}
 	void operator()(spe_region* region)
 	{
@@ -217,10 +223,11 @@ struct print_region {
 };
 
 template <class T>
-struct vars_op {
+class vars_op {
 	list<const T*>*& vars;
 	mutable map<string, const T*>& tbl;
 
+public:
 	vars_op(list<const T*>*& v, map<string, const T*>& t): vars(v), tbl(t)
 	{
 		vars = new list<const T*>;	
@@ -251,6 +258,7 @@ struct vars_op {
 
 struct op_op {
 	mutable string op;
+
 	void operator()(fileiter_t first, const fileiter_t& last) const
 	{
 		stringstream ss;
@@ -263,9 +271,10 @@ struct op_op {
 };
 
 template <class T>
-struct push_back_op {
+class push_back_op {
 	T& container;
-
+	
+public:
 	push_back_op(T& c): container(c) {}
 	void operator()(fileiter_t first, const fileiter_t& last) const
 	{
@@ -291,10 +300,11 @@ struct sstream_op {
 	}
 };
 
-struct assign_cvar {
+class assign_cvar {
 	cvarlist_t*& vars;
 	string local;
 
+public:
 	assign_cvar(cvarlist_t*& v, string l): vars(v), local(l) {}
 	void operator()(fileiter_t first, const fileiter_t& last) const
 	{
@@ -499,34 +509,11 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	};
 };
 
-class spe_main_grammar: public grammar<spe_main_grammar> {
-	stream_writer prolouge_sw;
-	stream_writer epilouge_sw;
-
-public:
-	spe_main_grammar(stringstream& pro, stringstream& ep):
-		prolouge_sw(pro), epilouge_sw(ep) {}
-
-	template <typename ScannerT>
-	struct definition {
-		rule<ScannerT> program, prolouge, epilouge;
-
-		const rule<ScannerT>& start() const { return program; }
-
-		definition(const spe_main_grammar& self)
-		{
-			program	=	prolouge >> spe_main_switch.c_str() >> epilouge;
-			prolouge =	(*(anychar_p - spe_main_switch.c_str()))
-					[self.prolouge_sw];
-			epilouge =	(*anychar_p)
-					[self.epilouge_sw];
-		}
-	};
-};
-
-struct astout {
+class astout {
 	int level;
 	string tabs;
+
+public:
 	astout(int l, string t): level(l), tabs(t) {}
 	void operator()(const tree_node_t& node)
 	{
@@ -632,20 +619,6 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 	}
 }
 
-void parse_spe(stringstream& declarations, 
-		stringstream& main_prolouge, stringstream& main_epilouge)
-{
-	ifstream ifile_declarations(spe_declarations_iname.c_str());
-	file_to_stream(declarations, ifile_declarations);
-
-	fileiter_t first_main(spe_main_iname);
-	open_check(first_main, spe_main_iname);
-	fileiter_t last_main = first_main.make_end();
-
-	spe_main_grammar smg(main_prolouge, main_epilouge);
-	parse(first_main, last_main, smg);
-}
-
 void parse_generic(stringstream& stream, const string& str)
 {
 	ifstream ifile(str.c_str());
@@ -667,23 +640,18 @@ void print_file(const string& ifile_name, const string& ofile_name, const string
 }
 
 class make_pass_struct {
-	string& str;
+	stringstream& ss;
 
 public:
-	make_pass_struct(string& s): str(s) {}
+	make_pass_struct(stringstream& s): ss(s) {}
 
 	void operator()(const c_variable* cv)
 	{
 		// SPE_start and SPE_stop are keywords 
 		// that already exist in the template code.
-		if (	cv->name() != "SPE_start" && 
-			cv->name() != "SPE_stop") {
-			stringstream svar;
-			svar	<< "\t" 
-				<< cv->declare() << ";" << endl 
-				<< pass_struct_hook;
-			string temp = regex_replace(str, regex(pass_struct_hook), svar.str());
-			str = temp;
+		if (cv->name() != "SPE_start" && cv->name() != "SPE_stop") {
+			ss	<< "\t" 
+				<< cv->declare() << ";" << endl;
 		}
 	}
 
@@ -775,28 +743,28 @@ void print_pass_struct(spelist_t& regions)
 	stringstream pass;
 	parse_generic(pass, pass_struct_iname);
 
-	string p = pass.str();
-	fmap(make_pass_struct(p), regions);
-	string final_p = regex_replace(p, regex(pass_struct_hook), "");
-
-	out << final_p;
+	stringstream vars;
+	fmap(make_pass_struct(vars), regions);
+	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
 
-void print_spe(const string& name, stringstream& spe_dec, stringstream& main_pro, 
-		stringstream& main_epi, spelist_t& regions)
+void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist_t& regions)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
 
-	file << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-	fmap(make_buffer(file), regions);
+	stringstream ss;
+	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
+	fmap(make_buffer(ss), regions);
 
 	sslist_t cases;
-	fmap(print_region(file, cases), regions);
+	fmap(print_region(ss, cases), regions);
 
-	file << main_pro.str() << spe_main_switch << endl;
-	fmap(sstream_out(file), cases);
-	file << main_epi.str();
+	stringstream cases_ss;
+	fmap(sstream_out(cases_ss), cases);
+	ss << regex_replace(spe_main.str(), regex(case_hook), cases_ss.str());
+
+	file << ss.str();
 }
 
 string parse_command_line(int argc, char* argv[])
@@ -849,15 +817,14 @@ int main(int argc, char* argv[])
 			reduce_tbl);
 
 	stringstream ppe_fork;
-	parse_generic(ppe_fork, ppe_fork_iname);
-
 	stringstream ppe_prolouge;
-	parse_generic(ppe_prolouge, ppe_prolouge_iname);
-
 	stringstream spe_declarations;
-	stringstream spe_main_prolouge;
-	stringstream spe_main_epilouge;
-	parse_spe(spe_declarations, spe_main_prolouge, spe_main_epilouge);
+	stringstream spe_main;
+
+	parse_generic(ppe_fork, ppe_fork_iname);
+	parse_generic(ppe_prolouge, ppe_prolouge_iname);
+	parse_generic(spe_declarations, spe_declarations_iname);
+	parse_generic(spe_main, spe_main_iname);
 
 	// Do all of the output and code generation.
 	string no_dot = src_name;
@@ -873,8 +840,8 @@ int main(int argc, char* argv[])
 	print_pass_struct(spe_regions);
 	print_ppe(no_dot + "_ppe.c", ppe_src_blocks, ppe_prolouge, ppe_fork, 
 			spe_regions);
-	print_spe("spu/" + no_dot + "_spe.c", spe_declarations, 
-			spe_main_prolouge, spe_main_epilouge, spe_regions);
+	print_spe("spu/" + no_dot + "_spe.c", spe_declarations, spe_main, 
+			spe_regions);
 	
 	system(string("cp " + mmgp_spu_h_iname + " spu/").c_str());
 

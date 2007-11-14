@@ -26,7 +26,7 @@ int main()
         	received = MMGP_SPE_wait();
 
 		switch (received) {
-
+			CASES
 			case TERMINATE: goto done;
 		}
 	}
