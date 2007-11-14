@@ -63,6 +63,8 @@ typedef list<stringstream*>	sslist_t;
 const c_compound_grammar c_compound;
 const skip_grammar skip;
 
+bool print_ast = false;
+
 class spe_region {
 	cvarlist_t* _priv;
 	sharedlist_t* _shared;
@@ -625,7 +627,9 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 		}
 	}
 
-	//fmap(astout(0, ""), p->trees);
+	if (print_ast) {
+		fmap(astout(0, ""), p->trees);
+	}
 }
 
 void parse_spe(stringstream& declarations, 
@@ -803,7 +807,8 @@ string parse_command_line(int argc, char* argv[])
 		options_description desc("Allowed options");
 		desc.add_options()
 		("help,h", "print usage message")
-		("infile,i", "input filename");
+		("infile,i", value<string>(&src_name), "input filename")
+		("astout,a", value<bool>(&print_ast)->zero_tokens()->default_value(false), "print the ast");
 
 		positional_options_description p;
 		p.add("infile", 1);
@@ -816,11 +821,6 @@ string parse_command_line(int argc, char* argv[])
 			cout << desc << "\n";
 			return 0;
 		}
-
-		if (vm.count("infile")) {
-			src_name = vm["infile"].as<string>();
-		}
-		
 	} 
 
 	catch(exception& e) {
