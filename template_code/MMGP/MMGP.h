@@ -17,7 +17,7 @@ void MMGP_init(int num_threads);
 void (*MMGP_offload)(void);
 void (*MMGP_start_SPE)(int i, int value);
 void (*MMGP_wait_SPE)(int num);
-void (*MMGP_reduction)(double *cont, int num);
+//void (*MMGP_reduction)(double *cont, int num);
 void (*MMGP_prediction)(void);
 void (*MMGP_create_threads)(void);
 void (*MMGP_prediction)(void);

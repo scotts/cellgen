@@ -153,83 +153,17 @@ inline void _wait_SPE(int num){
  *           the sum of the returning values from all SPEs.
  * 2. num - the SPE number (the work can be distributed 
  *          among multiple SPEs). */ 
-inline void _reductionDT(double *cont, int num){
-
-    int i;
-
-    sched_yield();
-    for(i=0; i<__SPE_threads; i++){
-        while (((struct signal *)signal[i])->stop==0){
-            sched_yield();
-        }
-
-        *cont += ((struct signal *)signal[i])->result;
-        
-        if (i==0){
-            COMM_rec[i] = get_tb();
-            spe_T[num] += ((struct signal *)signal[i])->total_time;
-            spe_L[num] += ((struct signal *)signal[i])->loop_time;
-        }
-    }
-    ppe_T[num] += (get_tb()-start_time);
-    ppe_N[num]++;
-    
-}
-
-inline void _reductionD(double *cont, int num){
-
-    int i;
-
-    sched_yield();
-    for(i=0; i<__SPE_threads; i++){
-        while (((struct signal *)signal[i])->stop==0){
-            sched_yield();
-        }
-
-        *cont += ((struct signal *)signal[i])->result;
-        
-    }
-}
-
-
-inline void _reductionIT(int *cont, int num){
-
-    int i;
-
-    sched_yield();
-    for(i=0; i<__SPE_threads; i++){
-        while (((struct signal *)signal[i])->stop==0){
-            sched_yield();
-        }
-
-        *cont += ((struct signal *)signal[i])->result_int;
-        
-        if (i==0){
-            COMM_rec[i] = get_tb();
-            spe_T[num] += ((struct signal *)signal[i])->total_time;
-            spe_L[num] += ((struct signal *)signal[i])->loop_time;
-        }
-    }
-    ppe_T[num] += (get_tb()-start_time);
-    ppe_N[num]++;
-    
-}
-
-inline void _reductionI(int *cont, int num){
-
-    int i;
-
-    sched_yield();
-    for(i=0; i<__SPE_threads; i++){
-        while (((struct signal *)signal[i])->stop==0){
-            sched_yield();
-        }
-
-        *cont += ((struct signal *)signal[i])->result_int;
-        
-    }
-}
-
+#define MMGP_reduction(c, op) \
+({ \
+	int i; \
+	sched_yield(); \
+	for(i=0; i<__SPE_threads; i++) { \
+		while (((struct signal *)signal[i])->stop==0) { \
+			sched_yield(); \
+		} \
+		*c op##= ((struct signal *)signal[i])->result; \
+	} \
+})
 
 void _prediction(){
         
@@ -366,7 +300,7 @@ void MMGP_init(int num_threads)
 
     MMGP_offload = &_empty;
     MMGP_prediction = &_empty;
-    MMGP_reduction = &_reductionD; 
+    //MMGP_reduction = &_reductionD; 
     MMGP_create_threads = &_create_threads;
     MMGP_wait_SPE = &_wait_SPE;
     MMGP_start_SPE = &_start_SPE;

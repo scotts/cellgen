@@ -21,8 +21,8 @@ bool descend_rule(tree_node_t& node, Rule r)
 }
 
 struct call_rule {
-	const sharedtbl_t& shared;
-	call_rule(const sharedtbl_t& s): shared(s) {}
+	const symtbl_t& shared;
+	call_rule(const symtbl_t& s): shared(s) {}
 	void operator()(tree_node_t& node);
 };
 
@@ -35,12 +35,12 @@ void for_each_rule(tree_node_t& node, F f)
 }
 
 struct postfix_op {
-	const sharedtbl_t& shared;
+	const symtbl_t& shared;
 	const symtbl_t& cond;
 	bool found_shared;
 	string shared_ident;
 	string itervar;
-	postfix_op(const sharedtbl_t& s, const symtbl_t& c):
+	postfix_op(const symtbl_t& s, const symtbl_t& c):
 		shared(s), cond(c), 
 		found_shared(false)
 		{}
@@ -51,7 +51,7 @@ struct postfix_op {
 			if (found_shared) {
 				if (cond.find(ident) != cond.end()) {
 					itervar = ident;
-					node.value.value("(" + ident + " % " + buff_size.actual() + ")");
+					node.value.value("(" + ident + " % " + buff_size.alias() + ")");
 				}
 			}
 			else {
@@ -68,9 +68,9 @@ struct postfix_op {
 };
 
 struct lhs_op {
-	const sharedtbl_t& shared;
-	sharedtbl_t& out;
-	lhs_op(const sharedtbl_t& s, sharedtbl_t& o):
+	const symtbl_t& shared;
+	symtbl_t& out;
+	lhs_op(const symtbl_t& s, symtbl_t& o):
 		shared(s), out(o)
 		{}
 	void operator()(tree_node_t& node)
@@ -94,12 +94,12 @@ bool find_equals(tree_node_t& node)
 }
 
 struct exprstmnt_op {
-	const sharedtbl_t& shared;
+	const symtbl_t& shared;
 	const symtbl_t& cond;
-	sharedtbl_t& out;
+	symtbl_t& out;
 	list<string> shared_idents;
 	string itervar;
-	exprstmnt_op(const sharedtbl_t& s, const symtbl_t& c, sharedtbl_t& o):
+	exprstmnt_op(const symtbl_t& s, const symtbl_t& c, symtbl_t& o):
 		shared(s), cond(c), out(o)
 		{}
 	void operator()(tree_node_t& node)
@@ -130,42 +130,46 @@ struct exprstmnt_op {
 
 struct gen_wait {
 	tree_node_t& node;
-	map<const shared_variable*, bool>& first;
-	const sharedtbl_t& shared;
+	map<const c_variable*, bool>& first;
+	const symtbl_t& shared;
 	const string& itervar;
-	gen_wait(tree_node_t& n, map<const shared_variable*, bool>& f,
-			const sharedtbl_t& s, const string& i): 
+	gen_wait(tree_node_t& n, map<const c_variable*, bool>& f,
+			const symtbl_t& s, const string& i): 
 		node(n), first(f), shared(s), itervar(i) 
 		{}
 	void operator()(const string& shared_ident)
 	{
-		const shared_variable* sv = (shared.find(shared_ident))->second;
-		if (!first[sv]) {
+		const c_variable* cv = (shared.find(shared_ident))->second;
+		index_variable index(cv);
+		buff_variable buff(cv);
+		orig_variable orig(cv);
+
+		if (!first[cv]) {
 			string use(node.value.begin(), node.value.end());
 			use += node.value.value();
 			node.value.value(
-					"if (!(" + itervar + "%" + buff_size.actual() + ")) {\n" +
-						sv->index_name() + "= !" + sv->index_name() + 
+					"if (!(" + itervar + "%" + buff_size.alias() + ")) {\n" +
+						index.name() + "= !" + index.name() + 
 						";\n mfc_get("
-							+ sv->buff_name() + "[" + sv->index_name() + "]," 
-							+ sv->name() + "+(" + itervar + "+" + buff_size.actual() + ")," 
-							+ "sizeof(" + sv->buff_type() + ") *" + buff_size.actual() + ","
-							+ sv->index_name() + ", 0, 0);\n"
-						+ sv->orig_name() + "=" + sv->buff_name() + "[!" + sv->index_name() + "];\n"
-						+ "MMGP_SPE_dma_wait(!" + sv->index_name() + ");\n }\n"
+							+ buff.name() + "[" + index.name() + "]," 
+							+ cv->name() + "+(" + itervar + "+" + buff_size.alias() + ")," 
+							+ "sizeof(" + buff.type() + ") *" + buff_size.alias() + ","
+							+ index.name() + ", 0, 0);\n"
+						+ orig.name() + "=" + buff.name() + "[!" + index.name() + "];\n"
+						+ "MMGP_SPE_dma_wait(!" + index.name() + ");\n }\n"
 					+ use);
-			first[sv] = true;
+			first[cv] = true;
 		}
 	}
 };
 
 struct for_compound_op {
-	const sharedtbl_t& shared; 
+	const symtbl_t& shared; 
 	const symtbl_t& cond;
-	sharedtbl_t& out;
-	map<const shared_variable*, bool> first;
+	symtbl_t& out;
+	map<const c_variable*, bool> first;
 	string itervar;
-	for_compound_op(const sharedtbl_t& s, symtbl_t& c, sharedtbl_t& o): 
+	for_compound_op(const symtbl_t& s, symtbl_t& c, symtbl_t& o): 
 		shared(s), cond(c), out(o)
 		{}
 	void operator()(tree_node_t& node)
@@ -186,21 +190,24 @@ struct gen_out {
 	tree_node_t& node;
 	const string& itervar;
 	gen_out(tree_node_t& n, const string& i): node(n), itervar(i) {}
-	void operator()(pair<string, const shared_variable*> p)
+	void operator()(pair<string, const c_variable*> p)
 	{
-		node.value.value("if (!((" + itervar + "+1) % " + buff_size.actual() + 
+		buff_variable buff(p.second);
+		orig_variable orig(p.second);
+
+		node.value.value("if (!((" + itervar + "+1) % " + buff_size.alias() + 
 					")) {\n MMGP_SPE_dma_wait(out_tag); \n mfc_put(" +
-					(p.second)->orig_name() + "," + (p.second)->name() + 
-					"+(" + itervar + "-" + buff_size.actual() + "+1), sizeof(" + 
-					(p.second)->buff_type() + ")*" + buff_size.actual() + 
+					orig.name() + "," + (p.second)->name() + 
+					"+(" + itervar + "-" + buff_size.alias() + "+1), sizeof(" + 
+					buff.type() + ")*" + buff_size.alias() + 
 					", out_tag, 0, 0);\n }\n }");
 	}
 };
 
 struct for_op {
-	const sharedtbl_t& shared;
+	const symtbl_t& shared;
 	symtbl_t& cond;
-	for_op(const sharedtbl_t& s, symtbl_t& c): 
+	for_op(const symtbl_t& s, symtbl_t& c): 
 		shared(s), cond(c)
 		{}
 	void operator()(tree_node_t& node)
@@ -210,7 +217,7 @@ struct for_op {
 			cond[ident] = NULL;
 		}
 		else if (node.value.id() == ids::compound) {
-			sharedtbl_t out;
+			symtbl_t out;
 			for_compound_op f(shared, cond, out);
 			fmap(&f, node.children);
 			fmap(gen_out(node.children.back(), f.itervar), out);
@@ -221,23 +228,23 @@ struct for_op {
 	}
 };
 
-void for_loop(tree_node_t& node, const sharedtbl_t& shared)
+void for_loop(tree_node_t& node, const symtbl_t& shared)
 {
 	symtbl_t iter_cond;
 	fmap(for_op(shared, iter_cond), node.children);
 }
 
-void compound(tree_node_t& node, const sharedtbl_t& shared)
+void compound(tree_node_t& node, const symtbl_t& shared)
 {
 	fmap(call_rule(shared), node.children);
 }
 
-void cell_region(tree_node_t& node, const sharedtbl_t& shared)
+void cell_region(tree_node_t& node, const symtbl_t& shared)
 {
 	fmap(call_rule(shared), node.children);
 }
 
-void root_eval(tree_t& trees, const sharedtbl_t& shared)
+void root_eval(tree_t& trees, const symtbl_t& shared)
 {
 	fmap(call_rule(shared), (*trees.begin()).children);
 }

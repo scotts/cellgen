@@ -6,31 +6,38 @@
 #include <sstream>
 using namespace std;
 
-#include <boost/spirit/symbols.hpp>
-using namespace boost::spirit;
+const string pass_var = "pass";
 
 class c_variable {
 	string _type;
 	string _name;
-	string _actual;
+	string _alias;
 
 public:
 	c_variable() {}
+	c_variable(const c_variable& c): 
+		_type(c._type), _name(c._name), _alias(c._alias) 
+		{}
 	c_variable(const string& t, const string& l = "", const string& a = ""):
-		_type(t), _name(l), _actual(a) {}
+		_type(t), _name(l), _alias(a) 
+		{}
 	virtual ~c_variable() {}
 
-	string type() const { return _type; }
 	virtual string name() const { return _name; }
-	string actual() const { return _actual; }
-	void set_actual(string s) { _actual = s; }
+	virtual string type() const { return _type; }
+	string alias() const { return _alias; }
+
+	void set_alias(string s) { _alias = s; }
 
 	virtual string declare() const
 	{
 		stringstream ss;
-		ss << _type << " " << _name;
+		ss << type() << " " << name();
 		return ss.str();
 	}
+
+	virtual string actual() const { return pass_var + "." + name(); }
+	virtual string formal() const { return declare(); }
 };
 
 class const_c_variable: public c_variable {
@@ -41,7 +48,7 @@ public:
 	virtual string declare() const
 	{
 		stringstream ss;
-		ss << type() << " " << name() << " = " << actual() << ";";
+		ss << type() << " " << name() << " = " << alias() << ";";
 		return ss.str();
 	}
 };
@@ -49,28 +56,26 @@ public:
 const const_c_variable buff_size("int", "buff_size", "16");
 
 class shared_variable: public c_variable {
-	string _addr;
-	string _buff;
-	string _index;
-
 public:
-	shared_variable(): c_variable(), _addr("_addr"), _buff("_buff"), _index("_index") {}
-	shared_variable(const string& t, const string& l = "", const string& a = ""):
-		c_variable(t, l, a), _addr("_addr"), _buff("_buff"), _index("_index") {}
-	virtual ~shared_variable() {}
+	shared_variable() {}
+	shared_variable(const string& t, const string& l, const string& a):
+		c_variable(t, l + "_addr", a) 
+		{}
+};
 
-	string orig_name() const { return c_variable::name(); }
-	string buff_name() const { return orig_name() + _buff; }
-	string index_name() const { return orig_name() + _index; }
-	virtual string name() const { return orig_name() + _addr; }
+class buff_variable: public c_variable {
+public:
+	buff_variable(const c_variable* cv):
+		c_variable(cv->type(), cv->name() + "_buff", cv->alias()) {}
 
-	string buff_type() const
+	virtual string type() const
 	{
-		string noptr = type();
+		string noptr = c_variable::type();
 		size_t pos = noptr.find('*');
 		if (pos == string::npos) {
-			cerr	<< "error: variable " << declare() 
-				<< " is declared shared, but is not a pointer." << endl;
+			cerr	<< "error: variable " << c_variable::declare() 
+				<< " can't be made into a buffer because it is not a pointer." 
+				<< endl;
 			exit(1);
 		}
 		noptr.replace(pos, strlen("*"), "");
@@ -79,33 +84,61 @@ public:
 
 	virtual string declare() const
 	{
-		return type() + " " + orig_name() + _addr;
-	}
-
-	string orig_declare() const
-	{
-		return type() + " " + orig_name();
-	}
-
-	string buff_declare() const
-	{
 		stringstream ss;
-		ss	<< buff_type() << " " << orig_name() << _buff 
-			<< "[2][" + buff_size.actual() + "] __attribute__((aligned(128)))";
+		ss	<< type() << " " << name() 
+			<< "[2][" + buff_size.alias() + "] __attribute__((aligned(128)))";
 		return ss.str();
 	}
 
-	string index_declare() const
+};
+
+class index_variable: public c_variable {
+public:
+	index_variable(const c_variable* cv): 
+		c_variable("int", cv->name() + "_index", cv->alias()) 
+		{}
+};
+
+class orig_variable: public c_variable {
+public:
+	orig_variable(const c_variable* cv):
+		c_variable(cv->type(), cv->name(), cv->alias())
+		{}
+
+	virtual string name() const
 	{
-		return "int " + index_name();
+		string noaddr = c_variable::name();
+		size_t pos = noaddr.find("_addr");
+		if (pos == string::npos) {
+			cerr	<< "error: variable " << declare() 
+				<< " is not an shared variable." 
+				<< endl;
+			exit(1);
+		}
+		noaddr.replace(pos, strlen("_addr"), "");
+		return noaddr;
+	}
+};
+
+
+class reduction_variable: public c_variable {
+public:
+	reduction_variable(const string& t, const string& l, const string& a):
+		c_variable(t, l, a)
+		{}
+
+	virtual string actual() const { return "&" + pass_var + "." + name(); }
+
+	virtual string formal() const
+	{  
+		stringstream ss;
+		ss << type() << "* " << name();
+		return ss.str();
 	}
 };
 
 typedef list<const c_variable*>			cvarlist_t;
-typedef list<const shared_variable*>		sharedlist_t;
 typedef map<string, const c_variable*>		symtbl_t;
-typedef map<string, const shared_variable*>	sharedtbl_t;
-
 
 #endif // VARIABLE_H
 

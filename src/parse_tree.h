@@ -26,7 +26,7 @@ inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
 	return out;
 }
 
-void root_eval(tree_t& trees, const sharedtbl_t& shared);
+void root_eval(tree_t& trees, const symtbl_t& shared);
 
 template <class I, class F>
 F* for_each(I first, I last, F* f)
@@ -48,33 +48,6 @@ F fmap(F f, C* c)
 {
 	return for_each(c->begin(), c->end(), f);
 }
-
-/*
-template <int i>
-struct id_base {
-	enum { id = i };
-};
-
-template <class Rule>
-struct find_rule: id_base<any_rule> { 
-	Rule r;
-	//find_rule(): r() {}
-	find_rule(const string& i): r(i) {}
-	find_rule(const Rule& _r): r(_r) {}
-	void operator()(const tree_node_t& node)
-	{
-		// This is not a base case; the rule we're looking 
-		// for can be within itself. Recursion stops when we 
-		// hit the leaves of the tree.
-		cout << r.indent << "find: " << Rule::id << endl;
-		if (node.value.id() == Rule::id) {
-			r(node);
-		}
-
-		for_each(node.children.begin(), node.children.end(), *this);
-	}
-};
-*/
 
 #endif	// PARSE_TREE_H
 

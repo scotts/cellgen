@@ -22,6 +22,12 @@ using namespace boost;
 using namespace boost::program_options;
 using namespace boost::spirit;
 
+#include "c_grammar.h"
+#include "parse_tree.h"
+#include "variable.h"
+#include "streamops.h"
+#include "skip.h"
+
 const string path			= "/home/scschnei/code/cellgen/template_code/";
 const string ppe_fork_iname		= path + "ppe_fork.c";
 const string ppe_prolouge_iname		= path + "ppe_prolouge.c";
@@ -36,26 +42,22 @@ const string mmgp_h_iname		= path + "MMGP/" + mmgp_h_oname;
 const string mmgp_c_iname		= path + "MMGP/" + mmgp_c_oname;
 const string mmgp_spu_h_iname		= path + "MMGP/MMGP_spu.h";
 
-const string spe_main_switch		= "switch (received) {";
-const string pass_assign		= "((struct pass_t *)pass[__iLOOP_ID])->";
-const string compute_bounds		= "compute_bounds(&pass.SPE_start, &pass.SPE_stop);";
-const string mmgp_init			= "MMGP_init(6);";
-const string mmgp_create_threads	= "MMGP_create_threads();";
-const string mmgp_spe_stop		= "MMGP_SPE_stop();";
 const string loop_hook			= "LOOP_ID";
-const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
-const string mmgp_reduction		= "MMGP_reduction(VAR, " + loop_hook + ");\n";
 const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
 const string program_name_hook		= "PROGRAM_NAME";
 const string buffer_hook		= "BUFFER_SIZE";
 const string case_hook			= "CASES";
+const string var_hook			= "VAR";
+const string op_hook			= "OP";
 
-#include "c_grammar.h"
-#include "parse_tree.h"
-#include "variable.h"
-#include "streamops.h"
-#include "skip.h"
+const string pass_assign		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
+const string compute_bounds		= "compute_bounds(&pass.SPE_start, &pass.SPE_stop);";
+const string mmgp_init			= "MMGP_init(6);";
+const string mmgp_create_threads	= "MMGP_create_threads();";
+const string mmgp_spe_stop		= "MMGP_SPE_stop();";
+const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
+const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
 
 class spe_region;
 typedef list<spe_region*>	spelist_t;
@@ -68,20 +70,20 @@ bool print_ast = false;
 
 class spe_region {
 	cvarlist_t* _priv;
-	sharedlist_t* _shared;
-	stringstream* _text;
-	tree_node_t* _ast;
+	cvarlist_t* _shared;
 	cvarlist_t* _reductions;
 	string _reduction_op;
+	stringstream* _text;
+	tree_node_t* _ast;
 
 public:
 	spe_region(
 		cvarlist_t* v, 
-		sharedlist_t* d, 
+		cvarlist_t* d, 
 		stringstream* t, 
 		cvarlist_t* r,
 		string o):
-		_priv(v), _shared(d), _text(t), _reductions(r), _reduction_op(o)
+		_priv(v), _shared(d), _reductions(r), _reduction_op(o), _text(t)
 	{
 		assert(v);
 		assert(d);
@@ -90,7 +92,7 @@ public:
 	}
 
 	cvarlist_t*	priv()		const { return _priv; }
-	sharedlist_t*	shared()	const { return _shared; }
+	cvarlist_t*	shared()	const { return _shared; }
 	stringstream*	text()		const { return _text; }
 	cvarlist_t*	reductions()	const { return _reductions; }
 	string		reduction_op()	const { return _reduction_op; }
@@ -130,16 +132,20 @@ struct make_buffer_declarations {
 	stringstream& ss;
 
 	make_buffer_declarations(stringstream& s): ss(s) {}
-	void operator()(const shared_variable* sv)
+	void operator()(const c_variable* cv)
 	{
-		ss 	<< sv->orig_declare() << ";" << endl
-			<< sv->index_declare() << " = 0;" << endl
+		buff_variable buff(cv);
+		index_variable index(cv);
+		orig_variable orig(cv);
+
+		ss 	<< orig.declare() << ";" << endl
+			<< index.declare() << " = 0;" << endl
 			<< "mfc_get(" 
-				<< sv->buff_name() << "[" << sv->index_name() << "], " 
-				<< sv->name() << " + SPE_start,"
-				<< "sizeof(" << sv->buff_type() << ")*" << buff_size.actual() << ", "
-				<< sv->index_name() << ", 0, 0); \n" 
-			<< sv->orig_name() << " = " << sv->buff_name() << "[" << sv->index_name() << "];" << endl;
+				<< buff.name() << "[" << index.name() << "], " 
+				<< cv->name() << " + SPE_start,"
+				<< "sizeof(" << buff.type() << ")*" << buff_size.alias() << ", "
+				<< index.name() << ", 0, 0); \n" 
+			<< orig.name() << " = " << buff.name() << "[" << index.name() << "];" << endl;
 	}
 };
 
@@ -182,8 +188,8 @@ struct make_case_sig {
 	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
 	void operator()(const c_variable* cv)
 	{
-		casest << "pass." << cv->name() << ",";
-		file << cv->declare() << ",";
+		casest	<< cv->actual() << ",";
+		file	<< cv->formal() << ",";
 	}
 };
 
@@ -224,13 +230,13 @@ struct print_region {
 
 template <class T>
 class vars_op {
-	list<const T*>*& vars;
-	mutable map<string, const T*>& tbl;
+	cvarlist_t*& vars;
+	mutable symtbl_t& tbl;
 
 public:
-	vars_op(list<const T*>*& v, map<string, const T*>& t): vars(v), tbl(t)
+	vars_op(cvarlist_t*& v, symtbl_t& t): vars(v), tbl(t)
 	{
-		vars = new list<const T*>;	
+		vars = new cvarlist_t;	
 	}
 
 	void operator()(fileiter_t first, const fileiter_t& last) const
@@ -240,32 +246,32 @@ public:
 			ss << *first++;
 		}
 
-		string type, local, equals, actual;
-		ss >> type >> local >> equals >> actual;
+		string type, local, equals, alias;
+		ss >> type >> local >> equals >> alias;
 
-		const T* cv = new T(type, local, actual);
+		const T* cv = new T(type, local, alias);
 		vars->push_back(cv);
 		tbl[local] = cv;
 	}
 
-	list<const T*>* pickup()
+	cvarlist_t* pickup()
 	{
-		list<const T*>* temp = vars;
-		vars = new list<const T*>;
+		cvarlist_t* temp = vars;
+		vars = new cvarlist_t;
 		return temp;
 	}
 };
 
 struct op_op {
-	mutable string op;
+	string& op;
 
+	op_op(string& s): op(s) {}
 	void operator()(fileiter_t first, const fileiter_t& last) const
 	{
 		stringstream ss;
 		while (first != last) {
 			ss << *first++;
 		}
-
 		op = ss.str();
 	}
 };
@@ -324,7 +330,7 @@ class create_spe_region {
 	assign_cvar&			stop_op;
 	vars_op<c_variable>&		priv_op;
 	vars_op<shared_variable>&	shared_op;
-	vars_op<c_variable>&		reduce_def_op;
+	vars_op<reduction_variable>&	reduce_def_op;
 	op_op&				reduce_op_op;
 
 public:
@@ -335,11 +341,11 @@ public:
 			assign_cvar& stop, 
 			vars_op<c_variable>& p, 
 			vars_op<shared_variable>& s, 
-			vars_op<c_variable>& rd,
+			vars_op<reduction_variable>& rd,
 			op_op& ro):
 		regions(r), loop_op(l), start_op(start), stop_op(stop),
 		priv_op(p), shared_op(s), reduce_def_op(rd), reduce_op_op(ro)
-	{}
+		{}
 	void operator()(fileiter_t first, const fileiter_t& last) const
 	{
 		spe_region* r = new spe_region(	priv_op.pickup(),
@@ -359,25 +365,28 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	sstream_op			loop_op;
 	assign_cvar			start_op;
 	assign_cvar			stop_op;
-	vars_op<shared_variable>	shared_op;
 	vars_op<c_variable>		priv_op;
-	vars_op<c_variable>		reduce_def_op;
+	vars_op<shared_variable>	shared_op;
+	vars_op<reduction_variable>	reduce_def_op;
 	op_op				reduce_op_op;
 	create_spe_region		region_op;
 
 	stringstream*	loop_pickup;
 	cvarlist_t*	priv_vars;
-	sharedlist_t*	shared_vars;
+	//sharedlist_t*	shared_vars;
+	cvarlist_t*	shared_vars;
 	cvarlist_t*	reduce_vars;
+	string		op;
 
-	cellgen_grammar(sslist_t& ppe, spelist_t& regions, sharedtbl_t& s, symtbl_t& p, symtbl_t& r):
+	cellgen_grammar(sslist_t& ppe, spelist_t& regions, symtbl_t& s, symtbl_t& p, symtbl_t& r):
 		ppe_op(ppe),
 		loop_op(loop_pickup),
 		start_op(priv_vars, "SPE_start"),
 		stop_op(priv_vars, "SPE_stop"),
-		shared_op(shared_vars, s),
 		priv_op(priv_vars, p),
+		shared_op(shared_vars, s),
 		reduce_def_op(reduce_vars, r),
+		reduce_op_op(op),
 		region_op(regions,
 			loop_op, 
 			start_op, 
@@ -584,7 +593,7 @@ public:
 };
 
 void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regions, 
-		sharedtbl_t& shared_tbl, symtbl_t& private_tbl, symtbl_t& reduce_tbl)
+		symtbl_t& shared_tbl, symtbl_t& private_tbl, symtbl_t& reduce_tbl)
 {
 	fileiter_t first(src_name);
 	if (!first) {
@@ -639,6 +648,13 @@ void print_file(const string& ifile_name, const string& ofile_name, const string
 	ofile << regex_replace(ss.str(), regex(program_name_hook), program_name);
 }
 
+void print_mmgp_c(stringstream& mmgp_c, const string& ofile_name, const string& program_name)
+{
+	ofstream ofile(ofile_name.c_str());
+	open_check(ofile, ofile_name);
+	ofile << regex_replace(mmgp_c.str(), regex(program_name_hook), program_name);
+}
+
 class make_pass_struct {
 	stringstream& ss;
 
@@ -647,12 +663,8 @@ public:
 
 	void operator()(const c_variable* cv)
 	{
-		// SPE_start and SPE_stop are keywords 
-		// that already exist in the template code.
-		if (cv->name() != "SPE_start" && cv->name() != "SPE_stop") {
-			ss	<< "\t" 
-				<< cv->declare() << ";" << endl;
-		}
+		ss	<< "\t" 
+			<< cv->declare() << ";" << endl;
 	}
 
 	void operator()(const spe_region* r)
@@ -668,9 +680,9 @@ class make_buffer {
 
 public:
 	make_buffer(ostream& o): out(o) {}
-	void operator()(const shared_variable* sv)
+	void operator()(const c_variable* cv)
 	{
-		out << sv->buff_declare() << ";" << endl;
+		out << buff_variable(cv).declare() << ";" << endl;
 	}
 
 	void operator()(const spe_region* r)
@@ -686,7 +698,7 @@ public:
 	void operator()(const c_variable* cv)
 	{
 		out	<< pass_assign << cv->name() 
-			<< " = " << cv->actual() << ";" 
+			<< " = " << cv->alias() << ";" 
 			<< endl;
 	}
 };
@@ -728,7 +740,16 @@ void print_ppe(const string& name, sslist_t& blocks, stringstream& pro, stringst
 			string passes_str = regex_replace(passes.str(), regex(loop_hook), id_ss.str());
 			file << regex_replace(fork_str, regex(pass_assign_hook), passes_str);
 
-			file << regex_replace(mmgp_wait, regex(loop_hook), id_ss.str());
+			if ((*r)->reduction_op() != "") {
+				string str = regex_replace(
+						mmgp_reduction, 
+						regex(var_hook), 
+						"&" + (*((*r)->reductions()->begin()))->alias());
+				file << regex_replace(str, regex(op_hook), (*r)->reduction_op());
+			}
+			else {
+				file << regex_replace(mmgp_wait, regex(loop_hook), id_ss.str());
+			}
 
 			++r;
 		}
@@ -806,7 +827,7 @@ int main(int argc, char* argv[])
 	// Do all of the input and parsing.
 	sslist_t ppe_src_blocks;
 	spelist_t spe_regions;
-	sharedtbl_t shared_tbl;
+	symtbl_t shared_tbl;
 	symtbl_t private_tbl;
 	symtbl_t reduce_tbl;
 	parse_src(	src_name, 
@@ -820,11 +841,13 @@ int main(int argc, char* argv[])
 	stringstream ppe_prolouge;
 	stringstream spe_declarations;
 	stringstream spe_main;
+	stringstream mmgp_c;
 
 	parse_generic(ppe_fork, ppe_fork_iname);
 	parse_generic(ppe_prolouge, ppe_prolouge_iname);
 	parse_generic(spe_declarations, spe_declarations_iname);
 	parse_generic(spe_main, spe_main_iname);
+	parse_generic(mmgp_c, mmgp_c_iname);
 
 	// Do all of the output and code generation.
 	string no_dot = src_name;
