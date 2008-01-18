@@ -21,6 +21,10 @@ namespace ids {
 	static const int for_loop = 15;
 	static const int compound = 16;
 	static const int cell_region = 17;
+	static const int int_constant_dec = 18;
+	static const int multiplicative_expression = 19;
+	static const int multiplicative_expression_helper = 20;
+	static const int selection_statement = 21;
 	static const int any_rule = INT_MAX;
 };
 

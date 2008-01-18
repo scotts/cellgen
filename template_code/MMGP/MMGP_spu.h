@@ -14,7 +14,7 @@ inline void MMGP_SPE_dma_wait(unsigned int tag_id)
 }
 
 /* Structure used for PPE <-> SPE communication */
-volatile struct signal {
+struct signal {
 
     int start, stop;
     unsigned long long total_time,loop_time;

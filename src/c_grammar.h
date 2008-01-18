@@ -74,14 +74,10 @@ using namespace phoenix;
 #include "streamops.h"
 #include "parse_tree.h"
 
-stream_writer sw(cout);
-
-struct c_grammar : public grammar<c_grammar>
-{
+struct c_grammar : public grammar<c_grammar> {
     
     template <typename ScannerT>
-    struct definition
-    {
+    struct definition {
         definition(c_grammar const& self) :
             ELLIPSIS("..."), RIGHT_ASSIGN(">>="), LEFT_ASSIGN("<<="),
             ADD_ASSIGN("+="), SUB_ASSIGN("-="), MUL_ASSIGN("*="),
@@ -1029,7 +1025,7 @@ struct c_grammar : public grammar<c_grammar>
                 RETURN, SHORT, SIGNED, SIZEOF, STATIC, STRUCT, SWITCH, TYPEDEF,
                 UNION, UNSIGNED, VOID, VOLATILE, WHILE, /*IDENTIFIER,*/
                 STRING_LITERAL_PART, STRING_LITERAL, INT_CONSTANT_HEX, INT_CONSTANT,
-                INT_CONSTANT_OCT, INT_CONSTANT_DEC, INT_CONSTANT_CHAR,
+                INT_CONSTANT_OCT, /*INT_CONSTANT_DEC,*/ INT_CONSTANT_CHAR,
                 FLOAT_CONSTANT,FLOAT_CONSTANT_1, FLOAT_CONSTANT_2, FLOAT_CONSTANT_3,
                 CONSTANT;
 
@@ -1038,7 +1034,7 @@ struct c_grammar : public grammar<c_grammar>
                 primary_expression, /*postfix_expression,*/ /*postfix_expression_helper,*/
                 /*argument_expression_list,*/ unary_expression, unary_operator,
                 cast_expression,
-                multiplicative_expression, multiplicative_expression_helper,
+                /*multiplicative_expression,*/ /*multiplicative_expression_helper,*/
                 additive_expression, additive_expression_helper,
                 shift_expression, shift_expression_helper,
                 /*relational_expression,*/ relational_expression_helper,
@@ -1064,7 +1060,7 @@ struct c_grammar : public grammar<c_grammar>
                 direct_abstract_declarator, direct_abstract_declarator_helper,
                 initializer, initializer_list, /*statement,*/ labeled_statement,
                 /*compound_statement,*/ declaration_list, statement_list,
-                /*expression_statement,*/ selection_statement, iteration_statement,
+                /*expression_statement,*/ /*selection_statement,*/ iteration_statement,
                 jump_statement, translation_unit, external_declaration,
                 function_definition;
 
@@ -1080,6 +1076,10 @@ struct c_grammar : public grammar<c_grammar>
 	rule<ScannerT, parser_tag<ids::relational_expression> > relational_expression;
 	rule<ScannerT, parser_tag<ids::argument_expression_list> > argument_expression_list;
 	rule<ScannerT, parser_tag<ids::postfix_expression_helper> > postfix_expression_helper;
+	rule<ScannerT, parser_tag<ids::int_constant_dec> > INT_CONSTANT_DEC;
+	rule<ScannerT, parser_tag<ids::multiplicative_expression> > multiplicative_expression;
+	rule<ScannerT, parser_tag<ids::multiplicative_expression_helper> > multiplicative_expression_helper;
+	rule<ScannerT, parser_tag<ids::selection_statement> > selection_statement;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

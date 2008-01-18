@@ -22,6 +22,18 @@ void (*MMGP_prediction)(void);
 void (*MMGP_create_threads)(void);
 void (*MMGP_prediction)(void);
 
+#define MMGP_reduction(c, op) \
+({ \
+	int i; \
+	sched_yield(); \
+	for(i=0; i<__SPE_threads; i++) { \
+		while (((struct signal *)signal[i])->stop==0) { \
+			sched_yield(); \
+		} \
+		*c op##= ((struct signal *)signal[i])->result; \
+	} \
+})
+
 inline void send_mail(speid_t id, unsigned int data);
 
 extern spe_program_handle_t PROGRAM_NAME_spe;

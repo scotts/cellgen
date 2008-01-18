@@ -31,13 +31,16 @@ public:
 
 	virtual string declare() const
 	{
-		stringstream ss;
-		ss << type() << " " << name();
-		return ss.str();
+		return type() + " " + name();
 	}
 
 	virtual string actual() const { return pass_var + "." + name(); }
 	virtual string formal() const { return declare(); }
+
+	bool is_pointer() const
+	{
+		return _type.find("*") != string::npos;
+	}
 };
 
 class const_c_variable: public c_variable {
@@ -47,33 +50,48 @@ public:
 		{}
 	virtual string declare() const
 	{
-		stringstream ss;
-		ss << type() << " " << name() << " = " << alias() << ";";
-		return ss.str();
+		return type() + " " + name() + "=" + alias() + ";";
 	}
 };
-
+/* The Cell SPU C compiler doesn't allow const variables in static expressions. Oh well.
 const const_c_variable buff_size("int", "buff_size", "16");
+*/
+
+class pound_define: public c_variable {
+public:
+	pound_define(const string& l, const string& a):
+		c_variable("", l, a)
+		{}
+	virtual string declare() const
+	{
+		return "#define " + name() + " " + alias() + "\n";
+	}
+};
+const pound_define buff_size("buff_size", "80");
 
 class shared_variable: public c_variable {
 public:
 	shared_variable() {}
 	shared_variable(const string& t, const string& l, const string& a):
-		c_variable(t, l + "_addr", a) 
+		c_variable(t, l, a) 
 		{}
+
+	virtual string name() const { return c_variable::name() + "_addr"; }
+	virtual string actual() const { return pass_var + "." + name(); }
 };
 
-class buff_variable: public c_variable {
+class buffer_variable: public c_variable {
 public:
-	buff_variable(const c_variable* cv):
-		c_variable(cv->type(), cv->name() + "_buff", cv->alias()) {}
+	buffer_variable(const c_variable* cv): c_variable(*cv) {}
+
+	virtual string name() const { return c_variable::name() + "_buff"; }
 
 	virtual string type() const
 	{
 		string noptr = c_variable::type();
 		size_t pos = noptr.find('*');
 		if (pos == string::npos) {
-			cerr	<< "error: variable " << c_variable::declare() 
+			cerr	<< "error: variable " << c_variable::name() 
 				<< " can't be made into a buffer because it is not a pointer." 
 				<< endl;
 			exit(1);
@@ -82,44 +100,44 @@ public:
 		return noptr;
 	}
 
-	virtual string declare() const
-	{
-		stringstream ss;
-		ss	<< type() << " " << name() 
-			<< "[2][" + buff_size.alias() + "] __attribute__((aligned(128)))";
-		return ss.str();
-	}
-
 };
 
-class index_variable: public c_variable {
+class double_buffer: public buffer_variable {
 public:
-	index_variable(const c_variable* cv): 
-		c_variable("int", cv->name() + "_index", cv->alias()) 
-		{}
+	double_buffer(const c_variable* cv): buffer_variable(cv) {}
+
+	virtual string declare() const
+	{
+		return type() + " " + name() + "[2][" + buff_size.name() + "] __attribute__((aligned(128)))"; 
+	}
+};
+
+class private_buffer: public buffer_variable {
+public:
+	private_buffer(const c_variable* cv): buffer_variable(cv) {}
+
+	virtual string declare() const
+	{
+		return type() + " " + name() + "[" + buff_size.name() + "] __attribute__((aligned(128)))"; 
+	}
+};
+
+class next_variable: public c_variable {
+public:
+	next_variable(const c_variable* cv): c_variable(*cv) {}
+	virtual string type() const { return "int"; }
+	virtual string name() const { return c_variable::name() + "_next"; }
 };
 
 class orig_variable: public c_variable {
 public:
-	orig_variable(const c_variable* cv):
-		c_variable(cv->type(), cv->name(), cv->alias())
-		{}
-
-	virtual string name() const
-	{
-		string noaddr = c_variable::name();
-		size_t pos = noaddr.find("_addr");
-		if (pos == string::npos) {
-			cerr	<< "error: variable " << declare() 
-				<< " is not an shared variable." 
-				<< endl;
-			exit(1);
-		}
-		noaddr.replace(pos, strlen("_addr"), "");
-		return noaddr;
-	}
+	orig_variable(const c_variable* cv): c_variable(*cv) {}
+	virtual string type() const { return c_variable::type(); }
+	virtual string name() const { return c_variable::name(); }
+	virtual string declare() const { return c_variable::declare(); }
+	virtual string actual() const { return c_variable::actual(); }
+	virtual string formal() const { return c_variable::formal(); }
 };
-
 
 class reduction_variable: public c_variable {
 public:
@@ -127,18 +145,17 @@ public:
 		c_variable(t, l, a)
 		{}
 
+	virtual string name() const { return c_variable::name() + "_reduc"; }
 	virtual string actual() const { return "&" + pass_var + "." + name(); }
 
 	virtual string formal() const
 	{  
-		stringstream ss;
-		ss << type() << "* " << name();
-		return ss.str();
+		return type() + "* " + name();
 	}
 };
 
-typedef list<const c_variable*>			cvarlist_t;
-typedef map<string, const c_variable*>		symtbl_t;
+typedef list<const c_variable*>		cvarlist_t;
+typedef map<string, const c_variable*>	symtbl_t;
 
 #endif // VARIABLE_H
 

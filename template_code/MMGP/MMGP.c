@@ -18,11 +18,9 @@
  * id - id of the targeting SPE,
  * data - 32 bit data that is sent. */
 inline void send_mail(speid_t id, unsigned int data){
-
            spe_write_in_mbox(id,data);
 
 }
-
 
 /* Creates SPE trheads, parameters:
  * 1. SPE_trheads, number of SPE threads to be created */
@@ -153,17 +151,6 @@ inline void _wait_SPE(int num){
  *           the sum of the returning values from all SPEs.
  * 2. num - the SPE number (the work can be distributed 
  *          among multiple SPEs). */ 
-#define MMGP_reduction(c, op) \
-({ \
-	int i; \
-	sched_yield(); \
-	for(i=0; i<__SPE_threads; i++) { \
-		while (((struct signal *)signal[i])->stop==0) { \
-			sched_yield(); \
-		} \
-		*c op##= ((struct signal *)signal[i])->result; \
-	} \
-})
 
 void _prediction(){
         

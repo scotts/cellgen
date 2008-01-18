@@ -1,5 +1,8 @@
 /*
  * Scott Schneider
+ *
+ * TODO:	1. identify multiplicative indices
+ * 		2. output final DMA	
  */
 #include <cassert>
 #include <iostream>
@@ -25,6 +28,7 @@ using namespace boost::spirit;
 #include "c_grammar.h"
 #include "parse_tree.h"
 #include "variable.h"
+#include "spe_region.h"
 #include "streamops.h"
 #include "skip.h"
 
@@ -59,55 +63,12 @@ const string mmgp_spe_stop		= "MMGP_SPE_stop();";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
 
-class spe_region;
-typedef list<spe_region*>	spelist_t;
 typedef list<stringstream*>	sslist_t;
 
 const c_compound_grammar c_compound;
 const skip_grammar skip;
 
 bool print_ast = false;
-
-class spe_region {
-	cvarlist_t* _priv;
-	cvarlist_t* _shared;
-	cvarlist_t* _reductions;
-	string _reduction_op;
-	stringstream* _text;
-	tree_node_t* _ast;
-
-public:
-	spe_region(
-		cvarlist_t* v, 
-		cvarlist_t* d, 
-		stringstream* t, 
-		cvarlist_t* r,
-		string o):
-		_priv(v), _shared(d), _reductions(r), _reduction_op(o), _text(t)
-	{
-		assert(v);
-		assert(d);
-		assert(t);
-		assert(r);
-	}
-
-	cvarlist_t*	priv()		const { return _priv; }
-	cvarlist_t*	shared()	const { return _shared; }
-	stringstream*	text()		const { return _text; }
-	cvarlist_t*	reductions()	const { return _reductions; }
-	string		reduction_op()	const { return _reduction_op; }
-
-	void ast(tree_node_t* a)
-	{
-		_ast = a;
-	}
-
-	tree_node_t* ast() const
-	{
-		assert(_ast);
-		return _ast;
-	}
-};
 
 void file_to_stream(stringstream& in, istream& file) 
 {
@@ -128,48 +89,15 @@ void open_check(const T& s, const string& name)
 	}
 }
 
-struct make_buffer_declarations {
-	stringstream& ss;
-
-	make_buffer_declarations(stringstream& s): ss(s) {}
-	void operator()(const c_variable* cv)
-	{
-		buff_variable buff(cv);
-		index_variable index(cv);
-		orig_variable orig(cv);
-
-		ss 	<< orig.declare() << ";" << endl
-			<< index.declare() << " = 0;" << endl
-			<< "mfc_get(" 
-				<< buff.name() << "[" << index.name() << "], " 
-				<< cv->name() << " + SPE_start,"
-				<< "sizeof(" << buff.type() << ")*" << buff_size.alias() << ", "
-				<< index.name() << ", 0, 0); \n" 
-			<< orig.name() << " = " << buff.name() << "[" << index.name() << "];" << endl;
-	}
-};
-
-struct add_declarations {
-	const string& declarations;
-
-	add_declarations(const string& d): declarations(d) {}
-	void operator()(tree_node_t& node)
-	{
-		if (node.value.id() == ids::compound) {
-			tree_node_t& lparen = *node.children.begin();
-			lparen.value.value("{" + declarations);
-		}
-	}
-};
-
-struct codeout {
+class codeout {
 	ostream& out;
 
+public:
 	codeout(ostream& o): out(o) {}
 	void operator()(const tree_node_t& node)
 	{
 		string str;
-		if (node.value.value() == string()) {
+		if (node.value.value() == "") {
 			str = string(node.value.begin(), node.value.end());
 		}
 		else {
@@ -177,14 +105,15 @@ struct codeout {
 		}
 
 		out << str << " ";
-		fmap(*this, node.children);
+		fmap(this, node.children);
 	}
 };
 
-struct make_case_sig {
+class make_case_sig {
 	stringstream& file;
 	stringstream& casest;
 
+public:
 	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
 	void operator()(const c_variable* cv)
 	{
@@ -193,11 +122,23 @@ struct make_case_sig {
 	}
 };
 
-struct print_region {
+class make_writebacks {
+	stringstream& w;
+
+public:
+	make_writebacks(stringstream& _w): w(_w) {}
+	void operator()(const c_variable* cv)
+	{
+		w << "signal.result = " << pass_var << "." << cv->name() << ";" << endl;
+	}
+};
+
+class print_region {
 	ostream& file;
 	sslist_t& cases;
 	int loop_num;
 
+public:
 	print_region(ostream& f, sslist_t& c): file(f), cases(c), loop_num(1) {}
 	void operator()(spe_region* region)
 	{
@@ -213,18 +154,18 @@ struct print_region {
 		fmap(make_case_sig(f, c), region->shared());
 		fmap(make_case_sig(f, c), region->reductions());
 
-		// Remove extraneous ","
-		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
-		*casest << c.str().replace(c.str().find_last_of(","), strlen(","), "");
+		stringstream writebacks;
+		fmap(make_writebacks(writebacks), region->reductions());
 
-		file << ")" << endl;
-		stringstream decs;
-		fmap(make_buffer_declarations(decs), region->shared());
-		fmap(add_declarations(decs.str()), region->ast()->children);
-		fmap(codeout(file), region->ast()->children);
-
-		*casest << "); " << mmgp_spe_stop << "break;" << endl;
+		*casest	<< c.str().replace(c.str().find_last_of(","), strlen(","), "") << "); " << endl
+			<< writebacks.str() << endl
+			<< mmgp_spe_stop << "break;" << endl;
 		cases.push_back(casest);
+
+		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
+		file << ")" << endl;
+
+		fmap(codeout(file), region->ast()->children);
 	}
 };
 
@@ -373,7 +314,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 
 	stringstream*	loop_pickup;
 	cvarlist_t*	priv_vars;
-	//sharedlist_t*	shared_vars;
 	cvarlist_t*	shared_vars;
 	cvarlist_t*	reduce_vars;
 	string		op;
@@ -580,6 +520,15 @@ public:
 		else if (node.value.id() == ids::postfix_expression_helper) { 
 			rule = "postfix_expression_helper"; 
 		}
+		else if (node.value.id() == ids::int_constant_dec) { 
+			rule = "int_constant_dec"; 
+		}
+		else if (node.value.id() == ids::multiplicative_expression) {
+			rule = "multiplicative_expression";
+		}
+		else if (node.value.id() == ids::multiplicative_expression_helper) {
+			rule = "multiplicative_expression_helper";
+		}
 		else {
 			stringstream ss;
 			ss << node.value.id();
@@ -611,7 +560,7 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 		exit(-1);
 	}
 
-	root_eval(p->trees, shared_tbl);
+	root_eval(p->trees, shared_tbl, spe_regions);
 
 	spelist_t::iterator s = spe_regions.begin();
 	for (tree_iterator_t a = (*p->trees.begin()).children.begin(); 
@@ -675,22 +624,39 @@ public:
 	}
 };
 
-class make_buffer {
+class make_double_buffers {
 	ostream& out;
 
 public:
-	make_buffer(ostream& o): out(o) {}
+	make_double_buffers(ostream& o): out(o) {}
 	void operator()(const c_variable* cv)
 	{
-		out << buff_variable(cv).declare() << ";" << endl;
+		out << double_buffer(cv).declare() << ";" << endl;
 	}
 
 	void operator()(const spe_region* r)
 	{
-		fmap(*this, r->shared());
+		fmap(this, r->shared());
 	}
 };
 
+class make_private_buffers {
+	ostream& out;
+
+public:
+	make_private_buffers(ostream& o): out(o) {}
+	void operator()(const c_variable* cv)
+	{
+		if (cv->is_pointer()) {
+			out << private_buffer(cv).declare() << ";" << endl;
+		}
+	}
+
+	void operator()(const spe_region* r)
+	{
+		fmap(this, r->priv());
+	}
+};
 class make_pass_assign {
 	stringstream& out;
 public:
@@ -776,7 +742,8 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 
 	stringstream ss;
 	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-	fmap(make_buffer(ss), regions);
+	fmap(make_double_buffers(ss), regions);
+	fmap(make_private_buffers(ss), regions);
 
 	sslist_t cases;
 	fmap(print_region(ss, cases), regions);

@@ -2,11 +2,11 @@ void compute_bounds(int *start, int *stop)
 {
 	int total_chunks = (*stop - *start) / buff_size;
 	int thread_chunks = total_chunks / SPE_threads;
-	int rem = (*stop - *start) % SPE_threads; 
+	int rem = (*stop - *start) % (buff_size * SPE_threads);
 
 	if (SPE_id == SPE_threads - 1) {
 		*start = *start + (SPE_id * thread_chunks * buff_size);
-		*stop = *start + ((thread_chunks + rem) * buff_size);
+		*stop = *start + (thread_chunks * buff_size) + rem;
 	}
 	else {
 		*start = *start + (SPE_id * thread_chunks * buff_size);
