@@ -2,6 +2,8 @@
 #define VARIABLE_H
 
 #include <list>
+#include <map>
+#include <set>
 #include <string>
 #include <sstream>
 using namespace std;
@@ -81,8 +83,14 @@ public:
 };
 
 class buffer_variable: public c_variable {
+private:
+	size_t _depth; // What type of buffering? Currently we only go up to triple.
+
 public:
-	buffer_variable(const c_variable* cv): c_variable(*cv) {}
+	buffer_variable(const c_variable* cv, size_t d): c_variable(*cv), _depth(d)
+	{
+		assert(_depth > 0);	
+	}
 
 	virtual string name() const { return c_variable::name() + "_buff"; }
 
@@ -100,25 +108,22 @@ public:
 		return noptr;
 	}
 
-};
-
-class double_buffer: public buffer_variable {
-public:
-	double_buffer(const c_variable* cv): buffer_variable(cv) {}
-
 	virtual string declare() const
 	{
-		return type() + " " + name() + "[2][" + buff_size.name() + "] __attribute__((aligned(128)))"; 
+		stringstream ss;
+		ss << type() << " " << name();
+		if (_depth > 1) {
+			ss << "[" << _depth << "]";
+		}
+		ss << "[" << buff_size.name() << "] __attribute__((aligned(128)))"; 
+		return ss.str();
 	}
-};
 
-class private_buffer: public buffer_variable {
-public:
-	private_buffer(const c_variable* cv): buffer_variable(cv) {}
-
-	virtual string declare() const
+	string depth() const
 	{
-		return type() + " " + name() + "[" + buff_size.name() + "] __attribute__((aligned(128)))"; 
+		stringstream ss;
+		ss << _depth;
+		return ss.str();
 	}
 };
 
@@ -154,8 +159,9 @@ public:
 	}
 };
 
-typedef list<const c_variable*>		cvarlist_t;
-typedef map<string, const c_variable*>	symtbl_t;
+typedef list<const c_variable*>		cvarlist;
+typedef map<string, const c_variable*>	symtbl;
+typedef set<string>			symset;
 
 #endif // VARIABLE_H
 

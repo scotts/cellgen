@@ -75,14 +75,20 @@ bool is_multop(string s)
 	return s == "*" || s == "/" || s == "%";
 }
 
-struct mult_op {
-	const symtbl_t& cond;
-	bool found_cond;
-	bool found_op;
-	mult_expr math;
+bool is_equals(tree_node_t& node)
+{
+	string str(node.value.begin(), node.value.end());
+	return str.find("=") != string::npos;
+}
 
-	mult_op(const symtbl_t&c):
-		cond(c), found_cond(false), found_op(false)
+struct mult_op {
+	const symset& cond;
+	bool& found_cond;
+	mult_expr& math;
+	bool found_op;
+
+	mult_op(const symset& c, bool& f, mult_expr& m):
+		cond(c), found_cond(f), math(m), found_op(false)
 		{}
 	void operator()(tree_node_t& node)
 	{
@@ -111,23 +117,21 @@ struct mult_op {
 };
 
 struct array_op {
-	const symtbl_t& cond;
-	bool found_cond;
-	mult_expr math;
+	const symset& cond;
+	bool& found_cond;
+	mult_expr& math;
 	string rem;
 
-	array_op(const symtbl_t& c):
-		cond(c), found_cond(false) 
+	array_op(const symset& c, bool& f, mult_expr& m):
+		cond(c), found_cond(f), math(m)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		string val(node.value.begin(), node.value.end());
 
 		if (node.value.id() == ids::multiplicative_expression) {
-			mult_op o(cond);
+			mult_op o(cond, found_cond, math);
 			fmap(&o, node.children);
-			math = o.math;
-			found_cond = o.found_cond;
 		}
 		else {
 			if (found_cond && !is_bracket(val)){
@@ -140,33 +144,31 @@ struct array_op {
 };
 
 struct postfix_op {
-	const symtbl_t& shared;
-	const symtbl_t& cond;
-	bool found_shared;
-	bool found_cond;
-	string shared_ident;
+	const symtbl& shared;
+	const symset& cond;
+	bool& found_cond;
 	mult_expr math;
+	bool found_shared;
+	const c_variable* shared_var;
 	
-	postfix_op(const symtbl_t& s, const symtbl_t& c):
-		shared(s), cond(c), 
-		found_shared(false), found_cond(false)
+	postfix_op(const symtbl& s, const symset& c, bool& f):
+		shared(s), cond(c), found_cond(f), found_shared(false)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		string val(node.value.begin(), node.value.end());
 		if (node.value.id() == ids::identifier) {
 			if (!found_shared) {
-				if (shared.find(val) != shared.end()) {
-					shared_ident = val;
+				symtbl::const_iterator it = shared.find(val);
+				if (it != shared.end()) {
+					shared_var = it->second;
 					found_shared = true;
 				}
 			}
 		}
 		else if (node.value.id() == ids::array_index) {
-			array_op o(cond);
+			array_op o(cond, found_cond, math);
 			fmap(&o, node.children);
-			math = o.math;
-			found_cond = o.found_cond;
 
 			if (found_shared && found_cond) {
 				node.value.value("[((" + math.as_written() + ")" + o.rem + ")%" + buff_size.name() + "]");
@@ -182,18 +184,18 @@ struct postfix_op {
 	}
 };
 
-struct lhs_op {
-	const symtbl_t& shared;
-	symtbl_t& out;
-	lhs_op(const symtbl_t& s, symtbl_t& o):
-		shared(s), out(o)
+struct handness {
+	const symtbl& shared;
+	cvarlist& lst;
+	handness(const symtbl& s, cvarlist& l):
+		shared(s), lst(l)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
 			if (shared.find(ident) != shared.end()) {
-				out[ident] = (shared.find(ident))->second;
+				lst.push_back((shared.find(ident))->second);
 			}
 		}
 		else {
@@ -202,39 +204,35 @@ struct lhs_op {
 	};
 };
 
-bool find_equals(tree_node_t& node)
-{
-	string str(node.value.begin(), node.value.end());
-	return str.find("=") != string::npos;
-}
 
-struct exprstmnt_op {
-	const symtbl_t& shared;
-	const symtbl_t& cond;
-	symtbl_t& out;
-	list<string> shared_idents;
-	mult_expr math;
-	exprstmnt_op(const symtbl_t& s, const symtbl_t& c, symtbl_t& o):
-		shared(s), cond(c), out(o)
+struct expression_statement_op {
+	const symtbl& shared;
+	const symset& cond;
+	cvarlist& out;
+	mult_expr& math;
+	cvarlist in;
+	expression_statement_op(const symtbl& s, const symset& c, cvarlist& o, mult_expr& m):
+		shared(s), cond(c), out(o), math(m)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::assignment_expression) {
 			tree_iterator_t e;
 			for (e = node.children.begin(); e != node.children.end(); ++e) {
-				if (find_equals(*e)) {
+				if (is_equals(*e)) {
 					break;
 				}
 			}
 
-			for_each(node.children.begin(), e, lhs_op(shared, out));
+			for_each(node.children.begin(), e, handness(shared, out));
+			for_each(e, node.children.end(), handness(shared, in));
 		}
 		else if (node.value.id() == ids::postfix_expression) {
-			postfix_op o(shared, cond);
+			bool found_cond;
+			postfix_op o(shared, cond, found_cond);
 			fmap(&o, node.children);
 
-			if (o.found_shared && o.found_cond) {
-				shared_idents.push_back(o.shared_ident);
+			if (o.found_shared && found_cond) {
 				math = o.math;
 			}
 		}
@@ -243,58 +241,70 @@ struct exprstmnt_op {
 	}
 };
 
-struct gen_wait {
+struct gen_in {
 	tree_node_t& node;
-	map<const c_variable*, bool>& first;
-	const symtbl_t& shared;
+	const symtbl& shared;
 	const string iexp;
-	gen_wait(tree_node_t& n, map<const c_variable*, bool>& f,
-			const symtbl_t& s, const string& i): 
-		node(n), first(f), shared(s), iexp(i) 
+	size_t depth;
+	gen_in(tree_node_t& n, const symtbl& s, const string& i): 
+		node(n), shared(s), iexp(i), depth(2)
 		{}
-	void operator()(const string& shared_ident)
+	gen_in(const gen_in& o): node(o.node), shared(o.shared), iexp(o.iexp), depth(o.depth) {}
+	void operator()(const c_variable* shared_var)
 	{
-		const c_variable* cv = (shared.find(shared_ident))->second;
-		next_variable next(cv);
-		double_buffer buff(cv);
-		orig_variable orig(cv);
+		next_variable next(shared_var);
+		buffer_variable buff(shared_var, depth);
+		orig_variable orig(shared_var);
 
-		if (!first[cv]) {
-			string use(node.value.begin(), node.value.end());
-			use += node.value.value();
-			node.value.value(
-					"if (!((" + iexp + ")%" + buff_size.name() + ")) {\n" +
-						next.name() + "= !" + next.name() + 
-						";\n mfc_get("
-							+ buff.name() + "[" + next.name() + "]," 
-							+ "(unsigned long)(" + cv->name() + "+((" + iexp + ")+" + buff_size.name() + "))," 
-							+ "sizeof(" + buff.type() + ") *" + buff_size.name() + ","
-							+ next.name() + ", 0, 0);\n"
-						+ orig.name() + "=" + buff.name() + "[!" + next.name() + "];\n"
-						+ "MMGP_SPE_dma_wait(!" + next.name() + ");\n }\n"
-					+ use);
-			first[cv] = true;
-		}
+		string use(node.value.begin(), node.value.end());
+		use += node.value.value();
+		node.value.value(
+			"if (!((" + iexp + ")%" + buff_size.name() + ")) {\n" 
+				"int old=" + next.name() + ";\n" +
+				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
+				"mfc_get(" + 
+					buff.name() + "[" + next.name() + "]," 
+					"(unsigned long)(" + shared_var->name() + "+((" + iexp + ")+" + buff_size.name() + "))," 
+					"sizeof(" + buff.type() + ") *" + buff_size.name() + "," +
+					next.name() + ", 0, 0);\n" +
+				orig.name() + "=" + buff.name() + "[old];\n"
+				"MMGP_SPE_dma_wait(old);\n }\n"
+			+ use);
 	}
+
+	void make_triple() { depth = 3; }
 };
 
+typedef map<const c_variable*, gen_in> lazy_gen_in;
+
 struct for_compound_op {
-	const symtbl_t& shared; 
-	const symtbl_t& cond;
-	symtbl_t& out;
-	map<const c_variable*, bool> first;
-	mult_expr math;
-	for_compound_op(const symtbl_t& s, symtbl_t& c, symtbl_t& o): 
-		shared(s), cond(c), out(o)
+	const symtbl& shared; 
+	const symset& cond;
+	cvarlist& out;
+	lazy_gen_in& in;
+	map<const c_variable*, bool>& first;
+	mult_expr& math;
+	for_compound_op(const symtbl& s, symset& c, cvarlist& o, lazy_gen_in& l, map<const c_variable*, bool>& f, mult_expr& m): 
+		shared(s), cond(c), out(o), in(l), first(f), math(m)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
-			exprstmnt_op o(shared, cond, out);
+			expression_statement_op o(shared, cond, out, math);
 			fmap(&o, node.children);
-			math = o.math;
 
-			fmap(gen_wait(node, first, shared, math.as_written()), o.shared_idents);
+			// Store the function object somewhere, and call it later once I know 
+			// which variables are in, which are out, and which are inout
+			for (cvarlist::iterator it = o.in.begin(); it != o.in.end(); ++it) {
+				if (!first[*it]) {
+					in.insert(pair<const c_variable*, gen_in>(
+								*it, 
+								gen_in(node, shared, math.as_written())
+							)
+						);
+					first[*it] = true;
+				}
+			}
 		}
 		else {
 			fmap(this, node.children);
@@ -305,12 +315,14 @@ struct for_compound_op {
 struct gen_out {
 	tree_node_t& node;
 	const string& iexp;
-	gen_out(tree_node_t& n, const string& i): 
-		node(n), iexp(i) {}
-	void operator()(pair<string, const c_variable*> p)
+	const size_t depth;
+	gen_out(tree_node_t& n, const string& i, size_t d): 
+		node(n), iexp(i), depth(d) {}
+	void operator()(const c_variable* out_var)
 	{
-		double_buffer buff(p.second);
-		orig_variable orig(p.second);
+		buffer_variable buff(out_var, depth);
+		orig_variable orig(out_var);
+		string var_switch;
 		string old;
 
 		if (node.value.value() == "") {
@@ -320,12 +332,21 @@ struct gen_out {
 			old = node.value.value();
 		}
 
-		node.value.value("if (!(" + iexp + "%" + buff_size.name() + 
-					")) {\n MMGP_SPE_dma_wait(out_tag); \n mfc_put(" +
-					orig.name() + "," + "(unsigned long)(" + (p.second)->name() + 
-					"+" + iexp + "-" + buff_size.name() + "), sizeof(" + 
-					buff.type() + ")*" + buff_size.name() + 
-					", out_tag, 0, 0);\n }\n" + 
+		if (depth < 3) {
+			next_variable next(out_var);
+
+			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + ";\n" +
+					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
+		}
+
+		node.value.value("if (!(" + iexp + "%" + buff_size.name() + ")) {\n "
+					"MMGP_SPE_dma_wait(out_tag); \n"
+					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + out_var->name() + 
+							"+" + iexp + "-" + buff_size.name() + "),"
+						"sizeof(" + buff.type() + ")*" + buff_size.name() + ","
+						"out_tag, 0, 0);\n" +
+					var_switch +
+				"}\n" + 
 				old);
 	}
 };
@@ -335,10 +356,10 @@ struct gen_final_out {
 	const string& multrhs;
 	gen_final_out(tree_node_t& n, const string& m):
 		node(n), multrhs(m) {}
-	void operator()(pair<string, const c_variable*> p)
+	void operator()(const c_variable* out_var)
 	{
-		double_buffer buff(p.second);
-		orig_variable orig(p.second);
+		buffer_variable buff(out_var, 2);
+		orig_variable orig(out_var);
 		string old;
 
 		if (node.value.value() == "") {
@@ -351,55 +372,16 @@ struct gen_final_out {
 		node.value.value(old + "if ((((SPE_stop - SPE_start)" + multrhs + ")%buff_size)) {" +
 					"MMGP_SPE_dma_wait(out_tag); \n mfc_put(" + 
 					orig.name() + "," + 
-					"(unsigned long)(" + (p.second)->name() +
+					"(unsigned long)(" + out_var->name() +
 					"+(SPE_stop" + multrhs + ")-(((SPE_stop-SPE_start)" + multrhs + ")%" + 
 					buff_size.name() + ")), sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + multrhs +
 					")%" + buff_size.name() + "),out_tag, 0, 0); \n" +
 				"MMGP_SPE_dma_wait(out_tag); \n }");
 	}
-};
 
-class init_double_buffers {
-	stringstream& ss;
-	const string& factor;
-
-public:
-	init_double_buffers(stringstream& s, const string& f): ss(s), factor(f) {}
-	void operator()(const c_variable* cv)
+	void operator()(const lazy_gen_in::value_type& p)
 	{
-		double_buffer buff(cv);
-		next_variable next(cv);
-		orig_variable orig(cv);
-
-		ss 	<< orig.declare() << ";" << endl
-			<< next.declare() << " = 0;" << endl
-			<< "mfc_get(" 
-				<< buff.name() << "[" << next.name() << "], " 
-				<< "(unsigned long)(" << cv->name() << " + (SPE_start" + factor + ")),"
-				<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ", "
-				<< next.name() << ", 0, 0); \n" 
-			<< orig.name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
-	}
-};
-
-class init_private_buffers {
-	stringstream& ss;
-
-public:
-	init_private_buffers(stringstream& s): ss(s) {}
-	void operator()(const c_variable* cv)
-	{
-		if (cv->is_pointer()) {
-			private_buffer buff(cv);
-
-			ss	<< "mfc_get("
-					<< buff.name() << ","
-					<< "(unsigned long)" << cv->name() << ","
-					<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ","
-					<< "3, 0, 0);" << endl
-				<< cv->name() << "=" << buff.name() << ";" << endl
-				<< "MMGP_SPE_dma_wait(3);" << endl;
-		}
+		operator()(p.first);
 	}
 };
 
@@ -428,24 +410,94 @@ public:
 	}
 };
 
+void printlist(const c_variable* cv)
+{
+	cout << cv << " ";
+}
+
+void printlazy(lazy_gen_in::value_type& l)
+{
+	cout << l.first << " ";
+}
+
+struct c_vars_less {
+	bool operator()(const c_variable* cv, const lazy_gen_in::value_type& p)
+	{
+		if (cv < p.first) return true;
+		else return false;
+	}
+
+	bool operator()(const lazy_gen_in::value_type& p, const c_variable* cv)
+	{
+		if (p.first < cv) return true;
+		else return false;
+	}
+
+	bool operator()(const lazy_gen_in::value_type& a, const lazy_gen_in::value_type& b)
+	{
+		if (a.first < b.first) return true; 
+		else return false;
+	}
+};
+
 struct for_op {
-	const symtbl_t& shared;
-	symtbl_t& cond;
-	mult_expr math;
-	for_op(const symtbl_t& s, symtbl_t& c): shared(s), cond(c) {}
+	const symtbl& shared;
+	symset& cond;
+	cvarlist& in;
+	cvarlist& out;
+	cvarlist& inout;
+	mult_expr& math;
+	for_op(const symtbl& s, symset& c, cvarlist& i, cvarlist& o, cvarlist& io, mult_expr& m): 
+		shared(s), cond(c), in(i), out(o), inout(io), math(m) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
-			cond[ident] = NULL;
+			cond.insert(ident);
 		}
 		else if (node.value.id() == ids::compound) {
-			symtbl_t out;
-			for_compound_op o(shared, cond, out);
+			map<const c_variable*, bool> first;
+			lazy_gen_in lazy_in;
+			cvarlist pre_out;
+
+			for_compound_op o(shared, cond, pre_out, lazy_in, first, math);
 			fmap(&o, node.children);
-			math = o.math;
-			
-			fmap(gen_out(node.children.back(), math.next_iteration()), out);
+
+			pre_out.sort();
+			pre_out.unique();
+
+			lazy_gen_in lazy_inout;
+			set_intersection(lazy_in.begin(), lazy_in.end(), 
+					pre_out.begin(), pre_out.end(), 
+					inserter(lazy_inout, lazy_inout.begin()),
+					c_vars_less());
+
+			set_difference(pre_out.begin(), pre_out.end(), 
+					lazy_inout.begin(), lazy_inout.end(), 
+					inserter(out, out.begin()),
+					c_vars_less());
+
+			lazy_gen_in diff_in;
+			set_difference(lazy_in.begin(), lazy_in.end(), 
+					lazy_inout.begin(), lazy_inout.end(), 
+					inserter(diff_in, diff_in.begin()),
+					c_vars_less());
+
+			// Lazily call gen_in on both in and inout variables.
+			for (lazy_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
+				it->second(it->first);
+				in.push_back(it->first);
+			}
+
+			for (lazy_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
+				it->second.make_triple(); // inout variables need triple buffers
+				it->second(it->first);
+				inout.push_back(it->first);
+			}
+
+			fmap(gen_out(node.children.back(), math.next_iteration(), 3), inout);
+			fmap(gen_out(node.children.back(), math.next_iteration(), 2), out);
+			fmap(gen_final_out(node.children.back(), math.factor()), inout);
 			fmap(gen_final_out(node.children.back(), math.factor()), out);
 		}
 		else {
@@ -455,16 +507,19 @@ struct for_op {
 };
 
 struct compound {
-	const symtbl_t& shared;
+	const symtbl& shared;
 	mult_expr math;
-	compound(const symtbl_t& s): shared(s) {}
+	cvarlist& in;
+	cvarlist& out;
+	cvarlist& inout;
+	compound(const symtbl& s, cvarlist& i, cvarlist& o, cvarlist& io): 
+		shared(s), in(i), out(o), inout(io) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			symtbl_t cond;
-			for_op o(shared, cond);
+			symset cond;
+			for_op o(shared, cond, in, out, inout, math);
 			fmap(&o, node.children);
-			math = o.math;
 		}
 		else {
 			fmap(this, node.children);
@@ -483,18 +538,70 @@ public:
 	}
 };
 
+class init_buffers {
+	stringstream& ss;
+	const string& factor;
+	const size_t depth;
+
+public:
+	init_buffers(stringstream& s, const string& f, size_t d): ss(s), factor(f), depth(d) {}
+	void operator()(const c_variable* cv)
+	{
+		buffer_variable buff(cv, depth);
+		next_variable next(cv);
+		orig_variable orig(cv);
+
+		ss 	<< orig.declare() << ";" << endl
+			<< next.declare() << " = 0;" << endl;
+
+		if (depth < 3) {
+			ss	<< "mfc_get(" 
+				<< buff.name() << "[" << next.name() << "], " 
+				<< "(unsigned long)(" << cv->name() << " + (SPE_start" + factor + ")),"
+				<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ", "
+				<< next.name() << ", 0, 0); \n";
+		}
+
+		ss	<< orig.name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
+	}
+};
+
+class init_private_buffers {
+	stringstream& ss;
+
+public:
+	init_private_buffers(stringstream& s): ss(s) {}
+	void operator()(const c_variable* cv)
+	{
+		if (cv->is_pointer()) {
+			buffer_variable buff(cv, 1);
+
+			ss	<< "mfc_get("
+					<< buff.name() << ","
+					<< "(unsigned long)" << cv->name() << ","
+					<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ","
+					<< "3, 0, 0);" << endl
+				<< cv->name() << "=" << buff.name() << ";" << endl
+				<< "MMGP_SPE_dma_wait(3);" << endl;
+		}
+	}
+};
+
 struct cell_region {
-	const symtbl_t& shared;
-	spelist_t::iterator rit;
-	cell_region(const symtbl_t& s, spelist_t::iterator r): shared(s), rit(r) {}
+	const symtbl& shared;
+	spelist::iterator rit;
+	cell_region(const symtbl& s, spelist::iterator r): shared(s), rit(r) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::compound) {
-			compound o(shared);
+			compound o(shared, (*rit)->in(), (*rit)->out(), (*rit)->inout());
 			fmap(&o, node.children);
 
 			stringstream decs;
-			fmap(init_double_buffers(decs, o.math.factor()), (*rit)->shared());
+			fmap(init_buffers(decs, o.math.factor(), 2), (*rit)->in());
+			fmap(init_buffers(decs, o.math.factor(), 2), (*rit)->out());
+			fmap(init_buffers(decs, o.math.factor(), 3), (*rit)->inout());
+
 			fmap(init_private_buffers(decs), (*rit)->priv());
 			fmap(make_reduction_declarations(decs), (*rit)->reductions());
 			node.children.front().value.value("{" + decs.str());
@@ -511,7 +618,7 @@ struct cell_region {
 	}
 };
 
-void root_eval(tree_t& trees, const symtbl_t& shared, spelist_t& regions)
+void root_eval(tree_t& trees, const symtbl& shared, spelist& regions)
 {
 	fmap(cell_region(shared, regions.begin()), (*trees.begin()).children);
 }

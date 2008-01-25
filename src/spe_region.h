@@ -5,19 +5,22 @@
 #include "parse_tree.h"
 
 class spe_region {
-	cvarlist_t* _priv;
-	cvarlist_t* _shared;
-	cvarlist_t* _reductions;
+	cvarlist* _priv;
+	cvarlist* _shared;
+	cvarlist _in;		// _in + _out + _inout = _shared
+	cvarlist _out;
+	cvarlist _inout;
+	cvarlist* _reductions;
 	string _reduction_op;
 	stringstream* _text;
 	tree_node_t* _ast;
 
 public:
 	spe_region(
-		cvarlist_t* v, 
-		cvarlist_t* d, 
+		cvarlist* v, 
+		cvarlist* d, 
 		stringstream* t, 
-		cvarlist_t* r,
+		cvarlist* r,
 		string o):
 		_priv(v), _shared(d), _reductions(r), _reduction_op(o), _text(t)
 	{
@@ -27,10 +30,13 @@ public:
 		assert(r);
 	}
 
-	cvarlist_t*	priv()		const { return _priv; }
-	cvarlist_t*	shared()	const { return _shared; }
+	cvarlist*	priv()		const { return _priv; }
+	cvarlist*	shared()	const { return _shared; }
+	cvarlist&	in()		{ return _in; }
+	cvarlist&	out()		{ return _out; }
+	cvarlist&	inout()		{ return _inout; }
 	stringstream*	text()		const { return _text; }
-	cvarlist_t*	reductions()	const { return _reductions; }
+	cvarlist*	reductions()	const { return _reductions; }
 	string		reduction_op()	const { return _reduction_op; }
 
 	void ast(tree_node_t* a)
@@ -45,6 +51,6 @@ public:
 	}
 };
 
-typedef list<spe_region*>	spelist_t;
+typedef list<spe_region*>	spelist;
 
 #endif	// SPE_REGION_H

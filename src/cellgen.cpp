@@ -63,7 +63,7 @@ const string mmgp_spe_stop		= "MMGP_SPE_stop();";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
 
-typedef list<stringstream*>	sslist_t;
+typedef list<stringstream*>	sslist;
 
 const c_compound_grammar c_compound;
 const skip_grammar skip;
@@ -135,11 +135,11 @@ public:
 
 class print_region {
 	ostream& file;
-	sslist_t& cases;
+	sslist& cases;
 	int loop_num;
 
 public:
-	print_region(ostream& f, sslist_t& c): file(f), cases(c), loop_num(1) {}
+	print_region(ostream& f, sslist& c): file(f), cases(c), loop_num(1) {}
 	void operator()(spe_region* region)
 	{
 		stringstream* casest = new stringstream;
@@ -171,16 +171,16 @@ public:
 
 template <class T>
 class vars_op {
-	cvarlist_t*& vars;
-	mutable symtbl_t& tbl;
+	cvarlist*& vars;
+	mutable symtbl& tbl;
 
 public:
-	vars_op(cvarlist_t*& v, symtbl_t& t): vars(v), tbl(t)
+	vars_op(cvarlist*& v, symtbl& t): vars(v), tbl(t)
 	{
-		vars = new cvarlist_t;	
+		vars = new cvarlist;	
 	}
 
-	void operator()(fileiter_t first, const fileiter_t& last) const
+	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
 		while (first != last) {
@@ -195,10 +195,10 @@ public:
 		tbl[local] = cv;
 	}
 
-	cvarlist_t* pickup()
+	cvarlist* pickup()
 	{
-		cvarlist_t* temp = vars;
-		vars = new cvarlist_t;
+		cvarlist* temp = vars;
+		vars = new cvarlist;
 		return temp;
 	}
 };
@@ -207,7 +207,7 @@ struct op_op {
 	string& op;
 
 	op_op(string& s): op(s) {}
-	void operator()(fileiter_t first, const fileiter_t& last) const
+	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
 		while (first != last) {
@@ -223,7 +223,7 @@ class push_back_op {
 	
 public:
 	push_back_op(T& c): container(c) {}
-	void operator()(fileiter_t first, const fileiter_t& last) const
+	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream* ss = new stringstream;
 		while (first != last) {
@@ -237,7 +237,7 @@ struct sstream_op {
 	stringstream*& pickup;
 
 	sstream_op(stringstream*& p): pickup(p) {}
-	void operator()(fileiter_t first, const fileiter_t& last) const
+	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream* ss = new stringstream;
 		while (first != last) {
@@ -248,12 +248,12 @@ struct sstream_op {
 };
 
 class assign_cvar {
-	cvarlist_t*& vars;
+	cvarlist*& vars;
 	string local;
 
 public:
-	assign_cvar(cvarlist_t*& v, string l): vars(v), local(l) {}
-	void operator()(fileiter_t first, const fileiter_t& last) const
+	assign_cvar(cvarlist*& v, string l): vars(v), local(l) {}
+	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
 		while (first != last) {
@@ -265,7 +265,7 @@ public:
 };
 
 class create_spe_region {
-	spelist_t&			regions;
+	spelist&			regions;
 	sstream_op&			loop_op;
 	assign_cvar&			start_op;
 	assign_cvar&			stop_op;
@@ -276,7 +276,7 @@ class create_spe_region {
 
 public:
 	create_spe_region(
-			spelist_t& r, 
+			spelist& r, 
 			sstream_op& l, 
 			assign_cvar& start, 
 			assign_cvar& stop, 
@@ -287,7 +287,7 @@ public:
 		regions(r), loop_op(l), start_op(start), stop_op(stop),
 		priv_op(p), shared_op(s), reduce_def_op(rd), reduce_op_op(ro)
 		{}
-	void operator()(fileiter_t first, const fileiter_t& last) const
+	void operator()(fileiter first, const fileiter& last) const
 	{
 		spe_region* r = new spe_region(	priv_op.pickup(),
 						shared_op.pickup(),
@@ -302,7 +302,7 @@ public:
  * 3: Allow program to start with cell region.
  */
 struct cellgen_grammar: public grammar<cellgen_grammar> {
-	push_back_op<sslist_t>		ppe_op;
+	push_back_op<sslist>		ppe_op;
 	sstream_op			loop_op;
 	assign_cvar			start_op;
 	assign_cvar			stop_op;
@@ -313,12 +313,12 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	create_spe_region		region_op;
 
 	stringstream*	loop_pickup;
-	cvarlist_t*	priv_vars;
-	cvarlist_t*	shared_vars;
-	cvarlist_t*	reduce_vars;
+	cvarlist*	priv_vars;
+	cvarlist*	shared_vars;
+	cvarlist*	reduce_vars;
 	string		op;
 
-	cellgen_grammar(sslist_t& ppe, spelist_t& regions, symtbl_t& s, symtbl_t& p, symtbl_t& r):
+	cellgen_grammar(sslist& ppe, spelist& regions, symtbl& s, symtbl& p, symtbl& r):
 		ppe_op(ppe),
 		loop_op(loop_pickup),
 		start_op(priv_vars, "SPE_start"),
@@ -541,19 +541,19 @@ public:
 	}
 };
 
-void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regions, 
-		symtbl_t& shared_tbl, symtbl_t& private_tbl, symtbl_t& reduce_tbl)
+void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions, 
+		symtbl& shared_tbl, symtbl& private_tbl, symtbl& reduce_tbl)
 {
-	fileiter_t first(src_name);
+	fileiter first(src_name);
 	if (!first) {
 		cout << "Unable to open " << src_name << endl;
 		exit(-1);
 	}
-	fileiter_t last = first.make_end();
+	fileiter last = first.make_end();
 
 	cellgen_grammar cg(ppe_blocks, spe_regions, shared_tbl, private_tbl, reduce_tbl);
 	tree_parse_info_t* p = new tree_parse_info_t(); // need to make sure the ast persists
-	*p = ast_parse<string_factory_t>(first, last, cg, skip);
+	*p = ast_parse<string_factory>(first, last, cg, skip);
 
 	if (!p->full) {
 		cerr << "error: parse of " << src_name << " failed." << endl;
@@ -562,7 +562,7 @@ void parse_src(const string& src_name, sslist_t& ppe_blocks, spelist_t& spe_regi
 
 	root_eval(p->trees, shared_tbl, spe_regions);
 
-	spelist_t::iterator s = spe_regions.begin();
+	spelist::iterator s = spe_regions.begin();
 	for (tree_iterator_t a = (*p->trees.begin()).children.begin(); 
 			a != (*p->trees.begin()).children.end(); 
 			++a) {
@@ -624,19 +624,24 @@ public:
 	}
 };
 
-class make_double_buffers {
+class make_buffers {
 	ostream& out;
+	const size_t depth;
 
 public:
-	make_double_buffers(ostream& o): out(o) {}
+	make_buffers(ostream& o): out(o), depth(0) {}
+	make_buffers(ostream& o, size_t d): out(o), depth(d) {}
+
 	void operator()(const c_variable* cv)
 	{
-		out << double_buffer(cv).declare() << ";" << endl;
+		out << buffer_variable(cv, depth).declare() << ";" << endl;
 	}
-
-	void operator()(const spe_region* r)
+	
+	void operator()(spe_region* region)
 	{
-		fmap(this, r->shared());
+		fmap(make_buffers(out, 2), region->in());
+		fmap(make_buffers(out, 2), region->out());
+		fmap(make_buffers(out, 3), region->inout());
 	}
 };
 
@@ -645,22 +650,25 @@ class make_private_buffers {
 
 public:
 	make_private_buffers(ostream& o): out(o) {}
+
 	void operator()(const c_variable* cv)
 	{
 		if (cv->is_pointer()) {
-			out << private_buffer(cv).declare() << ";" << endl;
+			out << buffer_variable(cv, 1).declare() << ";" << endl;
 		}
 	}
 
-	void operator()(const spe_region* r)
+	void operator()(const spe_region* region)
 	{
-		fmap(this, r->priv());
+		fmap(this, region->priv());
 	}
 };
+
 class make_pass_assign {
 	stringstream& out;
 public:
 	make_pass_assign(stringstream& o): out(o) {}
+
 	void operator()(const c_variable* cv)
 	{
 		out	<< pass_assign << cv->name() 
@@ -669,8 +677,8 @@ public:
 	}
 };
 
-void print_ppe(const string& name, sslist_t& blocks, stringstream& pro, stringstream& ppe_fork,
-		spelist_t& regions)
+void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstream& ppe_fork,
+		spelist& regions)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
@@ -682,15 +690,17 @@ void print_ppe(const string& name, sslist_t& blocks, stringstream& pro, stringst
 	// the source file. This works because the definition of ppe code is 
 	// all code before the #pragma cell section.
 	int loop_num = 1;
-	sslist_t::iterator b = blocks.begin();
-	spelist_t::iterator r = regions.begin();
+	sslist::iterator b = blocks.begin();
+	spelist::iterator r = regions.begin();
 	while (b != blocks.end()) {
 		file << (*b)->str();
 
+		/*
 		if (loop_num == 1) {
 			file << mmgp_init << endl;
 			file << mmgp_create_threads << endl;
 		}
+		*/
 
 		if (++b != blocks.end()) {
 
@@ -722,7 +732,7 @@ void print_ppe(const string& name, sslist_t& blocks, stringstream& pro, stringst
 	}
 }
 
-void print_pass_struct(spelist_t& regions)
+void print_pass_struct(spelist& regions)
 {	
 	ofstream out(pass_struct_oname.c_str());
 	open_check(out, pass_struct_oname);
@@ -735,17 +745,17 @@ void print_pass_struct(spelist_t& regions)
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
 
-void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist_t& regions)
+void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
 
 	stringstream ss;
 	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-	fmap(make_double_buffers(ss), regions);
+	fmap(make_buffers(ss), regions);
 	fmap(make_private_buffers(ss), regions);
 
-	sslist_t cases;
+	sslist cases;
 	fmap(print_region(ss, cases), regions);
 
 	stringstream cases_ss;
@@ -792,11 +802,11 @@ int main(int argc, char* argv[])
 	string src_name = parse_command_line(argc, argv);
 
 	// Do all of the input and parsing.
-	sslist_t ppe_src_blocks;
-	spelist_t spe_regions;
-	symtbl_t shared_tbl;
-	symtbl_t private_tbl;
-	symtbl_t reduce_tbl;
+	sslist ppe_src_blocks;
+	spelist spe_regions;
+	symtbl shared_tbl;
+	symtbl private_tbl;
+	symtbl reduce_tbl;
 	parse_src(	src_name, 
 			ppe_src_blocks, 
 			spe_regions, 
