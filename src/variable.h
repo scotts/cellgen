@@ -10,20 +10,20 @@ using namespace std;
 
 const string pass_var = "pass";
 
-class c_variable {
+class variable {
 	string _type;
 	string _name;
 	string _alias;
 
 public:
-	c_variable() {}
-	c_variable(const c_variable& c): 
+	variable() {}
+	variable(const variable& c): 
 		_type(c._type), _name(c._name), _alias(c._alias) 
 		{}
-	c_variable(const string& t, const string& l = "", const string& a = ""):
+	variable(const string& t, const string& l = "", const string& a = ""):
 		_type(t), _name(l), _alias(a) 
 		{}
-	virtual ~c_variable() {}
+	virtual ~variable() {}
 
 	virtual string name() const { return _name; }
 	virtual string type() const { return _type; }
@@ -45,10 +45,10 @@ public:
 	}
 };
 
-class const_c_variable: public c_variable {
+class const_variable: public variable {
 public:
-	const_c_variable(const string& t, const string& l, const string& a):
-		c_variable("const " + t, l, a)
+	const_variable(const string& t, const string& l, const string& a):
+		variable("const " + t, l, a)
 		{}
 	virtual string declare() const
 	{
@@ -56,13 +56,13 @@ public:
 	}
 };
 /* The Cell SPU C compiler doesn't allow const variables in static expressions. Oh well.
-const const_c_variable buff_size("int", "buff_size", "16");
+const const_variable buff_size("int", "buff_size", "16");
 */
 
-class pound_define: public c_variable {
+class pound_define: public variable {
 public:
 	pound_define(const string& l, const string& a):
-		c_variable("", l, a)
+		variable("", l, a)
 		{}
 	virtual string declare() const
 	{
@@ -71,35 +71,35 @@ public:
 };
 const pound_define buff_size("buff_size", "80");
 
-class shared_variable: public c_variable {
+class shared_variable: public variable {
 public:
 	shared_variable() {}
 	shared_variable(const string& t, const string& l, const string& a):
-		c_variable(t, l, a) 
+		variable(t, l, a) 
 		{}
 
-	virtual string name() const { return c_variable::name() + "_addr"; }
+	virtual string name() const { return variable::name() + "_addr"; }
 	virtual string actual() const { return pass_var + "." + name(); }
 };
 
-class buffer_variable: public c_variable {
+class buffer_variable: public variable {
 private:
 	size_t _depth; // What type of buffering? Currently we only go up to triple.
 
 public:
-	buffer_variable(const c_variable* cv, size_t d): c_variable(*cv), _depth(d)
+	buffer_variable(const variable* cv, size_t d): variable(*cv), _depth(d)
 	{
 		assert(_depth > 0);	
 	}
 
-	virtual string name() const { return c_variable::name() + "_buff"; }
+	virtual string name() const { return variable::name() + "_buff"; }
 
 	virtual string type() const
 	{
-		string noptr = c_variable::type();
+		string noptr = variable::type();
 		size_t pos = noptr.find('*');
 		if (pos == string::npos) {
-			cerr	<< "error: variable " << c_variable::name() 
+			cerr	<< "error: variable " << variable::name() 
 				<< " can't be made into a buffer because it is not a pointer." 
 				<< endl;
 			exit(1);
@@ -127,30 +127,30 @@ public:
 	}
 };
 
-class next_variable: public c_variable {
+class next_variable: public variable {
 public:
-	next_variable(const c_variable* cv): c_variable(*cv) {}
+	next_variable(const variable* cv): variable(*cv) {}
 	virtual string type() const { return "int"; }
-	virtual string name() const { return c_variable::name() + "_next"; }
+	virtual string name() const { return variable::name() + "_next"; }
 };
 
-class orig_variable: public c_variable {
+class orig_variable: public variable {
 public:
-	orig_variable(const c_variable* cv): c_variable(*cv) {}
-	virtual string type() const { return c_variable::type(); }
-	virtual string name() const { return c_variable::name(); }
-	virtual string declare() const { return c_variable::declare(); }
-	virtual string actual() const { return c_variable::actual(); }
-	virtual string formal() const { return c_variable::formal(); }
+	orig_variable(const variable* cv): variable(*cv) {}
+	virtual string type() const { return variable::type(); }
+	virtual string name() const { return variable::name(); }
+	virtual string declare() const { return variable::declare(); }
+	virtual string actual() const { return variable::actual(); }
+	virtual string formal() const { return variable::formal(); }
 };
 
-class reduction_variable: public c_variable {
+class reduction_variable: public variable {
 public:
 	reduction_variable(const string& t, const string& l, const string& a):
-		c_variable(t, l, a)
+		variable(t, l, a)
 		{}
 
-	virtual string name() const { return c_variable::name() + "_reduc"; }
+	virtual string name() const { return variable::name() + "_reduc"; }
 	virtual string actual() const { return "&" + pass_var + "." + name(); }
 
 	virtual string formal() const
@@ -159,8 +159,8 @@ public:
 	}
 };
 
-typedef list<const c_variable*>		cvarlist;
-typedef map<string, const c_variable*>	symtbl;
+typedef list<const variable*>		varlist;
+typedef map<string, const variable*>	symtbl;
 typedef set<string>			symset;
 
 #endif // VARIABLE_H

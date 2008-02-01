@@ -115,10 +115,10 @@ class make_case_sig {
 
 public:
 	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
-	void operator()(const c_variable* cv)
+	void operator()(const variable* v)
 	{
-		casest	<< cv->actual() << ",";
-		file	<< cv->formal() << ",";
+		casest	<< v->actual() << ",";
+		file	<< v->formal() << ",";
 	}
 };
 
@@ -127,9 +127,9 @@ class make_writebacks {
 
 public:
 	make_writebacks(stringstream& _w): w(_w) {}
-	void operator()(const c_variable* cv)
+	void operator()(const variable* v)
 	{
-		w << "signal.result = " << pass_var << "." << cv->name() << ";" << endl;
+		w << "signal.result = " << pass_var << "." << v->name() << ";" << endl;
 	}
 };
 
@@ -171,13 +171,13 @@ public:
 
 template <class T>
 class vars_op {
-	cvarlist*& vars;
+	varlist*& vars;
 	mutable symtbl& tbl;
 
 public:
-	vars_op(cvarlist*& v, symtbl& t): vars(v), tbl(t)
+	vars_op(varlist*& v, symtbl& t): vars(v), tbl(t)
 	{
-		vars = new cvarlist;	
+		vars = new varlist;	
 	}
 
 	void operator()(fileiter first, const fileiter& last) const
@@ -190,15 +190,15 @@ public:
 		string type, local, equals, alias;
 		ss >> type >> local >> equals >> alias;
 
-		const T* cv = new T(type, local, alias);
-		vars->push_back(cv);
-		tbl[local] = cv;
+		const T* v = new T(type, local, alias);
+		vars->push_back(v);
+		tbl[local] = v;
 	}
 
-	cvarlist* pickup()
+	varlist* pickup()
 	{
-		cvarlist* temp = vars;
-		vars = new cvarlist;
+		varlist* temp = vars;
+		vars = new varlist;
 		return temp;
 	}
 };
@@ -247,12 +247,12 @@ struct sstream_op {
 	}
 };
 
-class assign_cvar {
-	cvarlist*& vars;
+class assign_var {
+	varlist*& vars;
 	string local;
 
 public:
-	assign_cvar(cvarlist*& v, string l): vars(v), local(l) {}
+	assign_var(varlist*& v, string l): vars(v), local(l) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
@@ -260,16 +260,15 @@ public:
 			ss << *first++;
 		}
 
-		vars->push_back(new c_variable("int", local, ss.str()));
+		vars->push_back(new variable("int", local, ss.str()));
 	}
 };
 
 class create_spe_region {
 	spelist&			regions;
-	sstream_op&			loop_op;
-	assign_cvar&			start_op;
-	assign_cvar&			stop_op;
-	vars_op<c_variable>&		priv_op;
+	assign_var&			start_op;
+	assign_var&			stop_op;
+	vars_op<variable>&		priv_op;
 	vars_op<shared_variable>&	shared_op;
 	vars_op<reduction_variable>&	reduce_def_op;
 	op_op&				reduce_op_op;
@@ -277,21 +276,19 @@ class create_spe_region {
 public:
 	create_spe_region(
 			spelist& r, 
-			sstream_op& l, 
-			assign_cvar& start, 
-			assign_cvar& stop, 
-			vars_op<c_variable>& p, 
+			assign_var& start, 
+			assign_var& stop, 
+			vars_op<variable>& p, 
 			vars_op<shared_variable>& s, 
 			vars_op<reduction_variable>& rd,
 			op_op& ro):
-		regions(r), loop_op(l), start_op(start), stop_op(stop),
+		regions(r), start_op(start), stop_op(stop),
 		priv_op(p), shared_op(s), reduce_def_op(rd), reduce_op_op(ro)
 		{}
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		spe_region* r = new spe_region(	priv_op.pickup(),
 						shared_op.pickup(),
-						loop_op.pickup,
 						reduce_def_op.pickup(),
 						reduce_op_op.op);
 		regions.push_back(r);
@@ -303,24 +300,22 @@ public:
  */
 struct cellgen_grammar: public grammar<cellgen_grammar> {
 	push_back_op<sslist>		ppe_op;
-	sstream_op			loop_op;
-	assign_cvar			start_op;
-	assign_cvar			stop_op;
-	vars_op<c_variable>		priv_op;
+	assign_var			start_op;
+	assign_var			stop_op;
+	vars_op<variable>		priv_op;
 	vars_op<shared_variable>	shared_op;
 	vars_op<reduction_variable>	reduce_def_op;
 	op_op				reduce_op_op;
 	create_spe_region		region_op;
 
 	stringstream*	loop_pickup;
-	cvarlist*	priv_vars;
-	cvarlist*	shared_vars;
-	cvarlist*	reduce_vars;
+	varlist*	priv_vars;
+	varlist*	shared_vars;
+	varlist*	reduce_vars;
 	string		op;
 
 	cellgen_grammar(sslist& ppe, spelist& regions, symtbl& s, symtbl& p, symtbl& r):
 		ppe_op(ppe),
-		loop_op(loop_pickup),
 		start_op(priv_vars, "SPE_start"),
 		stop_op(priv_vars, "SPE_stop"),
 		priv_op(priv_vars, p),
@@ -328,7 +323,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		reduce_def_op(reduce_vars, r),
 		reduce_op_op(op),
 		region_op(regions,
-			loop_op, 
 			start_op, 
 			stop_op, 
 			priv_op, 
@@ -368,7 +362,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 					[self.region_op]
 				];
 
-			spe_code = c_compound[self.loop_op];
+			spe_code = c_compound;
 
 			options = 
 				priv_code 
@@ -604,39 +598,91 @@ void print_mmgp_c(stringstream& mmgp_c, const string& ofile_name, const string& 
 	ofile << regex_replace(mmgp_c.str(), regex(program_name_hook), program_name);
 }
 
+class unique_variables {
+	symtbl& unique;
+public:
+	unique_variables(symtbl& u): unique(u) {}
+	void operator()(const variable* v)
+	{
+		if (unique.find(v->name()) == unique.end()) {
+			unique[v->name()] = v;
+		}
+	}
+};
+
+class all_unique_variables {
+	symtbl& unique;
+public:
+	all_unique_variables(symtbl& u): unique(u) {}
+	void operator()(const spe_region* region)
+	{
+		fmap(unique_variables(unique), region->priv());
+		fmap(unique_variables(unique), region->shared());
+		fmap(unique_variables(unique), region->reductions());
+	}
+};
+
+class in_and_out_unique_variables {
+	symtbl& unique;
+public:
+	in_and_out_unique_variables(symtbl& u): unique(u) {}
+	void operator()(spe_region* region)
+	{
+		fmap(unique_variables(unique), region->in());
+		fmap(unique_variables(unique), region->out());
+	}
+};
+
+class inout_unique_variables {
+	symtbl& unique;
+public:
+	inout_unique_variables(symtbl& u): unique(u) {}
+	void operator()(spe_region* region)
+	{
+		fmap(unique_variables(unique), region->inout());
+	}
+};
+
 class make_pass_struct {
 	stringstream& ss;
-
 public:
 	make_pass_struct(stringstream& s): ss(s) {}
-
-	void operator()(const c_variable* cv)
+	void operator()(const symtbl::value_type p)
 	{
-		ss	<< "\t" 
-			<< cv->declare() << ";" << endl;
+		ss << "\t" << p.second->declare() << ";" << endl;
 	}
+};
 
-	void operator()(const spe_region* r)
+class make_in_and_out_buffers {
+	stringstream& ss;
+public:
+	make_in_and_out_buffers(stringstream& s): ss(s) {}
+	void operator()(const symtbl::value_type p)
 	{
-		fmap(this, r->priv());
-		fmap(this, r->shared());
-		fmap(this, r->reductions());
+		ss << "\t" << buffer_variable(p.second, 2).declare() << ";" << endl;
+	}
+};
+
+class make_inout_buffers {
+	stringstream& ss;
+public:
+	make_inout_buffers(stringstream& s): ss(s) {}
+	void operator()(const symtbl::value_type p)
+	{
+		ss << "\t" << buffer_variable(p.second, 3).declare() << ";" << endl;
 	}
 };
 
 class make_buffers {
 	ostream& out;
 	const size_t depth;
-
 public:
 	make_buffers(ostream& o): out(o), depth(0) {}
 	make_buffers(ostream& o, size_t d): out(o), depth(d) {}
-
-	void operator()(const c_variable* cv)
+	void operator()(const variable* v)
 	{
-		out << buffer_variable(cv, depth).declare() << ";" << endl;
+		out << buffer_variable(v, depth).declare() << ";" << endl;
 	}
-	
 	void operator()(spe_region* region)
 	{
 		fmap(make_buffers(out, 2), region->in());
@@ -647,17 +693,14 @@ public:
 
 class make_private_buffers {
 	ostream& out;
-
 public:
 	make_private_buffers(ostream& o): out(o) {}
-
-	void operator()(const c_variable* cv)
+	void operator()(const variable* v)
 	{
-		if (cv->is_pointer()) {
-			out << buffer_variable(cv, 1).declare() << ";" << endl;
+		if (v->is_pointer()) {
+			out << buffer_variable(v, 1).declare() << ";" << endl;
 		}
 	}
-
 	void operator()(const spe_region* region)
 	{
 		fmap(this, region->priv());
@@ -668,11 +711,10 @@ class make_pass_assign {
 	stringstream& out;
 public:
 	make_pass_assign(stringstream& o): out(o) {}
-
-	void operator()(const c_variable* cv)
+	void operator()(const variable* v)
 	{
-		out	<< pass_assign << cv->name() 
-			<< " = " << cv->alias() << ";" 
+		out	<< pass_assign << v->name() 
+			<< " = " << v->alias() << ";" 
 			<< endl;
 	}
 };
@@ -740,8 +782,12 @@ void print_pass_struct(spelist& regions)
 	stringstream pass;
 	parse_generic(pass, pass_struct_iname);
 
+	symtbl unique;
+	fmap(all_unique_variables(unique), regions);
+
 	stringstream vars;
-	fmap(make_pass_struct(vars), regions);
+	fmap(make_pass_struct(vars), unique);
+
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
 
@@ -752,7 +798,22 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 
 	stringstream ss;
 	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-	fmap(make_buffers(ss), regions);
+
+	symtbl in_and_out_unique;
+	fmap(in_and_out_unique_variables(in_and_out_unique), regions);
+
+	symtbl inout_unique;
+	fmap(inout_unique_variables(inout_unique), regions);
+
+	symtbl in_and_out_unique_final;
+	set_difference(in_and_out_unique.begin(), in_and_out_unique.end(),
+			inout_unique.begin(), inout_unique.end(),
+			inserter(in_and_out_unique_final, in_and_out_unique_final.begin()));
+
+	fmap(make_in_and_out_buffers(ss), in_and_out_unique_final);
+	fmap(make_inout_buffers(ss), inout_unique);
+	
+	//fmap(make_buffers(ss), regions);
 	fmap(make_private_buffers(ss), regions);
 
 	sslist cases;
@@ -837,6 +898,7 @@ int main(int argc, char* argv[])
 
 	print_file(mmgp_h_iname, mmgp_h_oname, no_dot);
 	print_file(mmgp_c_iname, mmgp_c_oname, no_dot);
+
 	print_pass_struct(spe_regions);
 	print_ppe(no_dot + "_ppe.c", ppe_src_blocks, ppe_prolouge, ppe_fork, 
 			spe_regions);
