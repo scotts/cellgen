@@ -163,7 +163,6 @@ struct handness {
 	};
 };
 
-
 struct expression_statement_op {
 	const symtbl& shared;
 	const symset& cond;
@@ -282,10 +281,10 @@ struct gen_out {
 					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
 		}
 
-		node.value.value("if (!(" + v->math().as_written() + "%" + buff_size.name() + ")) {\n "
+		node.value.value("if (!(" + v->math().next_iteration() + "%" + buff_size.name() + ")) {\n "
 					"MMGP_SPE_dma_wait(out_tag); \n"
 					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
-							"+" + v->math().as_written() + "-" + buff_size.name() + "),"
+							"+" + v->math().next_iteration() + "-" + buff_size.name() + "),"
 						"sizeof(" + buff.type() + ")*" + buff_size.name() + ","
 						"out_tag, 0, 0);\n" +
 					var_switch +
