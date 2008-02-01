@@ -8,12 +8,15 @@
 #include <sstream>
 using namespace std;
 
+#include "mult_expr.h"
+
 const string pass_var = "pass";
 
 class variable {
 	string _type;
 	string _name;
 	string _alias;
+	mult_expr _math;
 
 public:
 	variable() {}
@@ -28,8 +31,10 @@ public:
 	virtual string name() const { return _name; }
 	virtual string type() const { return _type; }
 	string alias() const { return _alias; }
+	mult_expr math() const { return _math; }
 
-	void set_alias(string s) { _alias = s; }
+	void alias(string s) { _alias = s; }
+	void math(mult_expr m) { _math = m; }
 
 	virtual string declare() const
 	{
@@ -159,9 +164,9 @@ public:
 	}
 };
 
-typedef list<const variable*>		varlist;
-typedef map<string, const variable*>	symtbl;
-typedef set<string>			symset;
+typedef list<variable*>		varlist;
+typedef map<string, variable*>	symtbl;
+typedef set<string>		symset;
 
 #endif // VARIABLE_H
 

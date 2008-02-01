@@ -190,7 +190,7 @@ public:
 		string type, local, equals, alias;
 		ss >> type >> local >> equals >> alias;
 
-		const T* v = new T(type, local, alias);
+		T* v = new T(type, local, alias);
 		vars->push_back(v);
 		tbl[local] = v;
 	}
@@ -602,7 +602,7 @@ class unique_variables {
 	symtbl& unique;
 public:
 	unique_variables(symtbl& u): unique(u) {}
-	void operator()(const variable* v)
+	void operator()(variable* v)
 	{
 		if (unique.find(v->name()) == unique.end()) {
 			unique[v->name()] = v;
