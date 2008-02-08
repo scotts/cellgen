@@ -106,7 +106,7 @@ struct postfix_op {
 	varlist& lst;
 	bool found_cond;
 	bool found_shared;
-	variable* shared_var;
+	region_variable* var;
 	
 	postfix_op(const symtbl& s, const symset& c, varlist& l):
 		shared(s), cond(c), lst(l), found_cond(false), found_shared(false)
@@ -118,8 +118,8 @@ struct postfix_op {
 			if (!found_shared) {
 				symtbl::const_iterator it = shared.find(val);
 				if (it != shared.end()) {
-					shared_var = it->second;
-					lst.push_back(shared_var);
+					var = it->second;
+					lst.push_back(var);
 					found_shared = true;
 				}
 			}
@@ -130,7 +130,7 @@ struct postfix_op {
 			fmap(&o, node.children);
 
 			if (found_shared && found_cond) {
-				shared_var->math(math);
+				var->math(math);
 				node.value.value("[((" + math.as_written() + ")" + o.rem + ")%" + buff_size.name() + "]");
 				
 				// If we don't do this, redundant printing. The above is a string 
@@ -199,11 +199,11 @@ struct gen_in: public unary_function<void, variable*> {
 		node(n), shared(s), depth(2)
 		{}
 	gen_in(const gen_in& o): node(o.node), shared(o.shared), depth(o.depth) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		next_variable next(v);
-		buffer_variable buff(v, depth);
-		orig_variable orig(v);
+		next_adaptor next(v);
+		buffer_adaptor buff(v, depth);
+		orig_adaptor orig(v);
 
 		string use(node.value.begin(), node.value.end());
 		use += node.value.value();
@@ -225,7 +225,7 @@ struct gen_in: public unary_function<void, variable*> {
 };
 
 typedef list<function1<void, variable*> > funlist;
-typedef map<variable*, gen_in> lazy_gen_in;
+typedef map<region_variable*, gen_in> lazy_gen_in;
 
 struct for_compound_op {
 	const symtbl& shared; 
@@ -260,10 +260,10 @@ struct gen_out {
 	const size_t depth;
 	gen_out(tree_node_t& n, size_t d): 
 		node(n), depth(d) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		buffer_variable buff(v, depth);
-		orig_variable orig(v);
+		buffer_adaptor buff(v, depth);
+		orig_adaptor orig(v);
 		string var_switch;
 		string old;
 
@@ -275,7 +275,7 @@ struct gen_out {
 		}
 
 		if (depth < 3) {
-			next_variable next(v);
+			next_adaptor next(v);
 
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + ";\n" +
 					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
@@ -297,10 +297,10 @@ struct gen_final_out {
 	tree_node_t& node;
 	gen_final_out(tree_node_t& n):
 		node(n) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		buffer_variable buff(v, 2);
-		orig_variable orig(v);
+		buffer_adaptor buff(v, 2);
+		orig_adaptor orig(v);
 		string old;
 
 		if (node.value.value() == "") {
@@ -331,9 +331,9 @@ class make_reduction_declarations {
 
 public:
 	make_reduction_declarations(stringstream& s): ss(s) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		ss << orig_variable(v).declare() << ";" << endl;
+		ss << orig_adaptor(v).declare() << ";" << endl;
 	}
 };
 
@@ -351,7 +351,7 @@ public:
 	}
 };
 
-void printlist(const variable* v)
+void printlist(const region_variable* v)
 {
 	cout << v << " ";
 }
@@ -362,13 +362,13 @@ void printlazy(lazy_gen_in::value_type& l)
 }
 
 struct variable_less {
-	bool operator()(const variable* v, const lazy_gen_in::value_type& p)
+	bool operator()(const region_variable* v, const lazy_gen_in::value_type& p)
 	{
 		if (v < p.first) return true;
 		else return false;
 	}
 
-	bool operator()(const lazy_gen_in::value_type& p, const variable* v)
+	bool operator()(const lazy_gen_in::value_type& p, const region_variable* v)
 	{
 		if (p.first < v) return true;
 		else return false;
@@ -470,9 +470,9 @@ class make_reduction_assignments {
 
 public:
 	make_reduction_assignments(stringstream& _a): a(_a) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		a << "*" << v->name() << "=" << orig_variable(v).name() << ";" << endl;
+		a << "*" << v->name() << "=" << orig_adaptor(v).name() << ";" << endl;
 	}
 };
 
@@ -481,15 +481,15 @@ class base_init_buffers {
 	const size_t depth;
 public:
 	base_init_buffers(stringstream& s, size_t d): ss(s), depth(d) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		buffer_variable buff(v, depth);
-		next_variable next(v);
-		orig_variable orig(v);
+		buffer_adaptor buff(v, depth);
+		next_adaptor next(v);
+		orig_adaptor orig(v);
 
 		ss 	<< orig.declare() << ";" << endl
 			<< next.declare() << " = 0;" << endl
-			<< orig.name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
+			<< v->name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
 	}
 };
 
@@ -499,11 +499,10 @@ class in_init_buffers {
 
 public:
 	in_init_buffers(stringstream& s, size_t d): ss(s), depth(d) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		buffer_variable buff(v, depth);
-		next_variable next(v);
-		orig_variable orig(v);
+		buffer_adaptor buff(v, depth);
+		next_adaptor next(v);
 
 		base_init_buffers(ss, depth)(v);
 
@@ -520,10 +519,10 @@ class init_private_buffers {
 
 public:
 	init_private_buffers(stringstream& s): ss(s) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
 		if (v->is_pointer()) {
-			buffer_variable buff(v, 1);
+			buffer_adaptor buff(v, 1);
 
 			ss	<< "mfc_get("
 					<< buff.name() << ","
@@ -537,29 +536,28 @@ public:
 };
 
 struct cell_region {
-	const symtbl& shared;
-	spelist::iterator rit;
-	cell_region(const symtbl& s, spelist::iterator r): shared(s), rit(r) {}
+	spelist::iterator region;
+	cell_region(spelist::iterator r): region(r) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::compound) {
-			compound o(shared, (*rit)->in(), (*rit)->out(), (*rit)->inout());
+			compound o(*((*region)->symbols()), (*region)->in(), (*region)->out(), (*region)->inout());
 			fmap(&o, node.children);
 
 			stringstream decs;
-			fmap(base_init_buffers(decs, 2), (*rit)->out());
-			fmap(in_init_buffers(decs, 2), (*rit)->in());
-			fmap(in_init_buffers(decs, 3), (*rit)->inout());
+			fmap(base_init_buffers(decs, 2), (*region)->out());
+			fmap(in_init_buffers(decs, 2), (*region)->in());
+			fmap(in_init_buffers(decs, 3), (*region)->inout());
 
-			fmap(init_private_buffers(decs), (*rit)->priv());
-			fmap(make_reduction_declarations(decs), (*rit)->reductions());
+			fmap(init_private_buffers(decs), (*region)->priv());
+			fmap(make_reduction_declarations(decs), (*region)->reductions());
 			node.children.front().value.value("{" + decs.str());
 
 			stringstream a;
-			fmap(make_reduction_assignments(a), (*rit)->reductions());
+			fmap(make_reduction_assignments(a), (*region)->reductions());
 			node.children.back().value.value(a.str() + "}");
 
-			++rit;
+			++region;
 		}
 		else {
 			fmap(this, node.children);
@@ -567,8 +565,8 @@ struct cell_region {
 	}
 };
 
-void root_eval(tree_t& trees, const symtbl& shared, spelist& regions)
+void traverse_ast(tree_t& trees, spelist& regions)
 {
-	fmap(cell_region(shared, regions.begin()), (*trees.begin()).children);
+	fmap(cell_region(regions.begin()), (*trees.begin()).children);
 }
 

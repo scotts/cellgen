@@ -12,19 +12,17 @@ class spe_region {
 	varlist _inout;
 	varlist* _reductions;
 	string _reduction_op;
+	symtbl* _symbols;
 	tree_node_t* _ast;
 
 public:
-	spe_region(
-		varlist* v, 
-		varlist* d, 
-		varlist* r,
-		string o):
-		_priv(v), _shared(d), _reductions(r), _reduction_op(o)
+	spe_region( varlist* v, varlist* d, varlist* r, string o, symtbl* s):
+		_priv(v), _shared(d), _reductions(r), _reduction_op(o), _symbols(s)
 	{
 		assert(v);
 		assert(d);
 		assert(r);
+		assert(s);
 	}
 
 	varlist*	priv()		const { return _priv; }
@@ -45,8 +43,13 @@ public:
 		assert(_ast);
 		return _ast;
 	}
+
+	symtbl* symbols()
+	{
+		return _symbols;
+	}
 };
 
-typedef list<spe_region*>	spelist;
+typedef list<spe_region*> spelist;
 
 #endif	// SPE_REGION_H

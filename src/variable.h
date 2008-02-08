@@ -36,18 +36,12 @@ public:
 	void alias(string s) { _alias = s; }
 	void math(mult_expr m) { _math = m; }
 
-	virtual string declare() const
-	{
-		return type() + " " + name();
-	}
+	virtual string declare() const { return type() + " " + name(); }
 
 	virtual string actual() const { return pass_var + "." + name(); }
 	virtual string formal() const { return declare(); }
 
-	bool is_pointer() const
-	{
-		return _type.find("*") != string::npos;
-	}
+	bool is_pointer() const { return _type.find("*") != string::npos; }
 };
 
 class const_variable: public variable {
@@ -55,10 +49,8 @@ public:
 	const_variable(const string& t, const string& l, const string& a):
 		variable("const " + t, l, a)
 		{}
-	virtual string declare() const
-	{
-		return type() + " " + name() + "=" + alias() + ";";
-	}
+
+	virtual string declare() const { return type() + " " + name() + "=" + alias() + ";"; }
 };
 /* The Cell SPU C compiler doesn't allow const variables in static expressions. Oh well.
 const const_variable buff_size("int", "buff_size", "16");
@@ -69,42 +61,77 @@ public:
 	pound_define(const string& l, const string& a):
 		variable("", l, a)
 		{}
-	virtual string declare() const
-	{
-		return "#define " + name() + " " + alias() + "\n";
-	}
+	virtual string declare() const { return "#define " + name() + " " + alias() + "\n"; }
 };
 const pound_define buff_size("buff_size", "80");
 
-class shared_variable: public variable {
+class region_variable: public variable {
+	int region_num;
 public:
-	shared_variable() {}
-	shared_variable(const string& t, const string& l, const string& a):
-		variable(t, l, a) 
-		{}
+	region_variable(const string& t, const string& l, const string& a):
+		variable(t, l, a), region_num(0) {}
+	region_variable(const string& t, const string& l, const string& a, int r):
+		variable(t, l, a), region_num(r) {}
 
-	virtual string name() const { return variable::name() + "_addr"; }
-	virtual string actual() const { return pass_var + "." + name(); }
+
+	virtual string name() const
+	{
+		stringstream ss;
+		ss << variable::name();
+		if (region_num > 0) {
+			ss << region_num;
+		}
+		return ss.str();
+	}
 };
 
-class buffer_variable: public variable {
+class shared_variable: public region_variable {
+	int region_num;
+public:
+	shared_variable(const string& t, const string& l, const string& a, int r):
+		region_variable(t, l, a, r)
+		{}
+
+	virtual string name() const
+	{
+		stringstream ss;
+		ss << region_variable::name() << "_adr";
+		return ss.str(); 
+	}
+};
+
+class reduction_variable: public region_variable {
+public:
+	reduction_variable(const string& t, const string& l, const string& a, int r):
+		region_variable(t, l, a, r)
+		{}
+
+	virtual string name() const { return region_variable::name() + "_reduc"; }
+	virtual string actual() const { return "&" + pass_var + "." + name(); }
+
+	virtual string formal() const {  return type() + "* " + name(); }
+};
+
+class buffer_adaptor {
 private:
+	const region_variable* v;
 	size_t _depth; // What type of buffering? Currently we only go up to triple.
 
 public:
-	buffer_variable(const variable* cv, size_t d): variable(*cv), _depth(d)
+	buffer_adaptor(const region_variable* _v, size_t d): v(_v), _depth(d)
 	{
+		assert(v);
 		assert(_depth > 0);	
 	}
 
-	virtual string name() const { return variable::name() + "_buff"; }
+	string name() const { return v->region_variable::name() + "_buff"; }
 
-	virtual string type() const
+	string type() const
 	{
-		string noptr = variable::type();
+		string noptr = v->type();
 		size_t pos = noptr.find('*');
 		if (pos == string::npos) {
-			cerr	<< "error: variable " << variable::name() 
+			cerr	<< "error: variable " << v->name() 
 				<< " can't be made into a buffer because it is not a pointer." 
 				<< endl;
 			exit(1);
@@ -113,7 +140,7 @@ public:
 		return noptr;
 	}
 
-	virtual string declare() const
+	string declare() const
 	{
 		stringstream ss;
 		ss << type() << " " << name();
@@ -132,41 +159,27 @@ public:
 	}
 };
 
-class next_variable: public variable {
+class next_adaptor {
+	const region_variable* v;
 public:
-	next_variable(const variable* cv): variable(*cv) {}
-	virtual string type() const { return "int"; }
-	virtual string name() const { return variable::name() + "_next"; }
+	next_adaptor(const region_variable* _v): v(_v) {}
+	string type() const { return "int"; }
+	string name() const { return v->region_variable::name() + "_nxt"; }
+	string declare() const { return type() + " " + name(); }
 };
 
-class orig_variable: public variable {
+class orig_adaptor {
+	const variable* v;
 public:
-	orig_variable(const variable* cv): variable(*cv) {}
-	virtual string type() const { return variable::type(); }
-	virtual string name() const { return variable::name(); }
-	virtual string declare() const { return variable::declare(); }
-	virtual string actual() const { return variable::actual(); }
-	virtual string formal() const { return variable::formal(); }
+	orig_adaptor(const region_variable* _v): v(_v) {}
+	string type() const { return v->variable::type(); }
+	string name() const { return v->variable::name(); }
+	string declare() const { return v->variable::declare(); }
 };
 
-class reduction_variable: public variable {
-public:
-	reduction_variable(const string& t, const string& l, const string& a):
-		variable(t, l, a)
-		{}
-
-	virtual string name() const { return variable::name() + "_reduc"; }
-	virtual string actual() const { return "&" + pass_var + "." + name(); }
-
-	virtual string formal() const
-	{  
-		return type() + "* " + name();
-	}
-};
-
-typedef list<variable*>		varlist;
-typedef map<string, variable*>	symtbl;
-typedef set<string>		symset;
+typedef list<region_variable*>		varlist;
+typedef map<string, region_variable*>	symtbl;
+typedef set<string>			symset;
 
 #endif // VARIABLE_H
 

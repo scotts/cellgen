@@ -1,8 +1,7 @@
 /*
  * Scott Schneider
  *
- * TODO:	1. identify multiplicative indices
- * 		2. output final DMA	
+ * Cellgen: pseudo-openmp support for the Cell.
  */
 #include <cassert>
 #include <iostream>
@@ -115,7 +114,7 @@ class make_case_sig {
 
 public:
 	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
 		casest	<< v->actual() << ",";
 		file	<< v->formal() << ",";
@@ -127,7 +126,7 @@ class make_writebacks {
 
 public:
 	make_writebacks(stringstream& _w): w(_w) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
 		w << "signal.result = " << pass_var << "." << v->name() << ";" << endl;
 	}
@@ -172,12 +171,28 @@ public:
 template <class T>
 class vars_op {
 	varlist*& vars;
-	mutable symtbl& tbl;
+	symtbl*& tbl;
+	spelist& regions;
 
 public:
-	vars_op(varlist*& v, symtbl& t): vars(v), tbl(t)
+	vars_op(varlist*& v, symtbl*& t, spelist& r): vars(v), tbl(t), regions(r)
 	{
-		vars = new varlist;	
+		vars = new varlist;
+		tbl = new symtbl;
+	}
+
+	varlist* pickup_vars()
+	{
+		varlist* temp = vars;
+		vars = new varlist;
+		return temp;
+	}
+
+	symtbl* pickup_symbols()
+	{
+		symtbl* temp = tbl;
+		tbl = new symtbl;
+		return temp;
 	}
 
 	void operator()(fileiter first, const fileiter& last) const
@@ -190,22 +205,16 @@ public:
 		string type, local, equals, alias;
 		ss >> type >> local >> equals >> alias;
 
-		T* v = new T(type, local, alias);
+		T* v = new T(type, local, alias, regions.size() + 1);
 		vars->push_back(v);
-		tbl[local] = v;
-	}
-
-	varlist* pickup()
-	{
-		varlist* temp = vars;
-		vars = new varlist;
-		return temp;
+		(*tbl)[local] = v;
 	}
 };
 
-struct op_op {
+class op_op {
 	string& op;
 
+public:
 	op_op(string& s): op(s) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -215,6 +224,8 @@ struct op_op {
 		}
 		op = ss.str();
 	}
+
+	string pickup() { return op; }
 };
 
 template <class T>
@@ -233,9 +244,10 @@ public:
 	}
 };
 
-struct sstream_op {
+class sstream_op {
 	stringstream*& pickup;
 
+public:
 	sstream_op(stringstream*& p): pickup(p) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -260,37 +272,31 @@ public:
 			ss << *first++;
 		}
 
-		vars->push_back(new variable("int", local, ss.str()));
+		vars->push_back(new region_variable("int", local, ss.str()));
 	}
 };
 
-class create_spe_region {
+struct create_spe_region {
 	spelist&			regions;
 	assign_var&			start_op;
 	assign_var&			stop_op;
-	vars_op<variable>&		priv_op;
+	vars_op<region_variable>&	priv_op;
 	vars_op<shared_variable>&	shared_op;
 	vars_op<reduction_variable>&	reduce_def_op;
 	op_op&				reduce_op_op;
 
-public:
-	create_spe_region(
-			spelist& r, 
-			assign_var& start, 
-			assign_var& stop, 
-			vars_op<variable>& p, 
-			vars_op<shared_variable>& s, 
-			vars_op<reduction_variable>& rd,
-			op_op& ro):
-		regions(r), start_op(start), stop_op(stop),
-		priv_op(p), shared_op(s), reduce_def_op(rd), reduce_op_op(ro)
+	create_spe_region(spelist& r, assign_var& start, assign_var& stop, vars_op<region_variable>& p, 
+			vars_op<shared_variable>& s, vars_op<reduction_variable>& rd, op_op& ro):
+		regions(r), start_op(start), stop_op(stop), priv_op(p), shared_op(s), 
+		reduce_def_op(rd), reduce_op_op(ro)
 		{}
 	void operator()(fileiter first, const fileiter& last) const
 	{
-		spe_region* r = new spe_region(	priv_op.pickup(),
-						shared_op.pickup(),
-						reduce_def_op.pickup(),
-						reduce_op_op.op);
+		spe_region* r = new spe_region(	priv_op.pickup_vars(),
+						shared_op.pickup_vars(),
+						reduce_def_op.pickup_vars(),
+						reduce_op_op.pickup(),
+						shared_op.pickup_symbols());
 		regions.push_back(r);
 	}
 };
@@ -302,7 +308,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	push_back_op<sslist>		ppe_op;
 	assign_var			start_op;
 	assign_var			stop_op;
-	vars_op<variable>		priv_op;
+	vars_op<region_variable>	priv_op;
 	vars_op<shared_variable>	shared_op;
 	vars_op<reduction_variable>	reduce_def_op;
 	op_op				reduce_op_op;
@@ -312,15 +318,18 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	varlist*	priv_vars;
 	varlist*	shared_vars;
 	varlist*	reduce_vars;
+	symtbl*		shared_tbl;
+	symtbl*		private_tbl;
+	symtbl*		reduction_tbl;
 	string		op;
-
-	cellgen_grammar(sslist& ppe, spelist& regions, symtbl& s, symtbl& p, symtbl& r):
+	
+	cellgen_grammar(sslist& ppe, spelist& regions):
 		ppe_op(ppe),
 		start_op(priv_vars, "SPE_start"),
 		stop_op(priv_vars, "SPE_stop"),
-		priv_op(priv_vars, p),
-		shared_op(shared_vars, s),
-		reduce_def_op(reduce_vars, r),
+		priv_op(priv_vars, private_tbl, regions),
+		shared_op(shared_vars, shared_tbl, regions),
+		reduce_def_op(reduce_vars, reduction_tbl, regions),
 		reduce_op_op(op),
 		region_op(regions,
 			start_op, 
@@ -535,8 +544,7 @@ public:
 	}
 };
 
-void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions, 
-		symtbl& shared_tbl, symtbl& private_tbl, symtbl& reduce_tbl)
+void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 {
 	fileiter first(src_name);
 	if (!first) {
@@ -545,7 +553,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions,
 	}
 	fileiter last = first.make_end();
 
-	cellgen_grammar cg(ppe_blocks, spe_regions, shared_tbl, private_tbl, reduce_tbl);
+	cellgen_grammar cg(ppe_blocks, spe_regions);
 	tree_parse_info_t* p = new tree_parse_info_t(); // need to make sure the ast persists
 	*p = ast_parse<string_factory>(first, last, cg, skip);
 
@@ -554,7 +562,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions,
 		exit(-1);
 	}
 
-	root_eval(p->trees, shared_tbl, spe_regions);
+	traverse_ast(p->trees, spe_regions);
 
 	spelist::iterator s = spe_regions.begin();
 	for (tree_iterator_t a = (*p->trees.begin()).children.begin(); 
@@ -602,7 +610,7 @@ class unique_variables {
 	symtbl& unique;
 public:
 	unique_variables(symtbl& u): unique(u) {}
-	void operator()(variable* v)
+	void operator()(region_variable* v)
 	{
 		if (unique.find(v->name()) == unique.end()) {
 			unique[v->name()] = v;
@@ -659,7 +667,7 @@ public:
 	make_in_and_out_buffers(stringstream& s): ss(s) {}
 	void operator()(const symtbl::value_type p)
 	{
-		ss << "\t" << buffer_variable(p.second, 2).declare() << ";" << endl;
+		ss << "\t" << buffer_adaptor(p.second, 2).declare() << ";" << endl;
 	}
 };
 
@@ -669,7 +677,7 @@ public:
 	make_inout_buffers(stringstream& s): ss(s) {}
 	void operator()(const symtbl::value_type p)
 	{
-		ss << "\t" << buffer_variable(p.second, 3).declare() << ";" << endl;
+		ss << "\t" << buffer_adaptor(p.second, 3).declare() << ";" << endl;
 	}
 };
 
@@ -679,9 +687,9 @@ class make_buffers {
 public:
 	make_buffers(ostream& o): out(o), depth(0) {}
 	make_buffers(ostream& o, size_t d): out(o), depth(d) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
-		out << buffer_variable(v, depth).declare() << ";" << endl;
+		out << buffer_adaptor(v, depth).declare() << ";" << endl;
 	}
 	void operator()(spe_region* region)
 	{
@@ -695,10 +703,10 @@ class make_private_buffers {
 	ostream& out;
 public:
 	make_private_buffers(ostream& o): out(o) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
 		if (v->is_pointer()) {
-			out << buffer_variable(v, 1).declare() << ";" << endl;
+			out << buffer_adaptor(v, 1).declare() << ";" << endl;
 		}
 	}
 	void operator()(const spe_region* region)
@@ -711,7 +719,7 @@ class make_pass_assign {
 	stringstream& out;
 public:
 	make_pass_assign(stringstream& o): out(o) {}
-	void operator()(const variable* v)
+	void operator()(const region_variable* v)
 	{
 		out	<< pass_assign << v->name() 
 			<< " = " << v->alias() << ";" 
@@ -812,8 +820,6 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 
 	fmap(make_in_and_out_buffers(ss), in_and_out_unique_final);
 	fmap(make_inout_buffers(ss), inout_unique);
-	
-	//fmap(make_buffers(ss), regions);
 	fmap(make_private_buffers(ss), regions);
 
 	sslist cases;
@@ -865,15 +871,7 @@ int main(int argc, char* argv[])
 	// Do all of the input and parsing.
 	sslist ppe_src_blocks;
 	spelist spe_regions;
-	symtbl shared_tbl;
-	symtbl private_tbl;
-	symtbl reduce_tbl;
-	parse_src(	src_name, 
-			ppe_src_blocks, 
-			spe_regions, 
-			shared_tbl, 
-			private_tbl,
-			reduce_tbl);
+	parse_src(src_name, ppe_src_blocks, spe_regions);
 
 	stringstream ppe_fork;
 	stringstream ppe_prolouge;

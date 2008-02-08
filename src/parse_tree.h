@@ -26,7 +26,7 @@ inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
 	return out;
 }
 
-void root_eval(tree_t& trees, const symtbl& shared, spelist& regions);
+void traverse_ast(tree_t& trees, spelist& regions);
 
 template <class I, class F>
 F* for_each(I first, I last, F* f)
