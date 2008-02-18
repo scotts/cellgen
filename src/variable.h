@@ -85,8 +85,15 @@ public:
 	}
 };
 
+class private_variable: public region_variable {
+public:
+	private_variable(const string& t, const string& l, const string& a, int r):
+		region_variable(t, l, a, r) {}
+
+	virtual string formal() const { return type() + " " + variable::name(); }
+};
+
 class shared_variable: public region_variable {
-	int region_num;
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
 		region_variable(t, l, a, r)
@@ -174,7 +181,7 @@ public:
 	orig_adaptor(const region_variable* _v): v(_v) {}
 	string type() const { return v->variable::type(); }
 	string name() const { return v->variable::name(); }
-	string declare() const { return v->variable::declare(); }
+	string declare() const { return type() + " " + name(); }
 };
 
 typedef list<region_variable*>		varlist;

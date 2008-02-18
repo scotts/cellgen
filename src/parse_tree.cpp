@@ -476,11 +476,12 @@ public:
 	}
 };
 
-class base_init_buffers {
+class init_buffers {
 	stringstream& ss;
 	const size_t depth;
+
 public:
-	base_init_buffers(stringstream& s, size_t d): ss(s), depth(d) {}
+	init_buffers(stringstream& s, size_t d): ss(s), depth(d) {}
 	void operator()(const region_variable* v)
 	{
 		buffer_adaptor buff(v, depth);
@@ -489,7 +490,7 @@ public:
 
 		ss 	<< orig.declare() << ";" << endl
 			<< next.declare() << " = 0;" << endl
-			<< v->name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
+			<< orig.name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
 	}
 };
 
@@ -504,7 +505,7 @@ public:
 		buffer_adaptor buff(v, depth);
 		next_adaptor next(v);
 
-		base_init_buffers(ss, depth)(v);
+		init_buffers(ss, depth)(v);
 
 		ss	<< "mfc_get(" 
 			<< buff.name() << "[" << next.name() << "], " 
@@ -523,13 +524,14 @@ public:
 	{
 		if (v->is_pointer()) {
 			buffer_adaptor buff(v, 1);
+			orig_adaptor orig(v);
 
 			ss	<< "mfc_get("
 					<< buff.name() << ","
-					<< "(unsigned long)" << v->name() << ","
+					<< "(unsigned long)" << orig.name() << ","
 					<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ","
 					<< "3, 0, 0);" << endl
-				<< v->name() << "=" << buff.name() << ";" << endl
+				<< orig.name() << "=" << buff.name() << ";" << endl
 				<< "MMGP_SPE_dma_wait(3);" << endl;
 		}
 	}
@@ -545,7 +547,7 @@ struct cell_region {
 			fmap(&o, node.children);
 
 			stringstream decs;
-			fmap(base_init_buffers(decs, 2), (*region)->out());
+			fmap(init_buffers(decs, 2), (*region)->out());
 			fmap(in_init_buffers(decs, 2), (*region)->in());
 			fmap(in_init_buffers(decs, 3), (*region)->inout());
 
