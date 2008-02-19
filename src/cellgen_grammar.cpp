@@ -386,7 +386,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 				];
 
 			unrolled_code = 
-				no_node_d[strlit<>("unrolled(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
+				no_node_d[strlit<>("unroll(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
 
 			unroll_num = int_p;
 		}

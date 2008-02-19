@@ -229,9 +229,18 @@ class make_pass_struct {
 	stringstream& ss;
 public:
 	make_pass_struct(stringstream& s): ss(s) {}
-	void operator()(const symtbl::value_type p)
+	void operator()(const region_variable* v)
 	{
-		ss << "\t" << p.second->declare() << ";" << endl;
+		if (v->name() != "SPE_start" && v->name() != "SPE_stop") {
+			ss << "\t" << v->declare() << ";" << endl;
+		}
+	}
+
+	void operator()(spe_region* region)
+	{
+		fmap(this, region->priv());
+		fmap(this, region->shared());
+		fmap(this, region->reductions());
 	}
 };
 
@@ -239,9 +248,16 @@ class make_in_and_out_buffers {
 	stringstream& ss;
 public:
 	make_in_and_out_buffers(stringstream& s): ss(s) {}
-	void operator()(const symtbl::value_type p)
+
+	void operator()(const region_variable* v)
 	{
-		ss << "\t" << buffer_adaptor(p.second, 2).declare() << ";" << endl;
+		ss << "\t" << buffer_adaptor(v, 2).declare() << ";" << endl;
+	}
+	
+	void operator()(spe_region* region)
+	{
+		fmap(this, region->in());
+		fmap(this, region->out());
 	}
 };
 
@@ -249,10 +265,17 @@ class make_inout_buffers {
 	stringstream& ss;
 public:
 	make_inout_buffers(stringstream& s): ss(s) {}
-	void operator()(const symtbl::value_type p)
+
+	void operator()(const region_variable* v)
 	{
-		ss << "\t" << buffer_adaptor(p.second, 3).declare() << ";" << endl;
+		ss << "\t" << buffer_adaptor(v, 3).declare() << ";" << endl;
 	}
+
+	void operator()(spe_region* region)
+	{
+		fmap(this, region->inout());
+	}
+
 };
 
 class make_buffers {
@@ -261,10 +284,12 @@ class make_buffers {
 public:
 	make_buffers(ostream& o): out(o), depth(0) {}
 	make_buffers(ostream& o, size_t d): out(o), depth(d) {}
+
 	void operator()(const region_variable* v)
 	{
 		out << buffer_adaptor(v, depth).declare() << ";" << endl;
 	}
+
 	void operator()(spe_region* region)
 	{
 		fmap(make_buffers(out, 2), region->in());
@@ -357,11 +382,13 @@ void print_pass_struct(spelist& regions)
 	stringstream pass;
 	parse_generic(pass, pass_struct_iname);
 
+	/*
 	symtbl unique;
 	fmap(all_unique_variables(unique), regions);
+	*/
 
 	stringstream vars;
-	fmap(make_pass_struct(vars), unique);
+	fmap(make_pass_struct(vars), regions);
 
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
@@ -374,6 +401,7 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 	stringstream ss;
 	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
 
+	/*
 	symtbl in_and_out_unique;
 	fmap(in_and_out_unique_variables(in_and_out_unique), regions);
 
@@ -384,9 +412,10 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 	set_difference(in_and_out_unique.begin(), in_and_out_unique.end(),
 			inout_unique.begin(), inout_unique.end(),
 			inserter(in_and_out_unique_final, in_and_out_unique_final.begin()));
+	*/
 
-	fmap(make_in_and_out_buffers(ss), in_and_out_unique_final);
-	fmap(make_inout_buffers(ss), inout_unique);
+	fmap(make_in_and_out_buffers(ss), regions);
+	fmap(make_inout_buffers(ss), regions);
 	fmap(make_private_buffers(ss), regions);
 
 	sslist cases;

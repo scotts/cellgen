@@ -387,8 +387,9 @@ struct for_op {
 	varlist& in;
 	varlist& out;
 	varlist& inout;
-	for_op(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io): 
-		shared(s), cond(c), in(i), out(o), inout(io) {}
+	int unroll;
+	for_op(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io, int u): 
+		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::identifier) {
@@ -422,22 +423,27 @@ struct for_op {
 					inserter(diff_in, diff_in.begin()),
 					variable_less());
 
-			// Lazily call gen_in on both in and inout variables.
-			for (lazy_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
-				it->second(it->first);
-				in.push_back(it->first);
+			if (unroll > 0) {
+				// unroll the loop
 			}
+			else {
+				// Lazily call gen_in on both in and inout variables.
+				for (lazy_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
+					it->second(it->first);
+					in.push_back(it->first);
+				}
 
-			for (lazy_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
-				it->second.make_triple(); // inout variables need triple buffers
-				it->second(it->first);
-				inout.push_back(it->first);
+				for (lazy_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
+					it->second.make_triple(); // inout variables need triple buffers
+					it->second(it->first);
+					inout.push_back(it->first);
+				}
+
+				fmap(gen_out(node.children.back(), 3), inout);
+				fmap(gen_out(node.children.back(), 2), out);
+				fmap(gen_final_out(node.children.back()), inout);
+				fmap(gen_final_out(node.children.back()), out);
 			}
-
-			fmap(gen_out(node.children.back(), 3), inout);
-			fmap(gen_out(node.children.back(), 2), out);
-			fmap(gen_final_out(node.children.back()), inout);
-			fmap(gen_final_out(node.children.back()), out);
 		}
 		else {
 			fmap(this, node.children);
@@ -450,17 +456,27 @@ struct compound {
 	varlist& in;
 	varlist& out;
 	varlist& inout;
-	compound(const symtbl& s, varlist& i, varlist& o, varlist& io): 
-		shared(s), in(i), out(o), inout(io) {}
+	int unroll;
+	tree_node_t dupe;
+	compound(const symtbl& s, varlist& i, varlist& o, varlist& io, int u): 
+		shared(s), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::for_loop) {
+			tree_node_t dupe;
+			if (unroll > 0) {
+				dupe = node;
+			}
 			symset cond;
-			for_op o(shared, cond, in, out, inout);
+			for_op o(shared, cond, in, out, inout, unroll);
 			fmap(&o, node.children);
 		}
 		else {
 			fmap(this, node.children);
+			if (dupe.value.id() == ids::for_loop) {
+				cout << "READY TO UNROLL" << endl;
+				dupe = tree_node_t();
+			}
 		}
 	}
 };
@@ -543,7 +559,7 @@ struct cell_region {
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::compound) {
-			compound o(*((*region)->symbols()), (*region)->in(), (*region)->out(), (*region)->inout());
+			compound o(*((*region)->symbols()), (*region)->in(), (*region)->out(), (*region)->inout(), (*region)->unroll());
 			fmap(&o, node.children);
 
 			stringstream decs;
