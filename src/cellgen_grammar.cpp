@@ -82,7 +82,7 @@ public:
 
 		cout << tabs << level << ":" << str << " [" << rule << "]" <<  endl;
 
-		fmap(astout(level + 1, tabs + "  "), node.children);
+		for_all(node.children, astout(level + 1, tabs + "  "));
 	}
 };
 
@@ -144,7 +144,12 @@ public:
 		ss >> scalar;
 	}
 
-	T pickup() { return scalar; }
+	T pickup()
+	{
+		T temp = scalar;
+		scalar = T();
+		return temp;
+	}
 };
 
 template <class T>
@@ -305,7 +310,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			| 	start_code
 			| 	stop_code
 			|	reduction
-			| 	shared_code;
+			| 	shared_code
+			|	unrolled_code;
 
 			start_code = 
 				no_node_d[strlit<>("SPE_start(")] >> start_priv >> no_node_d[chlit<>(')')];
@@ -404,7 +410,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 
 	cellgen_grammar cg(ppe_blocks, spe_regions);
 	tree_parse_info_t* p = new tree_parse_info_t(); // need to make sure the ast persists
-	*p = ast_parse<string_factory>(first, last, cg, skip);
+	*p = ast_parse<xformer_factory>(first, last, cg, skip);
 
 	if (!p->full) {
 		cerr << "error: parse of " << src_name << " failed." << endl;
@@ -424,7 +430,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 	}
 
 	if (print_ast) {
-		fmap(astout(0, ""), p->trees);
+		for_all(p->trees, astout(0, ""));
 	}
 }
 

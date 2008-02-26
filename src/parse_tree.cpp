@@ -2,14 +2,16 @@
 #include <algorithm>
 #include <iostream>
 #include <sstream>
+#include <iterator>
 #include <map>
 using namespace std;
 
-#include <boost/bind.hpp>
 #include <boost/function.hpp>
 using namespace boost;
 
 #include "parse_tree.h"
+
+const int NO_UNROLL = 0;
 
 bool is_constant(tree_node_t& node)
 {
@@ -31,6 +33,18 @@ bool is_equals(tree_node_t& node)
 	string str(node.value.begin(), node.value.end());
 	return str.find("=") != string::npos;
 }
+
+
+class to_buffer_space: node_xformer {
+	string math;
+	string rem;
+public:
+	to_buffer_space(const string& m, const string& r): math(m), rem(r) {}
+	string operator()(tree_node_t& node)
+	{
+		return "[((" + math + ")" + rem + ")%" + buff_size.name() + "]";
+	}
+};
 
 struct mult_op {
 	const symset& cond;
@@ -63,7 +77,7 @@ struct mult_op {
 			math.build_rhs(val);
 		}
 
-		fmap(this, node.children);
+		for_all(node.children, this);
 	}
 };
 
@@ -88,14 +102,14 @@ struct array_op {
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
 			mult_op o(cond, found_cond, math);
-			fmap(&o, node.children);
+			for_all(node.children, &o);
 		}
 		else {
 			if (found_cond && !is_bracket(val)){
 				rem += val;
 			}
 
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
 	}
 };
@@ -127,11 +141,13 @@ struct postfix_op {
 		else if (node.value.id() == ids::array_index) {
 			mult_expr math;
 			array_op o(cond, found_cond, math);
-			fmap(&o, node.children);
+			for_all(node.children, &o);
 
 			if (found_shared && found_cond) {
 				var->math(math);
+				// XFORM CHANGE
 				node.value.value("[((" + math.as_written() + ")" + o.rem + ")%" + buff_size.name() + "]");
+				//node.value.xformations.push_back(new to_buffer_space(math.as_written(), o.rem)); 
 				
 				// If we don't do this, redundant printing. The above is a string 
 				// reduction of all the children.
@@ -139,7 +155,7 @@ struct postfix_op {
 			}
 		}
 		else {
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
 	}
 };
@@ -155,10 +171,10 @@ struct handness {
 	{
 		if (node.value.id() == ids::postfix_expression) {
 			postfix_op o(shared, cond, lst);
-			fmap(&o, node.children);
+			for_all(node.children, &o);
 		}
 		else {
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
 	};
 };
@@ -186,19 +202,19 @@ struct expression_statement_op {
 			for_each(e, node.children.end(), handness(shared, cond, in));
 		}
 		else {
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
 	}
 };
 
-struct gen_in: public unary_function<void, variable*> {
+// XFORM CHANGE
+struct gen_in: public unary_function<void, region_variable*> {
 	tree_node_t& node;
-	const symtbl& shared;
 	size_t depth;
-	gen_in(tree_node_t& n, const symtbl& s): 
-		node(n), shared(s), depth(2)
+	int unroll;
+	gen_in(tree_node_t& n, int u): 
+		node(n), depth(buffer_adaptor::dbl), unroll(u)
 		{}
-	gen_in(const gen_in& o): node(o.node), shared(o.shared), depth(o.depth) {}
 	void operator()(const region_variable* v)
 	{
 		next_adaptor next(v);
@@ -206,9 +222,15 @@ struct gen_in: public unary_function<void, variable*> {
 		orig_adaptor orig(v);
 
 		string use(node.value.begin(), node.value.end());
+		string if_statement;
+
+		cout << "unroll: " << unroll << endl;
+		if (!unroll) {
+			if_statement = "if (!((" + v->math().as_written() + ")%" + buff_size.name() + "))"; 
+		}
+
 		use += node.value.value();
-		node.value.value(
-			"if (!((" + v->math().as_written() + ")%" + buff_size.name() + ")) {\n" 
+		node.value.value(if_statement + "{\n" 
 				"int old=" + next.name() + ";\n" +
 				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
 				"mfc_get(" + 
@@ -221,10 +243,46 @@ struct gen_in: public unary_function<void, variable*> {
 			+ use);
 	}
 
-	void make_triple() { depth = 3; }
+	void make_triple() { depth = buffer_adaptor::triple; }
 };
 
-typedef list<function1<void, variable*> > funlist;
+/*
+struct gen_in: public node_xformer {
+	const region_variable* v;
+	size_t depth;
+	int unroll;
+	gen_in(const region_variable* _v, int u): 
+		v(_v), depth(buffer_adaptor::dbl), unroll(u)
+		{}
+	string operator()(tree_node_t& node)
+	{
+		next_adaptor next(v);
+		buffer_adaptor buff(v, depth);
+		orig_adaptor orig(v);
+
+		string if_statement;
+
+		if (!unroll) {
+			if_statement = "if (!((" + v->math().as_written() + ")%" + buff_size.name() + "))"; 
+		}
+
+		return if_statement + "{\n" 
+				"int old=" + next.name() + ";\n" +
+				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
+				"mfc_get(" + 
+					buff.name() + "[" + next.name() + "]," 
+					"(unsigned long)(" + v->name() + "+((" + v->math().as_written() + ")+" + buff_size.name() + "))," 
+					"sizeof(" + buff.type() + ") *" + buff_size.name() + "," +
+					next.name() + ", 0, 0);\n" +
+				orig.name() + "=" + buff.name() + "[old];\n"
+				"MMGP_SPE_dma_wait(old);\n"
+			"}\n";
+	}
+
+	void make_triple() { depth = buffer_adaptor::triple; }
+};
+*/
+
 typedef map<region_variable*, gen_in> lazy_gen_in;
 
 struct for_compound_op {
@@ -232,39 +290,45 @@ struct for_compound_op {
 	const symset& cond;
 	varlist& out;
 	lazy_gen_in& in;
-	for_compound_op(const symtbl& s, symset& c, varlist& o, lazy_gen_in& l): 
-		shared(s), cond(c), out(o), in(l)
+	int unroll;
+	for_compound_op(const symtbl& s, symset& c, varlist& o, lazy_gen_in& l, int u): 
+		shared(s), cond(c), out(o), in(l), unroll(u)
 		{}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
 			expression_statement_op o(shared, cond, out);
-			fmap(&o, node.children);
+			for_all(node.children, &o);
 
 			// Store the function object somewhere, and call it later once I know 
 			// which variables are in, which are out, and which are inout
 			for (varlist::iterator it = o.in.begin(); it != o.in.end(); ++it) {
 				if (in.find(*it) == in.end()) {
-					in.insert(lazy_gen_in::value_type(*it, gen_in(node, shared)));
+					in.insert(lazy_gen_in::value_type(*it, gen_in(node, unroll)));
 				}
 			}
 		}
 		else {
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
 	}
 };
 
-struct gen_out {
+// XFORM CHANGE
+
+struct gen_out: public unary_function<void, region_variable*>  {
 	tree_node_t& node;
-	const size_t depth;
-	gen_out(tree_node_t& n, size_t d): 
-		node(n), depth(d) {}
+	const int depth;
+	int unroll;
+
+	gen_out(tree_node_t& n, int d, int u): 
+		node(n), depth(d), unroll(u) {}
 	void operator()(const region_variable* v)
 	{
 		buffer_adaptor buff(v, depth);
 		orig_adaptor orig(v);
 		string var_switch;
+		string if_statement;
 		string old;
 
 		if (node.value.value() == "") {
@@ -274,14 +338,18 @@ struct gen_out {
 			old = node.value.value();
 		}
 
-		if (depth < 3) {
+		if (depth < buffer_adaptor::triple) {
 			next_adaptor next(v);
 
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + ";\n" +
 					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
 		}
 
-		node.value.value("if (!(" + v->math().next_iteration() + "%" + buff_size.name() + ")) {\n "
+		if (!unroll) {
+			if_statement = "if (!(" + v->math().next_iteration() + "%" + buff_size.name() + "))";
+		}
+
+		node.value.value(if_statement + "{\n"
 					"MMGP_SPE_dma_wait(out_tag); \n"
 					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
 							"+" + v->math().next_iteration() + "-" + buff_size.name() + "),"
@@ -293,13 +361,52 @@ struct gen_out {
 	}
 };
 
+/*
+struct gen_out: public node_xformer {
+	const region_variable* v;
+	const int depth;
+	int unroll;
+
+	gen_out(region_variable* _v, int d, int u): 
+		v(_v), depth(d), unroll(u) {}
+	string operator()(tree_node_t& node)
+	{
+		buffer_adaptor buff(v, depth);
+		orig_adaptor orig(v);
+		string var_switch;
+		string if_statement;
+
+		if (depth < buffer_adaptor::triple) {
+			next_adaptor next(v);
+
+			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + ";\n" +
+					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
+		}
+
+		if (!unroll) {
+			if_statement = "if (!(" + v->math().next_iteration() + "%" + buff_size.name() + "))";
+		}
+
+		return if_statement + "{\n"
+					"MMGP_SPE_dma_wait(out_tag); \n"
+					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
+							"+" + v->math().next_iteration() + "-" + buff_size.name() + "),"
+						"sizeof(" + buff.type() + ")*" + buff_size.name() + ","
+						"out_tag, 0, 0);\n" +
+					var_switch +
+			"}\n";
+	}
+};
+*/
+
+// XFORM CHANGE
 struct gen_final_out {
 	tree_node_t& node;
 	gen_final_out(tree_node_t& n):
 		node(n) {}
 	void operator()(const region_variable* v)
 	{
-		buffer_adaptor buff(v, 2);
+		buffer_adaptor buff(v, buffer_adaptor::dbl);
 		orig_adaptor orig(v);
 		string old;
 
@@ -326,6 +433,27 @@ struct gen_final_out {
 	}
 };
 
+/*
+struct gen_final_out {
+	const region_variable* v;
+	gen_final_out(const region_variable* _v): v(_v) {}
+	string operator()(tree_node_t& node)
+	{
+		buffer_adaptor buff(v, buffer_adaptor::dbl);
+		orig_adaptor orig(v);
+
+		return "if ((((SPE_stop - SPE_start)" + v->math().factor() + ")%buff_size)) {" +
+					"MMGP_SPE_dma_wait(out_tag); \n mfc_put(" + 
+					orig.name() + "," + 
+					"(unsigned long)(" + v->name() +
+					"+(SPE_stop" + v->math().factor() + ")-(((SPE_stop-SPE_start)" + v->math().factor() + ")%" + 
+					buff_size.name() + ")), sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor() +
+					")%" + buff_size.name() + "),out_tag, 0, 0); \n" +
+				"MMGP_SPE_dma_wait(out_tag); \n }";
+	}
+};
+*/
+
 class make_reduction_declarations {
 	stringstream& ss;
 
@@ -336,30 +464,6 @@ public:
 		ss << orig_adaptor(v).declare() << ";" << endl;
 	}
 };
-
-class add_declarations {
-	const string& declarations;
-
-public:
-	add_declarations(const string& d): declarations(d) {}
-	void operator()(tree_node_t& node)
-	{
-		if (node.value.id() == ids::compound) {
-			tree_node_t& lparen = *node.children.begin();
-			lparen.value.value("{" + declarations);
-		}
-	}
-};
-
-void printlist(const region_variable* v)
-{
-	cout << v << " ";
-}
-
-void printlazy(lazy_gen_in::value_type& l)
-{
-	cout << l.first << " ";
-}
 
 struct variable_less {
 	bool operator()(const region_variable* v, const lazy_gen_in::value_type& p)
@@ -392,6 +496,7 @@ struct for_op {
 		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(tree_node_t& node)
 	{
+		// if unroll, need to change iteration parameters
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
 			cond.insert(ident);
@@ -400,8 +505,8 @@ struct for_op {
 			lazy_gen_in lazy_in;
 			varlist pre_out;
 
-			for_compound_op o(shared, cond, pre_out, lazy_in);
-			fmap(&o, node.children);
+			for_compound_op o(shared, cond, pre_out, lazy_in, NO_UNROLL);
+			for_all(node.children, &o);
 
 			pre_out.sort();
 			pre_out.unique();
@@ -423,63 +528,84 @@ struct for_op {
 					inserter(diff_in, diff_in.begin()),
 					variable_less());
 
-			if (unroll > 0) {
-				// unroll the loop
+			// Lazily call gen_in on both in and inout variables.
+			for (lazy_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
+				it->second(it->first);
+				in.push_back(it->first);
 			}
-			else {
-				// Lazily call gen_in on both in and inout variables.
-				for (lazy_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
-					it->second(it->first);
-					in.push_back(it->first);
-				}
 
-				for (lazy_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
-					it->second.make_triple(); // inout variables need triple buffers
-					it->second(it->first);
-					inout.push_back(it->first);
-				}
-
-				fmap(gen_out(node.children.back(), 3), inout);
-				fmap(gen_out(node.children.back(), 2), out);
-				fmap(gen_final_out(node.children.back()), inout);
-				fmap(gen_final_out(node.children.back()), out);
+			for (lazy_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
+				it->second.make_triple(); // inout variables need triple buffers
+				it->second(it->first);
+				inout.push_back(it->first);
 			}
+
+			tree_node_t& back = node.children.back();
+			// XFORM CHANGE
+			//append(back.xformations, fmap(create_gen_out(buffer_adaptor::triple, NO_UNROLL), inout));
+			for_all(inout, gen_out(back, buffer_adaptor::triple, NO_UNROLL));
+			for_all(out, gen_out(back, buffer_adaptor::dbl, NO_UNROLL));
+			for_all(inout, gen_final_out(back));
+			for_all(out, gen_final_out(back));
 		}
 		else {
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
+	}
+};
+
+struct unroll_for_op {
+	const symtbl& shared;
+	symset& cond;
+	varlist& in;
+	varlist& out;
+	varlist& inout;
+	int unroll;
+	unroll_for_op(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io, int u): 
+		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
+	void operator()(tree_node_t& node)
+	{
+		cout << "You ain't done yet." << endl;
+	}
+};
+
+template <class N>
+struct non_destructive_deep_copy {
+	N& dupe;
+	non_destructive_deep_copy(N& d): dupe(d) {}
+
+	void operator()(N node)
+	{
+		dupe.value.value(node.value.value());
+		for_all(node.children, non_destructive_deep_copy(back_inserter(dupe.children)));
 	}
 };
 
 struct compound {
 	const symtbl& shared;
+	symset& cond;
 	varlist& in;
 	varlist& out;
 	varlist& inout;
 	int unroll;
-	tree_node_t dupe;
-	compound(const symtbl& s, varlist& i, varlist& o, varlist& io, int u): 
-		shared(s), in(i), out(o), inout(io), unroll(u) {}
+	compound(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io, int u): 
+		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			tree_node_t dupe;
-			if (unroll > 0) {
-				dupe = node;
-			}
-			symset cond;
 			for_op o(shared, cond, in, out, inout, unroll);
-			fmap(&o, node.children);
+			for_all(node.children, &o);
 		}
 		else {
-			fmap(this, node.children);
-			if (dupe.value.id() == ids::for_loop) {
-				cout << "READY TO UNROLL" << endl;
-				dupe = tree_node_t();
-			}
+			for_all(node.children, this);
 		}
 	}
 };
+
+bool is_for_loop(tree_node_t& node)
+{
+	return node.value.id() == ids::for_loop;
+}
 
 class make_reduction_assignments {
 	stringstream& a;
@@ -539,7 +665,7 @@ public:
 	void operator()(const region_variable* v)
 	{
 		if (v->is_pointer()) {
-			buffer_adaptor buff(v, 1);
+			buffer_adaptor buff(v, buffer_adaptor::single);
 			orig_adaptor orig(v);
 
 			ss	<< "mfc_get("
@@ -555,36 +681,57 @@ public:
 
 struct cell_region {
 	spelist::iterator region;
+
 	cell_region(spelist::iterator r): region(r) {}
 	void operator()(tree_node_t& node)
 	{
 		if (node.value.id() == ids::compound) {
-			compound o(*((*region)->symbols()), (*region)->in(), (*region)->out(), (*region)->inout(), (*region)->unroll());
-			fmap(&o, node.children);
+			// We only support one for loop per cell_region & compound 
+			// statement, so we might as well define cond here and just 
+			// deal with supporting multiple loops in one region when it's 
+			// needed.
+			symset cond;
+			compound o(*((*region)->symbols()), cond,
+					(*region)->in(), (*region)->out(), (*region)->inout(), 
+					(*region)->unroll());
+
+			if ((*region)->unroll()) {
+				tree_node_t::children_t::iterator unroll_pos = for_all_duplicate(is_for_loop, &o, node.children);
+
+				if (unroll_pos != node.children.end()) {
+					unroll_for_op(*((*region)->symbols()), cond,
+							(*region)->in(), (*region)->out(), (*region)->inout(), 
+							(*region)->unroll())
+						(*unroll_pos);
+				}
+			}
+			else {
+				for_all(node.children, &o);
+			}
 
 			stringstream decs;
-			fmap(init_buffers(decs, 2), (*region)->out());
-			fmap(in_init_buffers(decs, 2), (*region)->in());
-			fmap(in_init_buffers(decs, 3), (*region)->inout());
+			for_all((*region)->out(), init_buffers(decs, buffer_adaptor::dbl));
+			for_all((*region)->in(), in_init_buffers(decs, buffer_adaptor::dbl));
+			for_all((*region)->inout(), in_init_buffers(decs, buffer_adaptor::triple));
 
-			fmap(init_private_buffers(decs), (*region)->priv());
-			fmap(make_reduction_declarations(decs), (*region)->reductions());
+			for_all((*region)->priv(), init_private_buffers(decs));
+			for_all((*region)->reductions(), make_reduction_declarations(decs));
 			node.children.front().value.value("{" + decs.str());
 
 			stringstream a;
-			fmap(make_reduction_assignments(a), (*region)->reductions());
+			for_all((*region)->reductions(), make_reduction_assignments(a));
 			node.children.back().value.value(a.str() + "}");
 
 			++region;
 		}
 		else {
-			fmap(this, node.children);
+			for_all(node.children, this);
 		}
 	}
 };
 
 void traverse_ast(tree_t& trees, spelist& regions)
 {
-	fmap(cell_region(regions.begin()), (*trees.begin()).children);
+	for_all((*trees.begin()).children, cell_region(regions.begin()));
 }
 

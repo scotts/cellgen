@@ -73,6 +73,7 @@ void open_check(const T& s, const string& name)
 	}
 }
 
+// XFORM CHANGE
 class codeout {
 	ostream& out;
 
@@ -89,9 +90,26 @@ public:
 		}
 
 		out << str << " ";
-		fmap(this, node.children);
+		for_all(node.children, this);
 	}
 };
+
+/*
+class codeout {
+	ostream& out;
+
+public:
+	codeout(ostream& o): out(o) {}
+	void operator()(const tree_node_t& node)
+	{
+		string init = string(node.value.begin(), node.value.end());
+		init = inv_accumulate_all(node.value.value(), init, node);
+
+		out << init << " ";
+		for_all(node.children, this);
+	}
+};
+*/
 
 class make_case_sig {
 	stringstream& file;
@@ -106,16 +124,11 @@ public:
 	}
 };
 
-class make_writebacks {
-	stringstream& w;
 
-public:
-	make_writebacks(stringstream& _w): w(_w) {}
-	void operator()(const region_variable* v)
-	{
-		w << "signal.result = " << pass_var << "." << v->name() << ";" << endl;
-	}
-};
+string make_writebacks(string val, const region_variable* v)
+{
+	return val + "signal.result = " + pass_var + "." + v->name() + ";\n";
+}
 
 class print_region {
 	ostream& file;
@@ -134,22 +147,21 @@ public:
 
 		stringstream f;
 		stringstream c;
-		fmap(make_case_sig(f, c), region->priv());
-		fmap(make_case_sig(f, c), region->shared());
-		fmap(make_case_sig(f, c), region->reductions());
+		for_all(region->priv(), make_case_sig(f, c));
+		for_all(region->shared(), make_case_sig(f, c));
+		for_all(region->reductions(), make_case_sig(f, c));
 
-		stringstream writebacks;
-		fmap(make_writebacks(writebacks), region->reductions());
+		string writebacks = accumulate_all(region->reductions(), string(""), make_writebacks);
 
 		*casest	<< c.str().replace(c.str().find_last_of(","), strlen(","), "") << "); " << endl
-			<< writebacks.str() << endl
+			<< writebacks << endl
 			<< mmgp_spe_stop << "break;" << endl;
 		cases.push_back(casest);
 
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
 		file << ")" << endl;
 
-		fmap(codeout(file), region->ast()->children);
+		for_all(region->ast()->children, codeout(file));
 	}
 };
 
@@ -198,9 +210,9 @@ public:
 	all_unique_variables(symtbl& u): unique(u) {}
 	void operator()(const spe_region* region)
 	{
-		fmap(unique_variables(unique), region->priv());
-		fmap(unique_variables(unique), region->shared());
-		fmap(unique_variables(unique), region->reductions());
+		for_all(region->priv(), unique_variables(unique));
+		for_all(region->shared(), unique_variables(unique));
+		for_all(region->reductions(), unique_variables(unique));
 	}
 };
 
@@ -210,8 +222,8 @@ public:
 	in_and_out_unique_variables(symtbl& u): unique(u) {}
 	void operator()(spe_region* region)
 	{
-		fmap(unique_variables(unique), region->in());
-		fmap(unique_variables(unique), region->out());
+		for_all(region->in(), unique_variables(unique));
+		for_all(region->out(), unique_variables(unique));
 	}
 };
 
@@ -221,7 +233,7 @@ public:
 	inout_unique_variables(symtbl& u): unique(u) {}
 	void operator()(spe_region* region)
 	{
-		fmap(unique_variables(unique), region->inout());
+		for_all(region->inout(), unique_variables(unique));
 	}
 };
 
@@ -238,64 +250,43 @@ public:
 
 	void operator()(spe_region* region)
 	{
-		fmap(this, region->priv());
-		fmap(this, region->shared());
-		fmap(this, region->reductions());
+		for_all(region->priv(), this);
+		for_all(region->shared(), this);
+		for_all(region->reductions(), this);
 	}
-};
-
-class make_in_and_out_buffers {
-	stringstream& ss;
-public:
-	make_in_and_out_buffers(stringstream& s): ss(s) {}
-
-	void operator()(const region_variable* v)
-	{
-		ss << "\t" << buffer_adaptor(v, 2).declare() << ";" << endl;
-	}
-	
-	void operator()(spe_region* region)
-	{
-		fmap(this, region->in());
-		fmap(this, region->out());
-	}
-};
-
-class make_inout_buffers {
-	stringstream& ss;
-public:
-	make_inout_buffers(stringstream& s): ss(s) {}
-
-	void operator()(const region_variable* v)
-	{
-		ss << "\t" << buffer_adaptor(v, 3).declare() << ";" << endl;
-	}
-
-	void operator()(spe_region* region)
-	{
-		fmap(this, region->inout());
-	}
-
 };
 
 class make_buffers {
 	ostream& out;
 	const size_t depth;
 public:
-	make_buffers(ostream& o): out(o), depth(0) {}
 	make_buffers(ostream& o, size_t d): out(o), depth(d) {}
-
 	void operator()(const region_variable* v)
 	{
 		out << buffer_adaptor(v, depth).declare() << ";" << endl;
 	}
+};
 
+class make_in_and_out_buffers {
+	stringstream& out;
+public:
+	make_in_and_out_buffers(stringstream& o): out(o) {}
 	void operator()(spe_region* region)
 	{
-		fmap(make_buffers(out, 2), region->in());
-		fmap(make_buffers(out, 2), region->out());
-		fmap(make_buffers(out, 3), region->inout());
+		for_all(region->in(), make_buffers(out, buffer_adaptor::dbl));
+		for_all(region->out(), make_buffers(out, buffer_adaptor::dbl));
 	}
+};
+
+class make_inout_buffers {
+	stringstream& out;
+public:
+	make_inout_buffers(stringstream& o): out(o) {}
+	void operator()(spe_region* region)
+	{
+		for_all(region->inout(), make_buffers(out, buffer_adaptor::triple));
+	}
+
 };
 
 class make_private_buffers {
@@ -305,12 +296,12 @@ public:
 	void operator()(const region_variable* v)
 	{
 		if (v->is_pointer()) {
-			out << buffer_adaptor(v, 1).declare() << ";" << endl;
+			out << buffer_adaptor(v, buffer_adaptor::single).declare() << ";" << endl;
 		}
 	}
 	void operator()(const spe_region* region)
 	{
-		fmap(this, region->priv());
+		for_all(region->priv(), this);
 	}
 };
 
@@ -350,9 +341,9 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 			id_ss << loop_num++;
 
 			stringstream passes;
-			fmap(make_pass_assign(passes), (*r)->priv());
-			fmap(make_pass_assign(passes), (*r)->shared());
-			fmap(make_pass_assign(passes), (*r)->reductions());
+			for_all((*r)->priv(), make_pass_assign(passes));
+			for_all((*r)->shared(), make_pass_assign(passes));
+			for_all((*r)->reductions(), make_pass_assign(passes));
 
 			string fork_str = regex_replace(ppe_fork.str(), regex(loop_hook), id_ss.str());
 			string passes_str = regex_replace(passes.str(), regex(loop_hook), id_ss.str());
@@ -384,11 +375,11 @@ void print_pass_struct(spelist& regions)
 
 	/*
 	symtbl unique;
-	fmap(all_unique_variables(unique), regions);
+	for_all(regions, all_unique_variables(unique));
 	*/
 
 	stringstream vars;
-	fmap(make_pass_struct(vars), regions);
+	for_all(regions, make_pass_struct(vars));
 
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
@@ -403,10 +394,10 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 
 	/*
 	symtbl in_and_out_unique;
-	fmap(in_and_out_unique_variables(in_and_out_unique), regions);
+	for_all(regions, in_and_out_unique_variables(in_and_out_unique));
 
 	symtbl inout_unique;
-	fmap(inout_unique_variables(inout_unique), regions);
+	for_all(regions, inout_unique_variables(inout_unique));
 
 	symtbl in_and_out_unique_final;
 	set_difference(in_and_out_unique.begin(), in_and_out_unique.end(),
@@ -414,15 +405,15 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 			inserter(in_and_out_unique_final, in_and_out_unique_final.begin()));
 	*/
 
-	fmap(make_in_and_out_buffers(ss), regions);
-	fmap(make_inout_buffers(ss), regions);
-	fmap(make_private_buffers(ss), regions);
+	for_all(regions, make_in_and_out_buffers(ss));
+	for_all(regions, make_inout_buffers(ss));
+	for_all(regions, make_private_buffers(ss));
 
 	sslist cases;
-	fmap(print_region(ss, cases), regions);
+	for_all(regions, print_region(ss, cases));
 
 	stringstream cases_ss;
-	fmap(sstream_out(cases_ss), cases);
+	for_all(cases, sstream_out(cases_ss));
 	ss << regex_replace(spe_main.str(), regex(case_hook), cases_ss.str());
 
 	file << ss.str();
