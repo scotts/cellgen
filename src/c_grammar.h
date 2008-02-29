@@ -73,8 +73,9 @@ using namespace phoenix;
 
 #include "streamops.h"
 #include "parse_tree.h"
+#include "ids.h"
 
-struct c_grammar : public grammar<c_grammar> {
+struct c_grammar: public grammar<c_grammar> {
     
     template <typename ScannerT>
     struct definition {

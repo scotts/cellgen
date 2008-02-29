@@ -1,5 +1,6 @@
 #include <string>
 #include <algorithm>
+#include <numeric>
 #include <iostream>
 #include <sstream>
 #include <iterator>
@@ -10,10 +11,14 @@ using namespace std;
 using namespace boost;
 
 #include "parse_tree.h"
+#include "ids.h"
+#include "variable.h"
+#include "spe_region.h"
+#include "utility.h"
 
 const int NO_UNROLL = 0;
 
-bool is_constant(tree_node_t& node)
+bool is_constant(ast_node& node)
 {
 	return node.value.id() == ids::int_constant_dec;
 }
@@ -28,19 +33,19 @@ bool is_multop(string s)
 	return s == "*" || s == "/" || s == "%";
 }
 
-bool is_equals(tree_node_t& node)
+bool is_equals(ast_node& node)
 {
 	string str(node.value.begin(), node.value.end());
 	return str.find("=") != string::npos;
 }
 
 
-class to_buffer_space: node_xformer {
+class to_buffer_space: public node_xformer {
 	string math;
 	string rem;
 public:
 	to_buffer_space(const string& m, const string& r): math(m), rem(r) {}
-	string operator()(tree_node_t& node)
+	string operator()(ast_node& node)
 	{
 		return "[((" + math + ")" + rem + ")%" + buff_size.name() + "]";
 	}
@@ -55,7 +60,7 @@ struct mult_op {
 	mult_op(const symset& c, bool& f, mult_expr& m):
 		cond(c), found_cond(f), math(m), found_op(false)
 		{}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
 
@@ -90,7 +95,7 @@ struct array_op {
 	array_op(const symset& c, bool& f, mult_expr& m):
 		cond(c), found_cond(f), math(m)
 		{}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
 
@@ -117,15 +122,15 @@ struct array_op {
 struct postfix_op {
 	const symtbl& shared;
 	const symset& cond;
-	varlist& lst;
+	varset& lst;
 	bool found_cond;
 	bool found_shared;
 	region_variable* var;
 	
-	postfix_op(const symtbl& s, const symset& c, varlist& l):
+	postfix_op(const symtbl& s, const symset& c, varset& l):
 		shared(s), cond(c), lst(l), found_cond(false), found_shared(false)
 		{}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
 		if (node.value.id() == ids::identifier) {
@@ -133,7 +138,7 @@ struct postfix_op {
 				symtbl::const_iterator it = shared.find(val);
 				if (it != shared.end()) {
 					var = it->second;
-					lst.push_back(var);
+					lst.insert(var);
 					found_shared = true;
 				}
 			}
@@ -145,9 +150,7 @@ struct postfix_op {
 
 			if (found_shared && found_cond) {
 				var->math(math);
-				// XFORM CHANGE
-				node.value.value("[((" + math.as_written() + ")" + o.rem + ")%" + buff_size.name() + "]");
-				//node.value.xformations.push_back(new to_buffer_space(math.as_written(), o.rem)); 
+				node.value.xformations.push_back(new to_buffer_space(math.as_written(), o.rem)); 
 				
 				// If we don't do this, redundant printing. The above is a string 
 				// reduction of all the children.
@@ -163,11 +166,11 @@ struct postfix_op {
 struct handness {
 	const symtbl& shared;
 	const symset& cond;
-	varlist& lst;
-	handness(const symtbl& s, const symset& c, varlist& l):
+	varset& lst;
+	handness(const symtbl& s, const symset& c, varset& l):
 		shared(s), cond(c), lst(l)
 		{}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::postfix_expression) {
 			postfix_op o(shared, cond, lst);
@@ -182,16 +185,16 @@ struct handness {
 struct expression_statement_op {
 	const symtbl& shared;
 	const symset& cond;
-	varlist& out;
-	varlist in;
-	expression_statement_op(const symtbl& s, const symset& c, varlist& o):
+	varset& out;
+	varset in;
+	expression_statement_op(const symtbl& s, const symset& c, varset& o):
 		shared(s), cond(c), out(o)
 		{}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		// Needs to work for non-assignment expressions.
 		if (node.value.id() == ids::assignment_expression) {
-			tree_iterator_t e;
+			ast_iterator e;
 			for (e = node.children.begin(); e != node.children.end(); ++e) {
 				if (is_equals(*e)) {
 					break;
@@ -207,54 +210,14 @@ struct expression_statement_op {
 	}
 };
 
-// XFORM CHANGE
-struct gen_in: public unary_function<void, region_variable*> {
-	tree_node_t& node;
-	size_t depth;
-	int unroll;
-	gen_in(tree_node_t& n, int u): 
-		node(n), depth(buffer_adaptor::dbl), unroll(u)
-		{}
-	void operator()(const region_variable* v)
-	{
-		next_adaptor next(v);
-		buffer_adaptor buff(v, depth);
-		orig_adaptor orig(v);
-
-		string use(node.value.begin(), node.value.end());
-		string if_statement;
-
-		cout << "unroll: " << unroll << endl;
-		if (!unroll) {
-			if_statement = "if (!((" + v->math().as_written() + ")%" + buff_size.name() + "))"; 
-		}
-
-		use += node.value.value();
-		node.value.value(if_statement + "{\n" 
-				"int old=" + next.name() + ";\n" +
-				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
-				"mfc_get(" + 
-					buff.name() + "[" + next.name() + "]," 
-					"(unsigned long)(" + v->name() + "+((" + v->math().as_written() + ")+" + buff_size.name() + "))," 
-					"sizeof(" + buff.type() + ") *" + buff_size.name() + "," +
-					next.name() + ", 0, 0);\n" +
-				orig.name() + "=" + buff.name() + "[old];\n"
-				"MMGP_SPE_dma_wait(old);\n }\n"
-			+ use);
-	}
-
-	void make_triple() { depth = buffer_adaptor::triple; }
-};
-
-/*
 struct gen_in: public node_xformer {
-	const region_variable* v;
+	region_variable* v;
 	size_t depth;
 	int unroll;
-	gen_in(const region_variable* _v, int u): 
+	gen_in(region_variable* _v, int u): 
 		v(_v), depth(buffer_adaptor::dbl), unroll(u)
 		{}
-	string operator()(tree_node_t& node)
+	string operator()(ast_node& node)
 	{
 		next_adaptor next(v);
 		buffer_adaptor buff(v, depth);
@@ -279,22 +242,23 @@ struct gen_in: public node_xformer {
 			"}\n";
 	}
 
+	void unroll_me(int u) { unroll = u; }
 	void make_triple() { depth = buffer_adaptor::triple; }
 };
-*/
 
-typedef map<region_variable*, gen_in> lazy_gen_in;
+typedef multimap<ast_node*, gen_in*> bind_gen_in;
 
 struct for_compound_op {
 	const symtbl& shared; 
 	const symset& cond;
-	varlist& out;
-	lazy_gen_in& in;
+	varset& out;
+	bind_gen_in& in;
 	int unroll;
-	for_compound_op(const symtbl& s, symset& c, varlist& o, lazy_gen_in& l, int u): 
+	varset seen;
+	for_compound_op(const symtbl& s, symset& c, varset& o, bind_gen_in& l, int u): 
 		shared(s), cond(c), out(o), in(l), unroll(u)
 		{}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
 			expression_statement_op o(shared, cond, out);
@@ -302,9 +266,10 @@ struct for_compound_op {
 
 			// Store the function object somewhere, and call it later once I know 
 			// which variables are in, which are out, and which are inout
-			for (varlist::iterator it = o.in.begin(); it != o.in.end(); ++it) {
-				if (in.find(*it) == in.end()) {
-					in.insert(lazy_gen_in::value_type(*it, gen_in(node, unroll)));
+			for (varset::iterator it = o.in.begin(); it != o.in.end(); ++it) {
+				if (seen.find(*it) == seen.end()) {
+					in.insert(bind_gen_in::value_type(&node, new gen_in(*it, unroll)));
+					seen.insert(*it);
 				}
 			}
 		}
@@ -314,62 +279,14 @@ struct for_compound_op {
 	}
 };
 
-// XFORM CHANGE
-
-struct gen_out: public unary_function<void, region_variable*>  {
-	tree_node_t& node;
-	const int depth;
-	int unroll;
-
-	gen_out(tree_node_t& n, int d, int u): 
-		node(n), depth(d), unroll(u) {}
-	void operator()(const region_variable* v)
-	{
-		buffer_adaptor buff(v, depth);
-		orig_adaptor orig(v);
-		string var_switch;
-		string if_statement;
-		string old;
-
-		if (node.value.value() == "") {
-			old.assign(node.value.begin(), node.value.end());
-		}
-		else {
-			old = node.value.value();
-		}
-
-		if (depth < buffer_adaptor::triple) {
-			next_adaptor next(v);
-
-			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + ";\n" +
-					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
-		}
-
-		if (!unroll) {
-			if_statement = "if (!(" + v->math().next_iteration() + "%" + buff_size.name() + "))";
-		}
-
-		node.value.value(if_statement + "{\n"
-					"MMGP_SPE_dma_wait(out_tag); \n"
-					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
-							"+" + v->math().next_iteration() + "-" + buff_size.name() + "),"
-						"sizeof(" + buff.type() + ")*" + buff_size.name() + ","
-						"out_tag, 0, 0);\n" +
-					var_switch +
-				"}\n" + 
-				old);
-	}
-};
-
-/*
 struct gen_out: public node_xformer {
 	const region_variable* v;
 	const int depth;
 	int unroll;
 
-	gen_out(region_variable* _v, int d, int u): 
+	gen_out(const region_variable* _v, int d, int u): 
 		v(_v), depth(d), unroll(u) {}
-	string operator()(tree_node_t& node)
+	string operator()(ast_node& node)
 	{
 		buffer_adaptor buff(v, depth);
 		orig_adaptor orig(v);
@@ -396,53 +313,22 @@ struct gen_out: public node_xformer {
 					var_switch +
 			"}\n";
 	}
-};
-*/
 
-// XFORM CHANGE
-struct gen_final_out {
-	tree_node_t& node;
-	gen_final_out(tree_node_t& n):
-		node(n) {}
-	void operator()(const region_variable* v)
-	{
-		buffer_adaptor buff(v, buffer_adaptor::dbl);
-		orig_adaptor orig(v);
-		string old;
-
-		if (node.value.value() == "") {
-			old.assign(node.value.begin(), node.value.end());
-		}
-		else {
-			old = node.value.value();
-		}
-
-		node.value.value(old + "if ((((SPE_stop - SPE_start)" + v->math().factor() + ")%buff_size)) {" +
-					"MMGP_SPE_dma_wait(out_tag); \n mfc_put(" + 
-					orig.name() + "," + 
-					"(unsigned long)(" + v->name() +
-					"+(SPE_stop" + v->math().factor() + ")-(((SPE_stop-SPE_start)" + v->math().factor() + ")%" + 
-					buff_size.name() + ")), sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor() +
-					")%" + buff_size.name() + "),out_tag, 0, 0); \n" +
-				"MMGP_SPE_dma_wait(out_tag); \n }");
-	}
-
-	void operator()(const lazy_gen_in::value_type& p)
-	{
-		operator()(p.first);
-	}
+	void unroll_me(int u) { unroll = u; }
 };
 
-/*
-struct gen_final_out {
+struct gen_final_out: public node_xformer {
 	const region_variable* v;
-	gen_final_out(const region_variable* _v): v(_v) {}
-	string operator()(tree_node_t& node)
+	int unroll;
+	gen_final_out(const region_variable* _v, int u): v(_v), unroll(u) {}
+	string operator()(ast_node& node)
 	{
 		buffer_adaptor buff(v, buffer_adaptor::dbl);
 		orig_adaptor orig(v);
+		string ret;
 
-		return "if ((((SPE_stop - SPE_start)" + v->math().factor() + ")%buff_size)) {" +
+		if (!unroll) {
+			ret = "if ((((SPE_stop - SPE_start)" + v->math().factor() + ")%buff_size)) {" +
 					"MMGP_SPE_dma_wait(out_tag); \n mfc_put(" + 
 					orig.name() + "," + 
 					"(unsigned long)(" + v->name() +
@@ -450,51 +336,82 @@ struct gen_final_out {
 					buff_size.name() + ")), sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor() +
 					")%" + buff_size.name() + "),out_tag, 0, 0); \n" +
 				"MMGP_SPE_dma_wait(out_tag); \n }";
+		}
+
+		return ret;
 	}
+
+	void unroll_me(int u) { unroll = true; }
 };
-*/
 
-class make_reduction_declarations {
-	stringstream& ss;
-
+class make_reduction_declarations: public node_xformer {
+	const region_variable* v;
 public:
-	make_reduction_declarations(stringstream& s): ss(s) {}
-	void operator()(const region_variable* v)
+	make_reduction_declarations(const region_variable* v): v(v) {}
+	string operator()(ast_node& node)
 	{
-		ss << orig_adaptor(v).declare() << ";" << endl;
+		return orig_adaptor(v).declare() + "; \n";
 	}
 };
 
-struct variable_less {
-	bool operator()(const region_variable* v, const lazy_gen_in::value_type& p)
+struct create_make_reduction_declarations: unary_function<const region_variable*, node_xformer*> {
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new make_reduction_declarations(v);
+	}
+};
+
+struct void_less {
+	bool operator()(const void* v, const bind_gen_in::value_type& p)
 	{
 		if (v < p.first) return true;
 		else return false;
 	}
 
-	bool operator()(const lazy_gen_in::value_type& p, const region_variable* v)
+	bool operator()(const bind_gen_in::value_type& p, const void* v)
 	{
 		if (p.first < v) return true;
 		else return false;
 	}
 
-	bool operator()(const lazy_gen_in::value_type& a, const lazy_gen_in::value_type& b)
+	bool operator()(const bind_gen_in::value_type& a, const bind_gen_in::value_type& b)
 	{
 		if (a.first < b.first) return true; 
 		else return false;
 	}
 };
 
+struct create_gen_out: public unary_function<const region_variable*, node_xformer*> {
+	const int depth;
+	int unroll;
+	create_gen_out(const int d, const int u): depth(d), unroll(u) {}
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new gen_out(v, depth, unroll);
+	}
+
+	void unroll_me(int u) { unroll = u; }
+};
+
+struct create_gen_final_out: public unary_function<const region_variable*, node_xformer*> {
+	const int unroll;
+	create_gen_final_out(const int u): unroll(u) {}
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new gen_final_out(v, unroll);
+	}
+};
+
 struct for_op {
 	const symtbl& shared;
 	symset& cond;
-	varlist& in;
-	varlist& out;
-	varlist& inout;
+	varset& in;
+	varset& out;
+	varset& inout;
 	int unroll;
-	for_op(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io, int u): 
+	for_op(const symtbl& s, symset& c, varset& i, varset& o, varset& io, int u): 
 		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		// if unroll, need to change iteration parameters
 		if (node.value.id() == ids::identifier) {
@@ -502,51 +419,47 @@ struct for_op {
 			cond.insert(ident);
 		}
 		else if (node.value.id() == ids::compound) {
-			lazy_gen_in lazy_in;
-			varlist pre_out;
+			bind_gen_in lazy_in;
+			varset pre_out;
 
 			for_compound_op o(shared, cond, pre_out, lazy_in, NO_UNROLL);
 			for_all(node.children, &o);
 
-			pre_out.sort();
-			pre_out.unique();
-
-			lazy_gen_in lazy_inout;
+			bind_gen_in lazy_inout;
 			set_intersection(lazy_in.begin(), lazy_in.end(), 
 					pre_out.begin(), pre_out.end(), 
 					inserter(lazy_inout, lazy_inout.begin()),
-					variable_less());
+					void_less());
 
 			set_difference(pre_out.begin(), pre_out.end(), 
 					lazy_inout.begin(), lazy_inout.end(), 
 					inserter(out, out.begin()),
-					variable_less());
+					void_less());
 
-			lazy_gen_in diff_in;
+			bind_gen_in diff_in;
 			set_difference(lazy_in.begin(), lazy_in.end(), 
 					lazy_inout.begin(), lazy_inout.end(), 
 					inserter(diff_in, diff_in.begin()),
-					variable_less());
+					void_less());
 
 			// Lazily call gen_in on both in and inout variables.
-			for (lazy_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
-				it->second(it->first);
-				in.push_back(it->first);
+			for (bind_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
+				it->first->value.xformations.push_back(it->second);
+				in.insert(it->second->v);
 			}
 
-			for (lazy_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
-				it->second.make_triple(); // inout variables need triple buffers
-				it->second(it->first);
-				inout.push_back(it->first);
+			for (bind_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
+				it->second->make_triple(); // inout variables need triple buffers
+
+				it->first->value.xformations.push_back(it->second);
+				inout.insert(it->second->v);
 			}
 
-			tree_node_t& back = node.children.back();
-			// XFORM CHANGE
-			//append(back.xformations, fmap(create_gen_out(buffer_adaptor::triple, NO_UNROLL), inout));
-			for_all(inout, gen_out(back, buffer_adaptor::triple, NO_UNROLL));
-			for_all(out, gen_out(back, buffer_adaptor::dbl, NO_UNROLL));
-			for_all(inout, gen_final_out(back));
-			for_all(out, gen_final_out(back));
+			ast_node& back = node.children.back();
+			append(back.value.xformations, fmap(create_gen_out(buffer_adaptor::triple, NO_UNROLL), inout));
+			append(back.value.xformations, fmap(create_gen_out(buffer_adaptor::triple, NO_UNROLL), inout));
+			append(back.value.xformations, fmap(create_gen_final_out(NO_UNROLL), inout));
+			append(back.value.xformations, fmap(create_gen_final_out(NO_UNROLL), out));
 		}
 		else {
 			for_all(node.children, this);
@@ -554,18 +467,27 @@ struct for_op {
 	}
 };
 
+struct unroll_xformation {
+	const int unroll;
+	unroll_xformation(const int u): unroll(u) {}
+	void operator()(node_xformer* xformer)
+	{
+		xformer->unroll_me(unroll);
+	}
+};
+
 struct unroll_for_op {
 	const symtbl& shared;
 	symset& cond;
-	varlist& in;
-	varlist& out;
-	varlist& inout;
+	varset& in;
+	varset& out;
+	varset& inout;
 	int unroll;
-	unroll_for_op(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io, int u): 
+	unroll_for_op(const symtbl& s, symset& c, varset& i, varset& o, varset& io, int u): 
 		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
-		cout << "You ain't done yet." << endl;
+		for_all(node.value.xformations, unroll_xformation(unroll));
 	}
 };
 
@@ -584,13 +506,13 @@ struct non_destructive_deep_copy {
 struct compound {
 	const symtbl& shared;
 	symset& cond;
-	varlist& in;
-	varlist& out;
-	varlist& inout;
+	varset& in;
+	varset& out;
+	varset& inout;
 	int unroll;
-	compound(const symtbl& s, symset& c, varlist& i, varlist& o, varlist& io, int u): 
+	compound(const symtbl& s, symset& c, varset& i, varset& o, varset& io, int u): 
 		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
 			for_op o(shared, cond, in, out, inout, unroll);
@@ -602,80 +524,112 @@ struct compound {
 	}
 };
 
-bool is_for_loop(tree_node_t& node)
+bool is_for_loop(ast_node& node)
 {
 	return node.value.id() == ids::for_loop;
 }
 
-class make_reduction_assignments {
-	stringstream& a;
-
-public:
-	make_reduction_assignments(stringstream& _a): a(_a) {}
-	void operator()(const region_variable* v)
+struct make_reduction_assignments: public node_xformer {
+	const region_variable* v;
+	make_reduction_assignments(const region_variable* v): v(v) {}
+	string operator()(ast_node& node)
 	{
-		a << "*" << v->name() << "=" << orig_adaptor(v).name() << ";" << endl;
+		return "*" + v->name() + "=" + orig_adaptor(v).name() + "; \n";
 	}
 };
 
-class init_buffers {
-	stringstream& ss;
+struct create_make_reduction_assignments: unary_function<const region_variable*, node_xformer*> {
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new make_reduction_assignments(v);
+	}
+};
+
+class init_buffers: public node_xformer {
+	const region_variable* v;
 	const size_t depth;
 
 public:
-	init_buffers(stringstream& s, size_t d): ss(s), depth(d) {}
-	void operator()(const region_variable* v)
+	init_buffers(const region_variable* _v, size_t d): v(_v), depth(d) {}
+	string operator()(ast_node& node)
 	{
 		buffer_adaptor buff(v, depth);
 		next_adaptor next(v);
 		orig_adaptor orig(v);
 
-		ss 	<< orig.declare() << ";" << endl
-			<< next.declare() << " = 0;" << endl
-			<< orig.name() << " = " << buff.name() << "[" << next.name() << "];" << endl;
+		return	orig.declare() + "; \n" +
+			next.declare() + " = 0; \n" +
+			orig.name() + " = " + buff.name() + "[" + next.name() + "]; \n";
 	}
 };
 
-class in_init_buffers {
-	stringstream& ss;
+struct create_init_buffers: public unary_function<const region_variable*, node_xformer*> {
+	const size_t depth;
+	create_init_buffers(const size_t depth): depth(depth) {}
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new init_buffers(v, depth);
+	}
+};
+	
+class in_init_buffers: public node_xformer {
+	const region_variable* v;
 	const size_t depth;
 
 public:
-	in_init_buffers(stringstream& s, size_t d): ss(s), depth(d) {}
-	void operator()(const region_variable* v)
+	in_init_buffers(const region_variable* _v, size_t d): v(_v), depth(d) {}
+	string operator()(ast_node& node)
 	{
 		buffer_adaptor buff(v, depth);
 		next_adaptor next(v);
 
-		init_buffers(ss, depth)(v);
-
-		ss	<< "mfc_get(" 
-			<< buff.name() << "[" << next.name() << "], " 
-			<< "(unsigned long)(" << v->name() << " + (SPE_start" + v->math().factor() + ")),"
-			<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ", "
-			<< next.name() << ", 0, 0); \n";
+		return	init_buffers(v, depth)(node) +
+			"mfc_get(" +
+				buff.name() + "[" + next.name() + "], " 
+				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor() + ")),"
+				"sizeof(" + buff.type() + ")*" + buff_size.name() + ", " +
+				next.name() + ", 0, 0); \n";
 	}
 };
 
-class init_private_buffers {
-	stringstream& ss;
+struct create_in_init_buffers: public unary_function<const region_variable*, node_xformer*> {
+	const size_t depth;
+	create_in_init_buffers(const size_t depth): depth(depth) {}
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new in_init_buffers(v, depth);
+	}
+};
+
+class init_private_buffers: public node_xformer {
+	const region_variable* v;
 
 public:
-	init_private_buffers(stringstream& s): ss(s) {}
-	void operator()(const region_variable* v)
+	init_private_buffers(const region_variable* v): v(v) {}
+	string operator()(ast_node& node)
 	{
+		string ret;
 		if (v->is_pointer()) {
 			buffer_adaptor buff(v, buffer_adaptor::single);
 			orig_adaptor orig(v);
 
-			ss	<< "mfc_get("
-					<< buff.name() << ","
-					<< "(unsigned long)" << orig.name() << ","
-					<< "sizeof(" << buff.type() << ")*" << buff_size.name() << ","
-					<< "3, 0, 0);" << endl
-				<< orig.name() << "=" << buff.name() << ";" << endl
-				<< "MMGP_SPE_dma_wait(3);" << endl;
+			ret =	"mfc_get(" +
+					buff.name() + "," +
+					"(unsigned long)" + orig.name() + "," +
+					"sizeof(" + buff.type() + ")*" + buff_size.name() + ","
+					"3, 0, 0); \n" + 
+				orig.name() + "=" + buff.name() + ";"
+				"MMGP_SPE_dma_wait(3); \n";
 		}
+
+		return ret;
+	}
+};
+
+struct create_init_private_buffers: public unary_function<const region_variable*, node_xformer*> {
+	node_xformer* operator()(const region_variable* v)
+	{
+		return new init_private_buffers(v);
 	}
 };
 
@@ -683,7 +637,7 @@ struct cell_region {
 	spelist::iterator region;
 
 	cell_region(spelist::iterator r): region(r) {}
-	void operator()(tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::compound) {
 			// We only support one for loop per cell_region & compound 
@@ -696,7 +650,7 @@ struct cell_region {
 					(*region)->unroll());
 
 			if ((*region)->unroll()) {
-				tree_node_t::children_t::iterator unroll_pos = for_all_duplicate(is_for_loop, &o, node.children);
+				ast_node::children_t::iterator unroll_pos = for_all_duplicate(is_for_loop, &o, node.children);
 
 				if (unroll_pos != node.children.end()) {
 					unroll_for_op(*((*region)->symbols()), cond,
@@ -709,18 +663,15 @@ struct cell_region {
 				for_all(node.children, &o);
 			}
 
-			stringstream decs;
-			for_all((*region)->out(), init_buffers(decs, buffer_adaptor::dbl));
-			for_all((*region)->in(), in_init_buffers(decs, buffer_adaptor::dbl));
-			for_all((*region)->inout(), in_init_buffers(decs, buffer_adaptor::triple));
+			ast_node& front = node.children.front();
+			append(front.value.xformations, fmap(create_init_buffers(buffer_adaptor::dbl), (*region)->out()));
+			append(front.value.xformations, fmap(create_in_init_buffers(buffer_adaptor::dbl), (*region)->in()));
+			append(front.value.xformations, fmap(create_in_init_buffers(buffer_adaptor::triple), (*region)->inout()));
+			append(front.value.xformations, fmap(create_init_private_buffers(), (*region)->priv()));
+			append(front.value.xformations, fmap(create_make_reduction_declarations(), (*region)->reductions()));
 
-			for_all((*region)->priv(), init_private_buffers(decs));
-			for_all((*region)->reductions(), make_reduction_declarations(decs));
-			node.children.front().value.value("{" + decs.str());
-
-			stringstream a;
-			for_all((*region)->reductions(), make_reduction_assignments(a));
-			node.children.back().value.value(a.str() + "}");
+			ast_node& back = node.children.back();
+			append(back.value.xformations, fmap(create_make_reduction_assignments(), (*region)->reductions()));
 
 			++region;
 		}
@@ -730,7 +681,7 @@ struct cell_region {
 	}
 };
 
-void traverse_ast(tree_t& trees, spelist& regions)
+void traverse_ast(ast& trees, spelist& regions)
 {
 	for_all((*trees.begin()).children, cell_region(regions.begin()));
 }

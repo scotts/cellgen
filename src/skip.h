@@ -3,10 +3,9 @@
 
 #include <boost/spirit/core.hpp>
 #include <boost/spirit/utility.hpp>
-
 using namespace boost::spirit;
 
-struct skip_grammar : public grammar<skip_grammar>
+struct skip_grammar: public grammar<skip_grammar>
 {
 	template <typename ScannerT>
 	struct definition {

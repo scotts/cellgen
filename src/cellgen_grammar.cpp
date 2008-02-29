@@ -1,4 +1,20 @@
+#include <list>
+#include <iostream>
+#include <sstream>
+using namespace std;
+
+#include <boost/spirit/core.hpp>
+#include <boost/spirit/symbols.hpp>
+#include <boost/spirit/utility/confix.hpp>
+#include <boost/spirit/iterator/file_iterator.hpp>
+using namespace boost::spirit;
+
 #include "cellgen_grammar.h"
+#include "c_grammar.h"
+#include "parse_tree.h"
+#include "variable.h"
+#include "skip.h"
+#include "utility.h"
 
 const c_compound_grammar c_compound;
 const skip_grammar skip;
@@ -9,7 +25,7 @@ class astout {
 
 public:
 	astout(int l, string t): level(l), tabs(t) {}
-	void operator()(const tree_node_t& node)
+	void operator()(const ast_node& node)
 	{
 		string str;
 		if (node.value.value() == string()) {
@@ -88,21 +104,21 @@ public:
 
 template <class T>
 class vars_op {
-	varlist*& vars;
+	varset*& vars;
 	symtbl*& tbl;
 	spelist& regions;
 
 public:
-	vars_op(varlist*& v, symtbl*& t, spelist& r): vars(v), tbl(t), regions(r)
+	vars_op(varset*& v, symtbl*& t, spelist& r): vars(v), tbl(t), regions(r)
 	{
-		vars = new varlist;
+		vars = new varset;
 		tbl = new symtbl;
 	}
 
-	varlist* pickup_vars()
+	varset* pickup_vars()
 	{
-		varlist* temp = vars;
-		vars = new varlist;
+		varset* temp = vars;
+		vars = new varset;
 		return temp;
 	}
 
@@ -124,7 +140,7 @@ public:
 		ss >> type >> local >> equals >> alias;
 
 		T* v = new T(type, local, alias, regions.size() + 1);
-		vars->push_back(v);
+		vars->insert(v);
 		(*tbl)[local] = v;
 	}
 };
@@ -184,11 +200,11 @@ public:
 };
 
 class assign_var {
-	varlist*& vars;
+	varset*& vars;
 	string local;
 
 public:
-	assign_var(varlist*& v, string l): vars(v), local(l) {}
+	assign_var(varset*& v, string l): vars(v), local(l) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
@@ -196,7 +212,7 @@ public:
 			ss << *first++;
 		}
 
-		vars->push_back(new region_variable("int", local, ss.str()));
+		vars->insert(new region_variable("int", local, ss.str()));
 	}
 };
 
@@ -243,9 +259,9 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	create_spe_region		region_op;
 
 	stringstream*	loop_pickup;
-	varlist*	priv_vars;
-	varlist*	shared_vars;
-	varlist*	reduce_vars;
+	varset*	priv_vars;
+	varset*	shared_vars;
+	varset*	reduce_vars;
 	symtbl*		shared_tbl;
 	symtbl*		private_tbl;
 	symtbl*		reduction_tbl;
@@ -409,7 +425,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 	fileiter last = first.make_end();
 
 	cellgen_grammar cg(ppe_blocks, spe_regions);
-	tree_parse_info_t* p = new tree_parse_info_t(); // need to make sure the ast persists
+	ast_parse_info* p = new ast_parse_info(); // need to make sure the ast persists
 	*p = ast_parse<xformer_factory>(first, last, cg, skip);
 
 	if (!p->full) {
@@ -420,11 +436,9 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 	traverse_ast(p->trees, spe_regions);
 
 	spelist::iterator s = spe_regions.begin();
-	for (tree_iterator_t a = (*p->trees.begin()).children.begin(); 
-			a != (*p->trees.begin()).children.end(); 
-			++a) {
+	for (ast_iterator a = (*p->trees.begin()).children.begin(); a != (*p->trees.begin()).children.end(); ++a) {
 		if ((*a).value.id() == ids::cell_region) {
-			(*s)->ast(&(*a));	
+			(*s)->ast_root(&(*a));	
 			++s;
 		}
 	}

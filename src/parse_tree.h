@@ -1,10 +1,8 @@
 #ifndef PARSE_TREE_H
 #define PARSE_TREE_H
 
-#include <algorithm>
-#include <numeric>
-#include <string>
 #include <list>
+#include <string>
 using namespace std;
 
 #include <boost/spirit/iterator/file_iterator.hpp>
@@ -61,23 +59,18 @@ struct xformer_factory {
 	};
 };
 
-typedef file_iterator<char>			fileiter;
-//typedef node_val_data_factory<transformations>	node_factory;
-typedef tree_parse_info<fileiter, xformer_factory>	tree_parse_info_t;
-typedef tree_match<fileiter, xformer_factory>	tree_match_t;
-typedef tree_match_t::tree_iterator		tree_iterator_t;
-typedef tree_match_t::container_t		tree_t;
-typedef tree_match_t::node_t			tree_node_t;
+typedef file_iterator<char>				fileiter;
+typedef tree_parse_info<fileiter, xformer_factory>	ast_parse_info;
+typedef tree_match<fileiter, xformer_factory>		ast_match;
+typedef ast_match::tree_iterator			ast_iterator;
+typedef ast_match::container_t				ast;
+typedef ast_match::node_t				ast_node;
 
-struct node_xformer: public unary_function<void, tree_node_t&> {
+struct node_xformer: public unary_function<void, ast_node&> {
 	virtual ~node_xformer() {}
-	virtual string operator()(tree_node_t&) = 0;
-	virtual void unroll() {}
+	virtual string operator()(ast_node&) = 0;
+	virtual void unroll_me(int u) {}
 };
-
-#include "ids.h"
-#include "variable.h"
-#include "spe_region.h"
 
 inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
 {
@@ -85,7 +78,9 @@ inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
 	return out;
 }
 
-void traverse_ast(tree_t& trees, spelist& regions);
+#include "spe_region.h"
+
+void traverse_ast(ast& trees, spelist& regions);
 
 #endif	// PARSE_TREE_H
 

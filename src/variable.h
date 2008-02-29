@@ -188,7 +188,7 @@ public:
 	string declare() const { return type() + " " + name(); }
 };
 
-typedef list<region_variable*>		varlist;
+typedef set<region_variable*>		varset;
 typedef map<string, region_variable*>	symtbl;
 typedef set<string>			symset;
 

@@ -3,10 +3,9 @@
 
 #include <iostream>
 #include <sstream>
+using namespace std;
 
 #include <boost/spirit/iterator/file_iterator.hpp>
-
-using namespace std;
 using namespace boost::spirit;
 
 class sstream_out {

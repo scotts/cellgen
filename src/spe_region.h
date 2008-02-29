@@ -1,23 +1,26 @@
 #ifndef SPE_REGION_H
 #define SPE_REGION_H
 
+class spe_region;
+typedef list<spe_region*> spelist;
+
 #include "variable.h"
 #include "parse_tree.h"
 
 class spe_region {
-	varlist* _priv;
-	varlist* _shared;
-	varlist _in;		// _in + _out + _inout = _shared
-	varlist _out;
-	varlist _inout;
-	varlist* _reductions;
+	varset* _priv;
+	varset* _shared;
+	varset _in;		// _in + _out + _inout = _shared
+	varset _out;
+	varset _inout;
+	varset* _reductions;
 	string _reduction_op;
 	symtbl* _symbols;
-	tree_node_t* _ast;
+	ast_node* _ast_root;
 	int _unroll;
 
 public:
-	spe_region(varlist* v, varlist* d, varlist* r, string o, symtbl* s, int u):
+	spe_region(varset* v, varset* d, varset* r, string o, symtbl* s, int u):
 		_priv(v), _shared(d), _reductions(r), _reduction_op(o), _symbols(s), _unroll(u)
 	{
 		assert(v);
@@ -27,25 +30,25 @@ public:
 		assert(_unroll >= 0);
 	}
 
-	varlist*	priv()		const { return _priv; }
-	varlist*	shared()	const { return _shared; }
-	varlist&	in()		{ return _in; }
-	varlist&	out()		{ return _out; }
-	varlist&	inout()		{ return _inout; }
-	varlist*	reductions()	const { return _reductions; }
+	varset*	priv()		const { return _priv; }
+	varset*	shared()	const { return _shared; }
+	varset&	in()		{ return _in; }
+	varset&	out()		{ return _out; }
+	varset&	inout()		{ return _inout; }
+	varset*	reductions()	const { return _reductions; }
 	string		reduction_op()	const { return _reduction_op; }
 	int		unroll()	const { return _unroll; }
 
-	void ast(tree_node_t* a)
+	void ast_root(ast_node* a)
 	{
 		assert(a);
-		_ast = a;
+		_ast_root = a;
 	}
 
-	tree_node_t* ast() const
+	ast_node* ast_root() const
 	{
-		assert(_ast);
-		return _ast;
+		assert(_ast_root);
+		return _ast_root;
 	}
 
 	symtbl* symbols()
@@ -54,7 +57,5 @@ public:
 		return _symbols;
 	}
 };
-
-typedef list<spe_region*> spelist;
 
 #endif	// SPE_REGION_H

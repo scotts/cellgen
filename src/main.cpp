@@ -8,11 +8,10 @@
 #include <fstream>
 #include <sstream>
 #include <list>
+using namespace std;
 
 #include <boost/program_options.hpp>
 #include <boost/regex.hpp>
-
-using namespace std;
 using namespace boost;
 using namespace boost::program_options;
 
@@ -20,6 +19,7 @@ using namespace boost::program_options;
 #include "variable.h"
 #include "spe_region.h"
 #include "streamops.h"
+#include "utility.h"
 
 const string path			= "/home/scschnei/code/cellgen/template_code/";
 const string ppe_fork_iname		= path + "ppe_fork.c";
@@ -73,43 +73,18 @@ void open_check(const T& s, const string& name)
 	}
 }
 
-// XFORM CHANGE
 class codeout {
 	ostream& out;
 
 public:
 	codeout(ostream& o): out(o) {}
-	void operator()(const tree_node_t& node)
-	{
-		string str;
-		if (node.value.value() == "") {
-			str = string(node.value.begin(), node.value.end());
-		}
-		else {
-			str = node.value.value();
-		}
-
-		out << str << " ";
-		for_all(node.children, this);
-	}
-};
-
-/*
-class codeout {
-	ostream& out;
-
-public:
-	codeout(ostream& o): out(o) {}
-	void operator()(const tree_node_t& node)
+	void operator()(ast_node& node)
 	{
 		string init = string(node.value.begin(), node.value.end());
-		init = inv_accumulate_all(node.value.value(), init, node);
-
-		out << init << " ";
+		out << inv_accumulate_all(node.value.xformations, init, node) << " ";
 		for_all(node.children, this);
 	}
 };
-*/
 
 class make_case_sig {
 	stringstream& file;
@@ -161,7 +136,7 @@ public:
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
 		file << ")" << endl;
 
-		for_all(region->ast()->children, codeout(file));
+		for_all(region->ast_root()->children, codeout(file));
 	}
 };
 
