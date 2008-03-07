@@ -5,29 +5,44 @@
 #include <string>
 using namespace std;
 
+#include <boost/shared_ptr.hpp>
 #include <boost/spirit/iterator/file_iterator.hpp>
 #include <boost/spirit/tree/ast.hpp>
+using namespace boost;
 using namespace boost::spirit;
 
-typedef node_val_data<string::iterator, string> string_node;
+#include "utility.h"
 
-struct node_xformer;
-typedef list<node_xformer*> xformerlist;
+typedef node_val_data<const char*> char_data;
 
-struct xformerlist_node: public string_node {
-	xformerlist_node(): string_node() {}
-	xformerlist_node(const string::iterator& first, const string::iterator& last): string_node(first, last) {}
+struct xformer;
+typedef list<xformer*> xformerlist;
+
+struct xformerlist_data: public char_data {
+	xformerlist xformations;
+
+	xformerlist_data(): 
+		char_data() {}
+	xformerlist_data(const string::iterator& first, const string::iterator& last): 
+		char_data(first, last) {}
+	xformerlist_data(const xformerlist_data& n);
 
 	template <class I>
-	xformerlist_node(const I& first, const I& last): string_node(first, last) {}
+	xformerlist_data(const I& first, const I& last): 
+		char_data(first, last) {}
 
-	xformerlist xformations;
+	~xformerlist_data()
+	{
+		for_all(xformations, delete_ptr<xformer>);
+	}
+
+	xformerlist_data& operator=(const xformerlist_data& rhs);
 };
 
 struct xformer_factory {
 	template <class Iter>
 	struct factory {
-		typedef xformerlist_node node_t;
+		typedef xformerlist_data node_t;
 
 		static node_t create_node(const Iter& first, const Iter& last, bool is_leaf_node)
 		{
@@ -55,7 +70,6 @@ struct xformer_factory {
 			}
 			return node_t(c.begin(), c.end());
 		}
-
 	};
 };
 
@@ -66,9 +80,10 @@ typedef ast_match::tree_iterator			ast_iterator;
 typedef ast_match::container_t				ast;
 typedef ast_match::node_t				ast_node;
 
-struct node_xformer: public unary_function<void, ast_node&> {
-	virtual ~node_xformer() {}
-	virtual string operator()(ast_node&) = 0;
+struct xformer: public unary_function<void, ast_node&> {
+	virtual ~xformer() {}
+	virtual string operator()(const string& old) = 0;
+	virtual xformer* clone() const = 0;
 	virtual void unroll_me(int u) {}
 };
 

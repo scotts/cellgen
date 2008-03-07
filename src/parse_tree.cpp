@@ -18,6 +18,28 @@ using namespace boost;
 
 const int NO_UNROLL = 0;
 
+xformerlist_data::xformerlist_data(const xformerlist_data& o): char_data(o)
+{
+	is_root(o.is_root());
+	id(o.id());
+	value(o.value());
+
+	for (xformerlist::const_iterator i = o.xformations.begin(); i != o.xformations.end(); ++i) {
+		xformations.push_back((*i)->clone());
+	}
+}
+
+xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
+{
+	char_data::operator=(rhs);
+
+	for (xformerlist::const_iterator i = rhs.xformations.begin(); i != rhs.xformations.end(); ++i) {
+		xformations.push_back((*i)->clone());
+	}
+
+	return *this;
+}
+
 bool is_constant(ast_node& node)
 {
 	return node.value.id() == ids::int_constant_dec;
@@ -39,16 +61,27 @@ bool is_equals(ast_node& node)
 	return str.find("=") != string::npos;
 }
 
+template <class F>
+struct descend {
+	F f;
+	void operator()(ast_node& node)
+	{
+		f(node);
+		for_all(node.children, this);
+	}
+};
 
-class to_buffer_space: public node_xformer {
+class to_buffer_space: public xformer {
 	string math;
 	string rem;
 public:
 	to_buffer_space(const string& m, const string& r): math(m), rem(r) {}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
-		return "[((" + math + ")" + rem + ")%" + buff_size.name() + "]";
+		return old + "[((" + math + ")" + rem + ")%" + buff_size.name() + "]";
 	}
+
+	xformer* clone() const { return new to_buffer_space(math, rem); }
 };
 
 struct mult_op {
@@ -135,9 +168,9 @@ struct postfix_op {
 		string val(node.value.begin(), node.value.end());
 		if (node.value.id() == ids::identifier) {
 			if (!found_shared) {
-				symtbl::const_iterator it = shared.find(val);
-				if (it != shared.end()) {
-					var = it->second;
+				symtbl::const_iterator i = shared.find(val);
+				if (i != shared.end()) {
+					var = i->second;
 					lst.insert(var);
 					found_shared = true;
 				}
@@ -152,8 +185,8 @@ struct postfix_op {
 				var->math(math);
 				node.value.xformations.push_back(new to_buffer_space(math.as_written(), o.rem)); 
 				
-				// If we don't do this, redundant printing. The above is a string 
-				// reduction of all the children.
+				// If we don't do this, redundant printing. The to_buffer_space xformer
+				// is a reduction of all the children.
 				node.children.clear(); 
 			}
 		}
@@ -210,14 +243,14 @@ struct expression_statement_op {
 	}
 };
 
-struct gen_in: public node_xformer {
+struct gen_in: public xformer {
 	region_variable* v;
 	size_t depth;
 	int unroll;
 	gen_in(region_variable* _v, int u): 
-		v(_v), depth(buffer_adaptor::dbl), unroll(u)
+		v(_v), depth(2), unroll(u)
 		{}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
 		next_adaptor next(v);
 		buffer_adaptor buff(v, depth);
@@ -229,7 +262,7 @@ struct gen_in: public node_xformer {
 			if_statement = "if (!((" + v->math().as_written() + ")%" + buff_size.name() + "))"; 
 		}
 
-		return if_statement + "{\n" 
+		return old + if_statement + "{\n" 
 				"int old=" + next.name() + ";\n" +
 				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
 				"mfc_get(" + 
@@ -242,8 +275,9 @@ struct gen_in: public node_xformer {
 			"}\n";
 	}
 
+	xformer* clone() const { return new gen_in(v, unroll); }
 	void unroll_me(int u) { unroll = u; }
-	void make_triple() { depth = buffer_adaptor::triple; }
+	void make_triple() { depth = 3; }
 };
 
 typedef multimap<ast_node*, gen_in*> bind_gen_in;
@@ -266,10 +300,10 @@ struct for_compound_op {
 
 			// Store the function object somewhere, and call it later once I know 
 			// which variables are in, which are out, and which are inout
-			for (varset::iterator it = o.in.begin(); it != o.in.end(); ++it) {
-				if (seen.find(*it) == seen.end()) {
-					in.insert(bind_gen_in::value_type(&node, new gen_in(*it, unroll)));
-					seen.insert(*it);
+			for (varset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
+				if (seen.find(*i) == seen.end()) {
+					in.insert(bind_gen_in::value_type(&node, new gen_in(*i, unroll)));
+					seen.insert(*i);
 				}
 			}
 		}
@@ -279,24 +313,23 @@ struct for_compound_op {
 	}
 };
 
-struct gen_out: public node_xformer {
+struct gen_out: public xformer {
 	const region_variable* v;
 	const int depth;
 	int unroll;
 
-	gen_out(const region_variable* _v, int d, int u): 
-		v(_v), depth(d), unroll(u) {}
-	string operator()(ast_node& node)
+	gen_out(const region_variable* v, int d, int u): v(v), depth(d), unroll(u) {}
+	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v, depth);
 		orig_adaptor orig(v);
 		string var_switch;
 		string if_statement;
 
-		if (depth < buffer_adaptor::triple) {
+		if (depth < 3) {
 			next_adaptor next(v);
 
-			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + ";\n" +
+			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
 					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
 		}
 
@@ -309,21 +342,23 @@ struct gen_out: public node_xformer {
 					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
 							"+" + v->math().next_iteration() + "-" + buff_size.name() + "),"
 						"sizeof(" + buff.type() + ")*" + buff_size.name() + ","
-						"out_tag, 0, 0);\n" +
+						"out_tag, 0, 0); \n" +
 					var_switch +
-			"}\n";
+			"} \n" + old;
 	}
 
+	xformer* clone() const { return new gen_out(v, depth, unroll); }
 	void unroll_me(int u) { unroll = u; }
 };
 
-struct gen_final_out: public node_xformer {
+struct gen_final_out: public xformer {
 	const region_variable* v;
 	int unroll;
-	gen_final_out(const region_variable* _v, int u): v(_v), unroll(u) {}
-	string operator()(ast_node& node)
+
+	gen_final_out(const region_variable* v, int u): v(v), unroll(u) {}
+	string operator()(const string& old)
 	{
-		buffer_adaptor buff(v, buffer_adaptor::dbl);
+		buffer_adaptor buff(v, 2);
 		orig_adaptor orig(v);
 		string ret;
 
@@ -338,24 +373,27 @@ struct gen_final_out: public node_xformer {
 				"MMGP_SPE_dma_wait(out_tag); \n }";
 		}
 
-		return ret;
+		return old + ret;
 	}
 
-	void unroll_me(int u) { unroll = true; }
+	xformer* clone() const { return new gen_final_out(v, unroll); }
+	void unroll_me(int u) { unroll = u; }
 };
 
-class make_reduction_declarations: public node_xformer {
+class make_reduction_declarations: public xformer {
 	const region_variable* v;
 public:
 	make_reduction_declarations(const region_variable* v): v(v) {}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
-		return orig_adaptor(v).declare() + "; \n";
+		return old + orig_adaptor(v).declare() + "; \n";
 	}
+
+	xformer* clone() const { return new make_reduction_declarations(v); }
 };
 
-struct create_make_reduction_declarations: unary_function<const region_variable*, node_xformer*> {
-	node_xformer* operator()(const region_variable* v)
+struct create_make_reduction_declarations: unary_function<const region_variable*, xformer*> {
+	xformer* operator()(const region_variable* v)
 	{
 		return new make_reduction_declarations(v);
 	}
@@ -381,22 +419,20 @@ struct void_less {
 	}
 };
 
-struct create_gen_out: public unary_function<const region_variable*, node_xformer*> {
+struct create_gen_out: public unary_function<const region_variable*, xformer*> {
 	const int depth;
 	int unroll;
 	create_gen_out(const int d, const int u): depth(d), unroll(u) {}
-	node_xformer* operator()(const region_variable* v)
+	xformer* operator()(const region_variable* v)
 	{
 		return new gen_out(v, depth, unroll);
 	}
-
-	void unroll_me(int u) { unroll = u; }
 };
 
-struct create_gen_final_out: public unary_function<const region_variable*, node_xformer*> {
+struct create_gen_final_out: public unary_function<const region_variable*, xformer*> {
 	const int unroll;
 	create_gen_final_out(const int u): unroll(u) {}
-	node_xformer* operator()(const region_variable* v)
+	xformer* operator()(const region_variable* v)
 	{
 		return new gen_final_out(v, unroll);
 	}
@@ -443,23 +479,23 @@ struct for_op {
 					void_less());
 
 			// Lazily call gen_in on both in and inout variables.
-			for (bind_gen_in::iterator it = diff_in.begin(); it != diff_in.end(); ++it) {
-				it->first->value.xformations.push_back(it->second);
-				in.insert(it->second->v);
+			for (bind_gen_in::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
+				i->first->value.xformations.push_back(i->second);
+				in.insert(i->second->v);
 			}
 
-			for (bind_gen_in::iterator it = lazy_inout.begin(); it != lazy_inout.end(); ++it) {
-				it->second->make_triple(); // inout variables need triple buffers
+			for (bind_gen_in::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
+				i->second->make_triple(); // inout variables need triple buffers
 
-				it->first->value.xformations.push_back(it->second);
-				inout.insert(it->second->v);
+				i->first->value.xformations.push_back(i->second);
+				inout.insert(i->second->v);
 			}
 
-			ast_node& back = node.children.back();
-			append(back.value.xformations, fmap(create_gen_out(buffer_adaptor::triple, NO_UNROLL), inout));
-			append(back.value.xformations, fmap(create_gen_out(buffer_adaptor::triple, NO_UNROLL), inout));
-			append(back.value.xformations, fmap(create_gen_final_out(NO_UNROLL), inout));
-			append(back.value.xformations, fmap(create_gen_final_out(NO_UNROLL), out));
+			xformerlist& xformations = node.children.back().value.xformations;
+			append(xformations, fmap(create_gen_out(3, NO_UNROLL), inout));
+			append(xformations, fmap(create_gen_out(3, NO_UNROLL), out));
+			append(xformations, fmap(create_gen_final_out(NO_UNROLL), inout));
+			append(xformations, fmap(create_gen_final_out(NO_UNROLL), out));
 		}
 		else {
 			for_all(node.children, this);
@@ -470,36 +506,96 @@ struct for_op {
 struct unroll_xformation {
 	const int unroll;
 	unroll_xformation(const int u): unroll(u) {}
-	void operator()(node_xformer* xformer)
+	void operator()(xformer* xformer)
 	{
 		xformer->unroll_me(unroll);
+	}
+};
+
+struct transform_all {
+	const int unroll;
+	transform_all(const int u): unroll(u) {}
+	void operator()(ast_node& node)
+	{
+		for_all(node.value.xformations, unroll_xformation(unroll));
+		for_all(node.children, this);
+	}
+};
+
+bool has_declaration(const ast_node& node)
+{
+	if (node.value.id() == ids::declaration) {
+		return true;
+	}
+	else {
+		for (ast_node::const_tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
+			if (has_declaration(*i)) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+template <class X>
+struct remove_xforms {
+	void operator()(ast_node& node)
+	{
+		node.value.xformations.remove_if(is_type<X, xformer>);
+	}
+};
+
+struct copy_expressions {
+	list<ast_node>& nodes;
+	copy_expressions(list<ast_node>& n): nodes(n) {}
+	void operator()(ast_node& node)
+	{
+		if (!has_declaration(node)) {
+			nodes.push_back(node);
+
+			// This is the first unrolled section, so we don't need 
+			// any of the sending stuff.
+			remove_xforms<gen_out>()(node);
+			remove_xforms<gen_final_out>()(node);
+		}
 	}
 };
 
 struct unroll_for_op {
 	const symtbl& shared;
 	symset& cond;
-	varset& in;
-	varset& out;
-	varset& inout;
-	int unroll;
-	unroll_for_op(const symtbl& s, symset& c, varset& i, varset& o, varset& io, int u): 
-		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
+	const int unroll;
+	unroll_for_op(const symtbl& s, symset& c, const int u): 
+		shared(s), cond(c), unroll(u) {}
 	void operator()(ast_node& node)
 	{
-		for_all(node.value.xformations, unroll_xformation(unroll));
-	}
-};
+		if (node.value.id() == ids::compound) {
+			for_all(node.children, transform_all(unroll));
 
-template <class N>
-struct non_destructive_deep_copy {
-	N& dupe;
-	non_destructive_deep_copy(N& d): dupe(d) {}
+			list<ast_node> to_copy;
+			for_all(node.children, copy_expressions(to_copy));
 
-	void operator()(N node)
-	{
-		dupe.value.value(node.value.value());
-		for_all(node.children, non_destructive_deep_copy(back_inserter(dupe.children)));
+			// We copy it unroll-1 times because the first iteration
+			// already exists.
+			for (int i = 0; i < unroll - 1; ++i) {
+				for (list<ast_node>::iterator j = to_copy.begin(); j != to_copy.end(); ++j) {
+					ast_node copy = *j;
+
+					// All "inner" iterations don't need any in/out xformations, 
+					// but the final iteration needs out xformations.
+					descend< remove_xforms<gen_in> >()(copy);
+					if (i < unroll - 2) {
+						remove_xforms<gen_out>()(copy);
+						remove_xforms<gen_final_out>()(copy);
+					}
+
+					node.children.insert(node.children.end() - 1, copy);
+				}
+			}
+		}
+		else {
+			for_all(node.children, this);
+		}
 	}
 };
 
@@ -529,88 +625,95 @@ bool is_for_loop(ast_node& node)
 	return node.value.id() == ids::for_loop;
 }
 
-struct make_reduction_assignments: public node_xformer {
+struct make_reduction_assignments: public xformer {
 	const region_variable* v;
 	make_reduction_assignments(const region_variable* v): v(v) {}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
-		return "*" + v->name() + "=" + orig_adaptor(v).name() + "; \n";
+		return old + "*" + v->name() + "=" + orig_adaptor(v).name() + "; \n";
 	}
+
+	xformer* clone() const { return new make_reduction_assignments(v); }
 };
 
-struct create_make_reduction_assignments: unary_function<const region_variable*, node_xformer*> {
-	node_xformer* operator()(const region_variable* v)
+struct create_make_reduction_assignments: unary_function<const region_variable*, xformer*> {
+	xformer* operator()(const region_variable* v)
 	{
 		return new make_reduction_assignments(v);
 	}
 };
 
-class init_buffers: public node_xformer {
+class init_buffers: public xformer {
 	const region_variable* v;
 	const size_t depth;
 
 public:
 	init_buffers(const region_variable* _v, size_t d): v(_v), depth(d) {}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v, depth);
 		next_adaptor next(v);
 		orig_adaptor orig(v);
 
-		return	orig.declare() + "; \n" +
+		return	old + 
+			orig.declare() + "; \n" +
 			next.declare() + " = 0; \n" +
 			orig.name() + " = " + buff.name() + "[" + next.name() + "]; \n";
 	}
+
+	xformer* clone() const { return new init_buffers(v, depth); }
 };
 
-struct create_init_buffers: public unary_function<const region_variable*, node_xformer*> {
+struct create_init_buffers: public unary_function<const region_variable*, xformer*> {
 	const size_t depth;
 	create_init_buffers(const size_t depth): depth(depth) {}
-	node_xformer* operator()(const region_variable* v)
+	xformer* operator()(const region_variable* v)
 	{
 		return new init_buffers(v, depth);
 	}
 };
 	
-class in_init_buffers: public node_xformer {
+class in_init_buffers: public xformer {
 	const region_variable* v;
 	const size_t depth;
 
 public:
 	in_init_buffers(const region_variable* _v, size_t d): v(_v), depth(d) {}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v, depth);
 		next_adaptor next(v);
 
-		return	init_buffers(v, depth)(node) +
+		return	init_buffers(v, depth)(old) +
 			"mfc_get(" +
 				buff.name() + "[" + next.name() + "], " 
 				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor() + ")),"
 				"sizeof(" + buff.type() + ")*" + buff_size.name() + ", " +
 				next.name() + ", 0, 0); \n";
 	}
+
+	xformer* clone() const { return new in_init_buffers(v, depth); }
 };
 
-struct create_in_init_buffers: public unary_function<const region_variable*, node_xformer*> {
+struct create_in_init_buffers: public unary_function<const region_variable*, xformer*> {
 	const size_t depth;
 	create_in_init_buffers(const size_t depth): depth(depth) {}
-	node_xformer* operator()(const region_variable* v)
+	xformer* operator()(const region_variable* v)
 	{
 		return new in_init_buffers(v, depth);
 	}
 };
 
-class init_private_buffers: public node_xformer {
+class init_private_buffers: public xformer {
 	const region_variable* v;
 
 public:
 	init_private_buffers(const region_variable* v): v(v) {}
-	string operator()(ast_node& node)
+	string operator()(const string& old)
 	{
 		string ret;
 		if (v->is_pointer()) {
-			buffer_adaptor buff(v, buffer_adaptor::single);
+			buffer_adaptor buff(v, 1);
 			orig_adaptor orig(v);
 
 			ret =	"mfc_get(" +
@@ -622,16 +725,31 @@ public:
 				"MMGP_SPE_dma_wait(3); \n";
 		}
 
-		return ret;
+		return old + ret;
 	}
+
+	xformer* clone() const { return new init_private_buffers(v); }
 };
 
-struct create_init_private_buffers: public unary_function<const region_variable*, node_xformer*> {
-	node_xformer* operator()(const region_variable* v)
+struct create_init_private_buffers: public unary_function<const region_variable*, xformer*> {
+	xformer* operator()(const region_variable* v)
 	{
 		return new init_private_buffers(v);
 	}
 };
+
+/*
+struct deep_copy {
+	xformerlist_data operator()(const xformerlist_data& node)
+	{
+		dupe.value.value(node.value.value());
+		for (xformerlist::iterator it = dupe.value.xformations.begin(); it != dupe.value.xformations.end(); ++it) {
+			*it = *(it)->clone();
+		}
+		for_all(node.children, deep_copy(back_inserter(dupe.children)));
+	}
+};
+*/
 
 struct cell_region {
 	spelist::iterator region;
@@ -650,28 +768,25 @@ struct cell_region {
 					(*region)->unroll());
 
 			if ((*region)->unroll()) {
-				ast_node::children_t::iterator unroll_pos = for_all_duplicate(is_for_loop, &o, node.children);
+				ast_node::tree_iterator unroll_pos = for_all_duplicate(node.children, &o, is_for_loop);
 
 				if (unroll_pos != node.children.end()) {
-					unroll_for_op(*((*region)->symbols()), cond,
-							(*region)->in(), (*region)->out(), (*region)->inout(), 
-							(*region)->unroll())
-						(*unroll_pos);
+					unroll_for_op(*((*region)->symbols()), cond, (*region)->unroll())(*unroll_pos);
 				}
 			}
 			else {
 				for_all(node.children, &o);
 			}
 
-			ast_node& front = node.children.front();
-			append(front.value.xformations, fmap(create_init_buffers(buffer_adaptor::dbl), (*region)->out()));
-			append(front.value.xformations, fmap(create_in_init_buffers(buffer_adaptor::dbl), (*region)->in()));
-			append(front.value.xformations, fmap(create_in_init_buffers(buffer_adaptor::triple), (*region)->inout()));
-			append(front.value.xformations, fmap(create_init_private_buffers(), (*region)->priv()));
-			append(front.value.xformations, fmap(create_make_reduction_declarations(), (*region)->reductions()));
+			xformerlist& front_xforms = node.children.front().value.xformations;
+			append(front_xforms, fmap(create_init_buffers(2), (*region)->out()));
+			append(front_xforms, fmap(create_in_init_buffers(2), (*region)->in()));
+			append(front_xforms, fmap(create_in_init_buffers(3), (*region)->inout()));
+			append(front_xforms, fmap(create_init_private_buffers(), (*region)->priv()));
+			append(front_xforms, fmap(create_make_reduction_declarations(), (*region)->reductions()));
 
-			ast_node& back = node.children.back();
-			append(back.value.xformations, fmap(create_make_reduction_assignments(), (*region)->reductions()));
+			xformerlist& back_xforms = node.children.back().value.xformations;
+			append(back_xforms, fmap(create_make_reduction_assignments(), (*region)->reductions()));
 
 			++region;
 		}

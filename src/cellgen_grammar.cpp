@@ -27,13 +27,6 @@ public:
 	astout(int l, string t): level(l), tabs(t) {}
 	void operator()(const ast_node& node)
 	{
-		string str;
-		if (node.value.value() == string()) {
-			str = string(node.value.begin(), node.value.end());
-		}
-		else {
-			str = node.value.value();
-		}
 		string rule = "";
 
 		if (     node.value.id() == ids::for_loop) { 
@@ -96,7 +89,10 @@ public:
 			rule = ss.str();
 		}
 
-		cout << tabs << level << ":" << str << " [" << rule << "]" <<  endl;
+		cout << tabs << level	<< ":" 
+					<< string(node.value.begin(), node.value.end()) 
+					<< " [" << rule << "]" 
+					<<  endl;
 
 		for_all(node.children, astout(level + 1, tabs + "  "));
 	}
@@ -410,7 +406,9 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			unrolled_code = 
 				no_node_d[strlit<>("unroll(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
 
-			unroll_num = int_p;
+			unroll_num = no_node_d[
+				int_p
+				];
 		}
 	};
 };

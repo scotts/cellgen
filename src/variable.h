@@ -125,10 +125,6 @@ private:
 	size_t _depth; // What type of buffering? Currently we only go up to triple.
 
 public:
-	static const int single = 1;
-	static const int dbl = 2;
-	static const int triple = 3;
-
 	buffer_adaptor(const region_variable* _v, size_t d): v(_v), _depth(d)
 	{
 		assert(v);

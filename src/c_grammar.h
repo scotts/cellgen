@@ -943,7 +943,6 @@ struct c_grammar: public grammar<c_grammar> {
             compound_statement
                 = root_node_d[
 			(LEFT_BRACE >> !(declaration_list || statement_list) >> RIGHT_BRACE)
-			//[self.str = construct_<string>(arg1, arg2)]
 		];
 
             declaration_list

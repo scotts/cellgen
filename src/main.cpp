@@ -78,10 +78,10 @@ class codeout {
 
 public:
 	codeout(ostream& o): out(o) {}
-	void operator()(ast_node& node)
+	void operator()(const ast_node& node)
 	{
-		string init = string(node.value.begin(), node.value.end());
-		out << inv_accumulate_all(node.value.xformations, init, node) << " ";
+		out	<< inv_accumulate_all(node.value.xformations, string(node.value.begin(), node.value.end()))
+			<< " ";
 		for_all(node.children, this);
 	}
 };
@@ -134,7 +134,7 @@ public:
 		cases.push_back(casest);
 
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
-		file << ")" << endl;
+		file << ") " << endl;
 
 		for_all(region->ast_root()->children, codeout(file));
 	}
@@ -248,8 +248,8 @@ public:
 	make_in_and_out_buffers(stringstream& o): out(o) {}
 	void operator()(spe_region* region)
 	{
-		for_all(region->in(), make_buffers(out, buffer_adaptor::dbl));
-		for_all(region->out(), make_buffers(out, buffer_adaptor::dbl));
+		for_all(region->in(), make_buffers(out, 2));
+		for_all(region->out(), make_buffers(out, 2));
 	}
 };
 
@@ -259,7 +259,7 @@ public:
 	make_inout_buffers(stringstream& o): out(o) {}
 	void operator()(spe_region* region)
 	{
-		for_all(region->inout(), make_buffers(out, buffer_adaptor::triple));
+		for_all(region->inout(), make_buffers(out, 3));
 	}
 
 };
@@ -271,7 +271,7 @@ public:
 	void operator()(const region_variable* v)
 	{
 		if (v->is_pointer()) {
-			out << buffer_adaptor(v, buffer_adaptor::single).declare() << ";" << endl;
+			out << buffer_adaptor(v, 1).declare() << ";" << endl;
 		}
 	}
 	void operator()(const spe_region* region)
@@ -348,11 +348,6 @@ void print_pass_struct(spelist& regions)
 	stringstream pass;
 	parse_generic(pass, pass_struct_iname);
 
-	/*
-	symtbl unique;
-	for_all(regions, all_unique_variables(unique));
-	*/
-
 	stringstream vars;
 	for_all(regions, make_pass_struct(vars));
 
@@ -366,19 +361,6 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 
 	stringstream ss;
 	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
-
-	/*
-	symtbl in_and_out_unique;
-	for_all(regions, in_and_out_unique_variables(in_and_out_unique));
-
-	symtbl inout_unique;
-	for_all(regions, inout_unique_variables(inout_unique));
-
-	symtbl in_and_out_unique_final;
-	set_difference(in_and_out_unique.begin(), in_and_out_unique.end(),
-			inout_unique.begin(), inout_unique.end(),
-			inserter(in_and_out_unique_final, in_and_out_unique_final.begin()));
-	*/
 
 	for_all(regions, make_in_and_out_buffers(ss));
 	for_all(regions, make_inout_buffers(ss));

@@ -39,53 +39,61 @@ T accumulate_all(C* c, T init, F f)
 	return accumulate(c->begin(), c->end(), init, f);
 }
 
-template <class O, class T, class A>
-T inv_accumulate_all(const list<O>& ops, T init, A& atom)
+template <class C, class Pred>
+typename C::iterator remove_if(C& c, Pred pred)
 {
-	for (typename list<O>::const_iterator it = ops.begin(); it != ops.end(); ++it) {
-		init += ((*it))(atom);
+	return remove_if(c.begin(), c.end(), pred);
+}
+
+template <class C, class Pred>
+typename C::iterator remove_if(C* c, Pred pred)
+{
+	return remove_if(c->begin(), c->end(), pred);
+}
+
+template <class O, class T>
+T inv_accumulate_all(const list<O>& ops, T init)
+{
+	for (typename list<O>::const_iterator i = ops.begin(); i != ops.end(); ++i) {
+		init = ((*i))(init);
 	}
 	return init;
 }
 
-template <class O, class T, class A>
-T inv_accumulate_all(const list<O*>& ops, T init, A& atom)
+template <class O, class T>
+T inv_accumulate_all(const list<O*>& ops, T init)
 {
-	for (typename list<O*>::const_iterator it = ops.begin(); it != ops.end(); ++it) {
-		init += (*(*it))(atom);
+	for (typename list<O*>::const_iterator i = ops.begin(); i != ops.end(); ++i) {
+		init = (*(*i))(init);
 	}
 	return init;
 }
 
-template <class P, class C, class F>
-typename C::iterator for_all_duplicate(P pred, F f, C& c)
+template <class C, class F, class P>
+typename C::iterator for_all_duplicate(C& c, F f, P pred)
 {
-	typename C::value_type dupe;
-	typename C::iterator res = c.end();
-	for (typename C::iterator it = c.begin(); it != c.end(); ++it) {
-		f(*it);
-		if (pred(*it)) {
-			dupe = *it;
-			res = it;
+	for (typename C::iterator i = c.begin(); i != c.end(); ++i) {
+		f(*i);
+		if (pred(*i)) {
+			return c.insert(i, *i);
 		}
 	}
-	res = c.insert(res, dupe);
 
-	return res;
+	return c.end();
 }
 
-template <class P, class C, class F>
-typename C::iterator for_all_duplicate(P pred, F* f, C& c)
+template <class C, class F, class P>
+typename C::iterator for_all_duplicate(C& c, F* f, P pred)
 {
-	return for_all_duplicate(pred, *f, c);
+	return for_all_duplicate(c, *f, pred);
 }
 
 template <class S, class F>
 list<typename F::result_type> fmap(F f, const S& seq)
 {
 	list<typename F::result_type> lst;
-	for (typename S::const_iterator it = seq.begin(); it != seq.end(); ++it) {
-		lst.push_back(f(*it));
+	for (typename S::const_iterator i = seq.begin(); i != seq.end(); ++i) {
+		lst.push_back(f(*i));
 	}
 	return lst;
 }
@@ -108,6 +116,17 @@ list<T> cons(T t, const list<T>& l)
 	return list<T>(l).push_back(t);
 }
 
+template <class T>
+void delete_ptr(T* ptr)
+{
+	delete ptr;
+}
+
+template <class Test, class X>
+bool is_type(X* t)
+{
+	return dynamic_cast<Test*>(t) != NULL;
+}
 
 #endif // UTILITY_H
 
