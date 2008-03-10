@@ -27,28 +27,16 @@ F for_all(C* c, F f)
 	return for_each(c->begin(), c->end(), f);
 }
 
-template <class F, class T, class C>
+template <class C, class T, class F>
 T accumulate_all(C& c, T init, F f)
 {
-	return accumlate(c.begin(), c.end(), init, f);
+	return accumulate(c.begin(), c.end(), init, f);
 }
 
-template <class F, class T, class C>
+template <class C, class T, class F>
 T accumulate_all(C* c, T init, F f)
 {
 	return accumulate(c->begin(), c->end(), init, f);
-}
-
-template <class C, class Pred>
-typename C::iterator remove_if(C& c, Pred pred)
-{
-	return remove_if(c.begin(), c.end(), pred);
-}
-
-template <class C, class Pred>
-typename C::iterator remove_if(C* c, Pred pred)
-{
-	return remove_if(c->begin(), c->end(), pred);
 }
 
 template <class O, class T>

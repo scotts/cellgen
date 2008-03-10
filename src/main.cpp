@@ -167,51 +167,6 @@ void print_mmgp_c(stringstream& mmgp_c, const string& ofile_name, const string& 
 	ofile << regex_replace(mmgp_c.str(), regex(program_name_hook), program_name);
 }
 
-class unique_variables {
-	symtbl& unique;
-public:
-	unique_variables(symtbl& u): unique(u) {}
-	void operator()(region_variable* v)
-	{
-		if (unique.find(v->name()) == unique.end()) {
-			unique[v->name()] = v;
-		}
-	}
-};
-
-class all_unique_variables {
-	symtbl& unique;
-public:
-	all_unique_variables(symtbl& u): unique(u) {}
-	void operator()(const spe_region* region)
-	{
-		for_all(region->priv(), unique_variables(unique));
-		for_all(region->shared(), unique_variables(unique));
-		for_all(region->reductions(), unique_variables(unique));
-	}
-};
-
-class in_and_out_unique_variables {
-	symtbl& unique;
-public:
-	in_and_out_unique_variables(symtbl& u): unique(u) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->in(), unique_variables(unique));
-		for_all(region->out(), unique_variables(unique));
-	}
-};
-
-class inout_unique_variables {
-	symtbl& unique;
-public:
-	inout_unique_variables(symtbl& u): unique(u) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->inout(), unique_variables(unique));
-	}
-};
-
 class make_pass_struct {
 	stringstream& ss;
 public:

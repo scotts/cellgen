@@ -80,7 +80,7 @@ typedef ast_match::tree_iterator			ast_iterator;
 typedef ast_match::container_t				ast;
 typedef ast_match::node_t				ast_node;
 
-struct xformer: public unary_function<void, ast_node&> {
+struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;

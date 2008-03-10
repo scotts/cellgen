@@ -20,10 +20,6 @@ const int NO_UNROLL = 0;
 
 xformerlist_data::xformerlist_data(const xformerlist_data& o): char_data(o)
 {
-	is_root(o.is_root());
-	id(o.id());
-	value(o.value());
-
 	for (xformerlist::const_iterator i = o.xformations.begin(); i != o.xformations.end(); ++i) {
 		xformations.push_back((*i)->clone());
 	}
@@ -452,7 +448,9 @@ struct for_op {
 		// if unroll, need to change iteration parameters
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
-			cond.insert(ident);
+			if (ident != "SPE_start" && ident != "SPE_stop") {
+				cond.insert(ident);
+			}
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_gen_in lazy_in;
@@ -561,6 +559,22 @@ struct copy_expressions {
 	}
 };
 
+string var_increment(const string& old, const string var)
+{
+	return old + "++" + var + ";";
+}
+
+struct cond_increment: public xformer {
+	symset cond;
+	cond_increment(symset c): cond(c) {}
+	string operator()(const string& old)
+	{
+		return accumulate_all(cond, old, var_increment);
+	}
+
+	xformer* clone() const { return new cond_increment(cond); }
+};
+
 struct unroll_for_op {
 	const symtbl& shared;
 	symset& cond;
@@ -574,6 +588,10 @@ struct unroll_for_op {
 
 			list<ast_node> to_copy;
 			for_all(node.children, copy_expressions(to_copy));
+
+			if (!to_copy.empty()) {
+				to_copy.front().value.xformations.push_back(new cond_increment(cond));
+			}
 
 			// We copy it unroll-1 times because the first iteration
 			// already exists.
