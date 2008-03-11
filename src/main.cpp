@@ -39,7 +39,6 @@ const string loop_hook			= "LOOP_ID";
 const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
 const string program_name_hook		= "PROGRAM_NAME";
-const string buffer_hook		= "BUFFER_SIZE";
 const string case_hook			= "CASES";
 const string var_hook			= "VAR";
 const string op_hook			= "OP";
@@ -242,7 +241,7 @@ public:
 	void operator()(const region_variable* v)
 	{
 		out	<< pass_assign << v->name() 
-			<< " = " << v->alias() << ";" 
+			<< " = " << v->definition() << ";" 
 			<< endl;
 	}
 };
@@ -283,7 +282,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 				string str = regex_replace(
 						mmgp_reduction, 
 						regex(var_hook), 
-						"&" + (*((*r)->reductions()->begin()))->alias());
+						"&" + (*((*r)->reductions()->begin()))->definition());
 				file << regex_replace(str, regex(op_hook), (*r)->reduction_op());
 			}
 			else {
@@ -309,13 +308,18 @@ void print_pass_struct(spelist& regions)
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
 
+void make_pound_define(ostream& out, pound_define pd)
+{
+}
+
 void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
 
 	stringstream ss;
-	ss << regex_replace(spe_dec.str(), regex(buffer_hook), buff_size.declare());
+	ss 	<< spe_dec.str() << endl
+		<< buff_size.declare() << endl;
 
 	for_all(regions, make_in_and_out_buffers(ss));
 	for_all(regions, make_inout_buffers(ss));

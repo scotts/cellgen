@@ -756,18 +756,23 @@ struct create_init_private_buffers: public unary_function<const region_variable*
 	}
 };
 
-/*
-struct deep_copy {
-	xformerlist_data operator()(const xformerlist_data& node)
+class unroll_boundaries: public xformer {
+	const int unroll;
+public:
+	unroll_boundaries(const int u): unroll(u) {}
+	string operator()(const string& old)
 	{
-		dupe.value.value(node.value.value());
-		for (xformerlist::iterator it = dupe.value.xformations.begin(); it != dupe.value.xformations.end(); ++it) {
-			*it = *(it)->clone();
-		}
-		for_all(node.children, deep_copy(back_inserter(dupe.children)));
+		stringstream ss;
+		ss << unroll;
+
+		return 	old + 
+			const_variable("int", "unroll_factor", ss.str()).define() + ";" +
+			unrolled.define() + ";" + 
+			epilouge.define() + ";";
 	}
+
+	xformer* clone() const { return new unroll_boundaries(unroll); }
 };
-*/
 
 struct cell_region {
 	spelist::iterator region;
@@ -802,6 +807,10 @@ struct cell_region {
 			append(front_xforms, fmap(create_in_init_buffers(3), (*region)->inout()));
 			append(front_xforms, fmap(create_init_private_buffers(), (*region)->priv()));
 			append(front_xforms, fmap(create_make_reduction_declarations(), (*region)->reductions()));
+
+			if ((*region)->unroll()) {
+				front_xforms.push_back(new unroll_boundaries((*region)->unroll()));
+			}
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
 			append(back_xforms, fmap(create_make_reduction_assignments(), (*region)->reductions()));

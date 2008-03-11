@@ -132,10 +132,10 @@ public:
 			ss << *first++;
 		}
 
-		string type, local, equals, alias;
-		ss >> type >> local >> equals >> alias;
+		string type, local, equals, definition;
+		ss >> type >> local >> equals >> definition;
 
-		T* v = new T(type, local, alias, regions.size() + 1);
+		T* v = new T(type, local, definition, regions.size() + 1);
 		vars->insert(v);
 		(*tbl)[local] = v;
 	}

@@ -15,28 +15,29 @@ const string pass_var = "pass";
 class variable {
 	string _type;
 	string _name;
-	string _alias;
+	string _definition;
 	mult_expr _math;
 
 public:
 	variable() {}
 	variable(const variable& c): 
-		_type(c._type), _name(c._name), _alias(c._alias) 
+		_type(c._type), _name(c._name), _definition(c._definition) 
 		{}
 	variable(const string& t, const string& l = "", const string& a = ""):
-		_type(t), _name(l), _alias(a) 
+		_type(t), _name(l), _definition(a) 
 		{}
 	virtual ~variable() {}
 
 	virtual string name() const { return _name; }
 	virtual string type() const { return _type; }
-	string alias() const { return _alias; }
+	string definition() const { return _definition; }
 	mult_expr math() const { return _math; }
 
-	void alias(string s) { _alias = s; }
+	void definition(string s) { _definition = s; }
 	void math(mult_expr m) { _math = m; }
 
 	virtual string declare() const { return type() + " " + name(); }
+	virtual string define() const { return type() + " " + name() + "=" + definition(); }
 
 	virtual string actual() const { return pass_var + "." + name(); }
 	virtual string formal() const { return declare(); }
@@ -44,24 +45,28 @@ public:
 	bool is_pointer() const { return _type.find("*") != string::npos; }
 };
 
+
 class const_variable: public variable {
 public:
 	const_variable(const string& t, const string& l, const string& a):
 		variable("const " + t, l, a)
 		{}
 
-	virtual string declare() const { return type() + " " + name() + "=" + alias() + ";"; }
+	virtual string declare() const { return type() + " " + name() + "=" + definition() + ";"; }
 };
 /* The Cell SPU C compiler doesn't allow const variables in static expressions. Oh well.
 const const_variable buff_size("int", "buff_size", "16");
 */
+
+const const_variable unrolled("int", "unrolled", "(SPE_stop / unroll_factor) * unroll_factor");
+const const_variable epilouge("int", "epilouge", "unrolled + (SPE_stop % unroll_factor)");
 
 class pound_define: public variable {
 public:
 	pound_define(const string& l, const string& a):
 		variable("", l, a)
 		{}
-	virtual string declare() const { return "#define " + name() + " " + alias() + "\n"; }
+	virtual string declare() const { return "#define " + name() + " " + definition() + "\n"; }
 };
 const pound_define buff_size("buff_size", "80");
 
