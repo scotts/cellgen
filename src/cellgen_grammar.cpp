@@ -3,6 +3,7 @@
 #include <sstream>
 using namespace std;
 
+#undef BOOST_SPIRIT_THREADSAFE // performance optimization
 #include <boost/spirit/core.hpp>
 #include <boost/spirit/symbols.hpp>
 #include <boost/spirit/utility/confix.hpp>

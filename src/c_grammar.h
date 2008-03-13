@@ -42,6 +42,7 @@
 #define BOOST_SPIRIT_DEBUG
 #endif // defined(_DEBUG)
 
+#undef BOOST_SPIRIT_THREADSAFE // performance optimization
 #include <boost/spirit/core.hpp>
 #include <boost/spirit/utility.hpp>
 #include <boost/spirit/symbols.hpp>

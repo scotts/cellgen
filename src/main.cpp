@@ -3,6 +3,7 @@
  *
  * Cellgen: pseudo-openmp support for the Cell.
  */
+
 #include <cassert>
 #include <iostream>
 #include <fstream>
@@ -85,12 +86,12 @@ public:
 	}
 };
 
-class make_case_sig {
+class case_sig {
 	stringstream& file;
 	stringstream& casest;
 
 public:
-	make_case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
+	case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
 	void operator()(const region_variable* v)
 	{
 		casest	<< v->actual() << ",";
@@ -99,7 +100,7 @@ public:
 };
 
 
-string make_writebacks(string val, const region_variable* v)
+string reduction_writeback(string val, const region_variable* v)
 {
 	return val + "signal.result = " + pass_var + "." + v->name() + ";\n";
 }
@@ -121,11 +122,11 @@ public:
 
 		stringstream f;
 		stringstream c;
-		for_all(region->priv(), make_case_sig(f, c));
-		for_all(region->shared(), make_case_sig(f, c));
-		for_all(region->reductions(), make_case_sig(f, c));
+		for_all(region->priv(), case_sig(f, c));
+		for_all(region->shared(), case_sig(f, c));
+		for_all(region->reductions(), case_sig(f, c));
 
-		string writebacks = accumulate_all(region->reductions(), string(""), make_writebacks);
+		string writebacks = accumulate_all(region->reductions(), string(""), reduction_writeback);
 
 		*casest	<< c.str().replace(c.str().find_last_of(","), strlen(","), "") << "); " << endl
 			<< writebacks << endl
@@ -306,10 +307,6 @@ void print_pass_struct(spelist& regions)
 	for_all(regions, make_pass_struct(vars));
 
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
-}
-
-void make_pound_define(ostream& out, pound_define pd)
-{
 }
 
 void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions)

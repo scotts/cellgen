@@ -116,5 +116,11 @@ bool is_type(X* t)
 	return dynamic_cast<Test*>(t) != NULL;
 }
 
+template <class I>
+I next(I i)
+{
+	return ++i;
+}
+
 #endif // UTILITY_H
 

@@ -1,6 +1,7 @@
 #ifndef SKIP_H
 #define SKIP_H
 
+#undef BOOST_SPIRIT_THREADSAFE // performance optimization
 #include <boost/spirit/core.hpp>
 #include <boost/spirit/utility.hpp>
 using namespace boost::spirit;

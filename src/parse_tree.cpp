@@ -60,12 +60,20 @@ bool is_equals(ast_node& node)
 template <class F>
 struct descend {
 	F f;
+	descend() {}
+	descend(F f): f(f) {}
 	void operator()(ast_node& node)
 	{
 		f(node);
 		for_all(node.children, this);
 	}
 };
+
+template <class F>
+descend<F> make_descend(F f)
+{
+	return descend<F>(f);
+}
 
 class to_buffer_space: public xformer {
 	string math;
@@ -376,22 +384,22 @@ struct gen_final_out: public xformer {
 	void unroll_me(int u) { unroll = u; }
 };
 
-class make_reduction_declarations: public xformer {
+class reduction_declare: public xformer {
 	const region_variable* v;
 public:
-	make_reduction_declarations(const region_variable* v): v(v) {}
+	reduction_declare(const region_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
 		return old + orig_adaptor(v).declare() + "; \n";
 	}
 
-	xformer* clone() const { return new make_reduction_declarations(v); }
+	xformer* clone() const { return new reduction_declare(v); }
 };
 
-struct create_make_reduction_declarations: unary_function<const region_variable*, xformer*> {
+struct create_reduction_declare: unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
-		return new make_reduction_declarations(v);
+		return new reduction_declare(v);
 	}
 };
 
@@ -434,6 +442,18 @@ struct create_gen_final_out: public unary_function<const region_variable*, xform
 	}
 };
 
+class variable_name: public xformer {
+	const variable v;
+public:
+	variable_name(const variable v): v(v) {}
+	string operator()(const string&)
+	{
+		return v.name();
+	}
+
+	xformer* clone() const { return new variable_name(v); }
+};
+
 struct for_op {
 	const symtbl& shared;
 	symset& cond;
@@ -450,6 +470,15 @@ struct for_op {
 			string ident(node.value.begin(), node.value.end());
 			if (ident != "SPE_start" && ident != "SPE_stop") {
 				cond.insert(ident);
+			}
+
+			if (unroll) {
+				if (ident == "SPE_start") {
+					node.value.xformations.push_back(new variable_name(unrolled));
+				}
+				else if (ident == "SPE_stop") {
+					node.value.xformations.push_back(new variable_name(epilouge));
+				}
 			}
 		}
 		else if (node.value.id() == ids::compound) {
@@ -491,7 +520,7 @@ struct for_op {
 
 			xformerlist& xformations = node.children.back().value.xformations;
 			append(xformations, fmap(create_gen_out(3, NO_UNROLL), inout));
-			append(xformations, fmap(create_gen_out(3, NO_UNROLL), out));
+			append(xformations, fmap(create_gen_out(2, NO_UNROLL), out));
 			append(xformations, fmap(create_gen_final_out(NO_UNROLL), inout));
 			append(xformations, fmap(create_gen_final_out(NO_UNROLL), out));
 		}
@@ -559,6 +588,55 @@ struct copy_expressions {
 	}
 };
 
+struct nop: public xformer {
+	string operator()(const string&)
+	{
+		return "";
+	}
+	xformer* clone() const { return new nop; }
+};
+
+struct match_identifier {
+	const string& to_replace;
+	xformer* x;
+	match_identifier(const string& t, xformer* x): 
+		to_replace(t), x(x)
+	{
+		assert(x);	
+	}
+
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::identifier) {
+			if (to_replace == string(node.value.begin(), node.value.end())) {
+				node.value.xformations.push_back(x);
+			}
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+struct wipeout_identifier {
+	const string& ident;
+	ast_node& root;
+	wipeout_identifier(const string& i, ast_node& r):
+		ident(i), root(r) {}
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::identifier) {
+			if (ident == string(node.value.begin(), node.value.end())) {
+				root.value.xformations.push_back(new nop);
+				root.children.clear();
+			}
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
 string var_increment(const string& old, const string var)
 {
 	return old + "++" + var + ";";
@@ -583,7 +661,18 @@ struct unroll_for_op {
 		shared(s), cond(c), unroll(u) {}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::compound) {
+		if (node.value.id() == ids::expression_statement) {
+			// Yeah, kinda odd. We changed the original for_loop in place when we knew 
+			// we were unrolling, so we're going to remove those, then add the new ones.
+			descend< remove_xforms<variable_name> >()(node);
+			for_all(node.children, match_identifier("SPE_stop", new variable_name(unrolled)));
+		}
+		else if (node.value.id() == ids::postfix_expression) {
+			for (symset::iterator i = cond.begin(); i != cond.end(); ++i) {
+				for_all(node.children, make_descend(wipeout_identifier(*i, node)));
+			}
+		}
+		else if (node.value.id() == ids::compound) {
 			for_all(node.children, transform_all(unroll));
 
 			list<ast_node> to_copy;
@@ -605,6 +694,9 @@ struct unroll_for_op {
 					if (i < unroll - 2) {
 						remove_xforms<gen_out>()(copy);
 						remove_xforms<gen_final_out>()(copy);
+					}
+					else if (next(j) == to_copy.end()) {
+						copy.value.xformations.push_front(new cond_increment(cond));
 					}
 
 					node.children.insert(node.children.end() - 1, copy);
@@ -643,21 +735,21 @@ bool is_for_loop(ast_node& node)
 	return node.value.id() == ids::for_loop;
 }
 
-struct make_reduction_assignments: public xformer {
+struct reduction_assign: public xformer {
 	const region_variable* v;
-	make_reduction_assignments(const region_variable* v): v(v) {}
+	reduction_assign(const region_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
-		return old + "*" + v->name() + "=" + orig_adaptor(v).name() + "; \n";
+		return "*" + v->name() + "=" + orig_adaptor(v).name() + "; \n" + old;
 	}
 
-	xformer* clone() const { return new make_reduction_assignments(v); }
+	xformer* clone() const { return new reduction_assign(v); }
 };
 
-struct create_make_reduction_assignments: unary_function<const region_variable*, xformer*> {
+struct create_reduction_assign: unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
-		return new make_reduction_assignments(v);
+		return new reduction_assign(v);
 	}
 };
 
@@ -806,14 +898,14 @@ struct cell_region {
 			append(front_xforms, fmap(create_in_init_buffers(2), (*region)->in()));
 			append(front_xforms, fmap(create_in_init_buffers(3), (*region)->inout()));
 			append(front_xforms, fmap(create_init_private_buffers(), (*region)->priv()));
-			append(front_xforms, fmap(create_make_reduction_declarations(), (*region)->reductions()));
+			append(front_xforms, fmap(create_reduction_declare(), (*region)->reductions()));
 
 			if ((*region)->unroll()) {
 				front_xforms.push_back(new unroll_boundaries((*region)->unroll()));
 			}
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
-			append(back_xforms, fmap(create_make_reduction_assignments(), (*region)->reductions()));
+			append(back_xforms, fmap(create_reduction_assign(), (*region)->reductions()));
 
 			++region;
 		}
