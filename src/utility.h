@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <numeric>
 #include <list>
+#include <string>
+#include <sstream>
 using namespace std;
 
 template <class I, class F>
@@ -120,6 +122,72 @@ template <class I>
 I next(I i)
 {
 	return ++i;
+}
+
+template <class Container1, class Container2, class Out, class Comp>
+Out set_intersection_all(Container1& c1, Container2& c2, Out o, Comp co)
+{
+	return set_intersection(c1.begin(), c1.end(),
+				c2.begin(), c2.end(),
+				o, co);
+}
+
+template <class Container1, class Container2, class Out, class Comp>
+Out set_intersection_all(Container1* c1, Container2* c2, Out o, Comp co)
+{
+	return set_intersection(c1->begin(), c1->end(),
+				c2->begin(), c2->end(),
+				o, co);
+}
+
+template <class Container1, class Container2, class Out, class Comp>
+Out set_difference_all(Container1& c1, Container2& c2, Out o, Comp co)
+{
+	return set_difference(c1.begin(), c1.end(),
+				c2.begin(), c2.end(),
+				o, co);
+}
+
+template <class Container1, class Container2, class Out>
+Out set_difference_all(Container1* c1, Container2* c2, Out o)
+{
+	return set_difference(c1->begin(), c1->end(),
+				c2->begin(), c2->end(),
+				o);
+}
+
+template <class Container1, class Container2, class Out>
+Out set_union_all(Container1& c1, Container2& c2, Out o)
+{
+	return set_union(c1.begin(), c1.end(),
+			c2.begin(), c2.end(),
+			o);
+}
+
+template <class Container1, class Container2, class Container3, class Out>
+Out set_union_all(Container1& c1, Container2& c2, Container3& c3, Out o)
+{
+	typename Out::container_type temp1;
+	set_union_all(c1, c2, inserter(temp1, temp1.begin()));
+	return set_union_all(temp1, c3, o);
+}
+
+template <class T>
+T from_string(const string& str)
+{
+	stringstream ss;
+	ss << str;
+	T temp;
+	ss >> temp;
+	return temp;
+}
+
+template <class T>
+string to_string(T t)
+{
+	stringstream ss;
+	ss << t;
+	return ss.str();
 }
 
 #endif // UTILITY_H

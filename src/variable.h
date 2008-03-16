@@ -16,7 +16,6 @@ class variable {
 	string _type;
 	string _name;
 	string _definition;
-	mult_expr _math;
 
 public:
 	variable() {}
@@ -31,10 +30,8 @@ public:
 	virtual string name() const { return _name; }
 	virtual string type() const { return _type; }
 	string definition() const { return _definition; }
-	mult_expr math() const { return _math; }
 
 	void definition(string s) { _definition = s; }
-	void math(mult_expr m) { _math = m; }
 
 	virtual string declare() const { return type() + " " + name(); }
 	virtual string define() const { return type() + " " + name() + "=" + definition(); }
@@ -66,18 +63,20 @@ public:
 	pound_define(const string& l, const string& a):
 		variable("", l, a)
 		{}
-	virtual string declare() const { return "#define " + name() + " " + definition() + "\n"; }
+	virtual string define() const { return "#define " + name() + " " + definition() + "\n"; }
 };
-const pound_define buff_size("buff_size", "80");
+const string default_buff_size("80");
 
 class region_variable: public variable {
 	int region_num;
+	mult_expr _math;
+	int _depth; // What type of buffering? Zero means scalar; support single, double and triple.
+
 public:
 	region_variable(const string& t, const string& l, const string& a):
-		variable(t, l, a), region_num(0) {}
+		variable(t, l, a), region_num(0), _depth(0) {}
 	region_variable(const string& t, const string& l, const string& a, int r):
-		variable(t, l, a), region_num(r) {}
-
+		variable(t, l, a), region_num(r), _depth(0) {}
 
 	virtual string name() const
 	{
@@ -88,6 +87,12 @@ public:
 		}
 		return ss.str();
 	}
+
+	mult_expr math() const { return _math; }
+	void math(mult_expr m) { _math = m; }
+
+	int depth() const { return _depth; }
+	void depth(int d) { _depth = d; }
 };
 
 class private_variable: public region_variable {
@@ -127,13 +132,12 @@ public:
 class buffer_adaptor {
 private:
 	const region_variable* v;
-	size_t _depth; // What type of buffering? Currently we only go up to triple.
 
 public:
-	buffer_adaptor(const region_variable* _v, size_t d): v(_v), _depth(d)
+	buffer_adaptor(const region_variable* _v): v(_v)
 	{
 		assert(v);
-		assert(_depth > 0);	
+		assert(v->depth() > 0);	
 	}
 
 	string name() const { return v->region_variable::name() + "_buff"; }
@@ -156,18 +160,23 @@ public:
 	{
 		stringstream ss;
 		ss << type() << " " << name();
-		if (_depth > 1) {
-			ss << "[" << _depth << "]";
+		if (v->depth() > 1) {
+			ss << "[" << v->depth() << "]";
 		}
-		ss << "[" << buff_size.name() << "] __attribute__((aligned(128)))"; 
+		ss << "[" << size() << "] __attribute__((aligned(128)))"; 
 		return ss.str();
 	}
 
 	string depth() const
 	{
 		stringstream ss;
-		ss << _depth;
+		ss << v->depth();
 		return ss.str();
+	}
+
+	string size() const
+	{
+		return name() + "_sz";
 	}
 };
 

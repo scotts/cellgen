@@ -45,9 +45,6 @@ const string var_hook			= "VAR";
 const string op_hook			= "OP";
 
 const string pass_assign		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
-const string compute_bounds		= "compute_bounds(&pass.SPE_start, &pass.SPE_stop);";
-const string mmgp_init			= "MMGP_init(6);";
-const string mmgp_create_threads	= "MMGP_create_threads();";
 const string mmgp_spe_stop		= "MMGP_SPE_stop();";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
@@ -116,7 +113,7 @@ public:
 	{
 		stringstream* casest = new stringstream;
 		*casest << "\t\t\tcase " << loop_num << ": " 
-			<< compute_bounds << "loop" << loop_num << "(" ; 
+			<< "loop" << loop_num << "(" ; 
 		file	<< "void loop" << loop_num << "(";
 		++loop_num;
 
@@ -167,10 +164,10 @@ void print_mmgp_c(stringstream& mmgp_c, const string& ofile_name, const string& 
 	ofile << regex_replace(mmgp_c.str(), regex(program_name_hook), program_name);
 }
 
-class make_pass_struct {
+class define_pass_struct {
 	stringstream& ss;
 public:
-	make_pass_struct(stringstream& s): ss(s) {}
+	define_pass_struct(stringstream& s): ss(s) {}
 	void operator()(const region_variable* v)
 	{
 		if (v->name() != "SPE_start" && v->name() != "SPE_stop") {
@@ -186,52 +183,84 @@ public:
 	}
 };
 
-class make_buffers {
-	ostream& out;
-	const size_t depth;
-public:
-	make_buffers(ostream& o, size_t d): out(o), depth(d) {}
-	void operator()(const region_variable* v)
-	{
-		out << buffer_adaptor(v, depth).declare() << ";" << endl;
-	}
-};
-
-class make_in_and_out_buffers {
-	stringstream& out;
-public:
-	make_in_and_out_buffers(stringstream& o): out(o) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->in(), make_buffers(out, 2));
-		for_all(region->out(), make_buffers(out, 2));
-	}
-};
-
-class make_inout_buffers {
-	stringstream& out;
-public:
-	make_inout_buffers(stringstream& o): out(o) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->inout(), make_buffers(out, 3));
-	}
-
-};
-
-class make_private_buffers {
+class define_buffers {
 	ostream& out;
 public:
-	make_private_buffers(ostream& o): out(o) {}
+	define_buffers(ostream& o): out(o) {}
 	void operator()(const region_variable* v)
 	{
-		if (v->is_pointer()) {
-			out << buffer_adaptor(v, 1).declare() << ";" << endl;
+		out << buffer_adaptor(v).declare() << ";" << endl;
+	}
+};
+
+class define_in_and_out_buffers {
+	stringstream& out;
+public:
+	define_in_and_out_buffers(stringstream& o): out(o) {}
+	void operator()(spe_region* region)
+	{
+		for_all(region->in(), define_buffers(out));
+		for_all(region->out(), define_buffers(out));
+	}
+};
+
+class define_inout_buffers {
+	stringstream& out;
+public:
+	define_inout_buffers(stringstream& o): out(o) {}
+	void operator()(spe_region* region)
+	{
+		for_all(region->inout(), define_buffers(out));
+	}
+
+};
+
+class define_private_buffers {
+	ostream& out;
+public:
+	define_private_buffers(ostream& o): out(o) {}
+	void operator()(const region_variable* v)
+	{
+		if (v->depth() > 0) {
+			out << buffer_adaptor(v).declare() << ";" << endl;
 		}
 	}
 	void operator()(const spe_region* region)
 	{
 		for_all(region->priv(), this);
+	}
+};
+
+class define_buff_size {
+	ostream& out;
+	const int unroll;
+public:
+	define_buff_size(ostream& o, const int u): out(o), unroll(u) {}
+	void operator()(const region_variable* v)
+	{
+		if (v->depth() > 0 ) {
+			string def;
+			if (unroll) {
+				stringstream ss;
+				ss << unroll;
+				def = "(" + ss.str() + v->math().factor() + ")";
+			}
+			else {
+				def = default_buff_size;
+			}
+			out << pound_define(buffer_adaptor(v).size(), def).define();
+		}
+	}
+};
+
+class define_region_buff_sizes {
+	ostream& out;
+public:
+	define_region_buff_sizes(ostream& o): out(o) {}
+	void operator()(spe_region* region)
+	{
+		for_all(region->priv(), define_buff_size(out, region->unroll()));
+		for_all(region->shared(), define_buff_size(out, region->unroll()));
 	}
 };
 
@@ -304,7 +333,7 @@ void print_pass_struct(spelist& regions)
 	parse_generic(pass, pass_struct_iname);
 
 	stringstream vars;
-	for_all(regions, make_pass_struct(vars));
+	for_all(regions, define_pass_struct(vars));
 
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
@@ -315,12 +344,13 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 	open_check(file, name);
 
 	stringstream ss;
-	ss 	<< spe_dec.str() << endl
-		<< buff_size.declare() << endl;
+	ss << spe_dec.str() << endl;
+		//<< buff_size.define() << endl;
 
-	for_all(regions, make_in_and_out_buffers(ss));
-	for_all(regions, make_inout_buffers(ss));
-	for_all(regions, make_private_buffers(ss));
+	for_all(regions, define_region_buff_sizes(ss));
+	for_all(regions, define_in_and_out_buffers(ss));
+	for_all(regions, define_inout_buffers(ss));
+	for_all(regions, define_private_buffers(ss));
 
 	sslist cases;
 	for_all(regions, print_region(ss, cases));
@@ -398,7 +428,7 @@ int main(int argc, char* argv[])
 	print_file(mmgp_c_iname, mmgp_c_oname, no_dot);
 
 	print_pass_struct(spe_regions);
-	print_ppe(no_dot + "_ppe.c", ppe_src_blocks, ppe_prolouge, ppe_fork, 
+	print_ppe(no_dot + ".c", ppe_src_blocks, ppe_prolouge, ppe_fork, 
 			spe_regions);
 	print_spe("spu/" + no_dot + "_spe.c", spe_declarations, spe_main, 
 			spe_regions);
