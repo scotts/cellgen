@@ -717,7 +717,14 @@ public:
 	compute_bounds(const region_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
-		return old + "compute_bounds(&SPE_start, &SPE_stop," + buffer_adaptor(v).size() + ");";
+		string size;
+		if (v) { // TODO: I don't like this NULL check. I'd rather it be a default value. Not sure how.
+			size = buffer_adaptor(v).size();
+		}
+		else {
+			size = default_buff_size;
+		}
+		return old + "compute_bounds(&SPE_start, &SPE_stop," + size + ");";
 	}
 
 	xformer* clone() const { return new compute_bounds(v); }
@@ -874,15 +881,24 @@ public:
 	xformer* clone() const { return new unroll_boundaries(unroll); }
 };
 
+string remove_multop(const string& str)
+{
+	size_t pos = str.find_first_of("*/%");
+	if (pos != string::npos) {
+		return str.substr(pos + 1, str.size() - 1);
+	}
+	return str;
+}
+
 struct max_buffer: unary_function<const region_variable*, void> {
 	region_variable* max;
 	max_buffer(): max(NULL) {}
 	void operator()(region_variable* v)
 	{
-		// FIXME: this doesn't work because factor() is more than just a number. It's 
-		// also sometimes blank, but I'm not sure if that matters.
 		if (max) {
-			if (from_string<int>(max->math().factor()) < from_string<int>(v->math().factor())) {
+			if (	from_string<int>(remove_multop(max->math().factor())) < 
+				from_string<int>(remove_multop(v->math().factor()))
+			) {
 				max = v;
 			}
 		}
@@ -923,11 +939,6 @@ struct cell_region {
 			}
 
 			xformerlist& front_xforms = node.children.front().value.xformations;
-			append(front_xforms, fmap(create_init_buffers(), (*region)->out()));
-			append(front_xforms, fmap(create_in_init_buffers(), (*region)->in()));
-			append(front_xforms, fmap(create_in_init_buffers(), (*region)->inout()));
-			append(front_xforms, fmap(create_init_private_buffers(), (*region)->priv()));
-			append(front_xforms, fmap(create_reduction_declare(), (*region)->reductions()));
 
 			// We're assuming here that all buffers have the same size, so 
 			// using any of (in ^ out ^ inout) should be valid.
@@ -935,6 +946,12 @@ struct cell_region {
 			set_union_all((*region)->in(), (*region)->out(), (*region)->inout(), 
 					inserter(combined, combined.begin()));
 			front_xforms.push_back(new compute_bounds((for_all(combined, max_buffer()).max)));
+
+			append(front_xforms, fmap(create_init_buffers(), (*region)->out()));
+			append(front_xforms, fmap(create_in_init_buffers(), (*region)->in()));
+			append(front_xforms, fmap(create_in_init_buffers(), (*region)->inout()));
+			append(front_xforms, fmap(create_init_private_buffers(), (*region)->priv()));
+			append(front_xforms, fmap(create_reduction_declare(), (*region)->reductions()));
 
 			// Order matters; unroll_boundaries generates code that depends on 
 			// code generated from compute_bounds.

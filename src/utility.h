@@ -177,7 +177,7 @@ T from_string(const string& str)
 {
 	stringstream ss;
 	ss << str;
-	T temp;
+	T temp = 0;
 	ss >> temp;
 	return temp;
 }

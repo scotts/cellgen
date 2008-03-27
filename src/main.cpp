@@ -22,7 +22,8 @@ using namespace boost::program_options;
 #include "streamops.h"
 #include "utility.h"
 
-const string path			= "/home/scschnei/code/cellgen/template_code/";
+// TEMPLATE_DIR is fed from the makefile
+const string path			= TEMPLATE_DIR;
 const string ppe_fork_iname		= path + "ppe_fork.c";
 const string ppe_prolouge_iname		= path + "ppe_prolouge.c";
 const string spe_declarations_iname	= path + "spe_prolouge.c";
@@ -43,6 +44,7 @@ const string program_name_hook		= "PROGRAM_NAME";
 const string case_hook			= "CASES";
 const string var_hook			= "VAR";
 const string op_hook			= "OP";
+const string num_threads_hook		= "NUM_THREADS_HOOK";
 
 const string pass_assign		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
 const string mmgp_spe_stop		= "MMGP_SPE_stop();";
@@ -50,6 +52,7 @@ const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
 
 bool print_ast = false;
+int num_threads = 6;
 
 void file_to_stream(stringstream& in, istream& file) 
 {
@@ -154,14 +157,8 @@ void print_file(const string& ifile_name, const string& ofile_name, const string
 
 	ofstream ofile(ofile_name.c_str());
 	open_check(ofile, ofile_name);
-	ofile << regex_replace(ss.str(), regex(program_name_hook), program_name);
-}
-
-void print_mmgp_c(stringstream& mmgp_c, const string& ofile_name, const string& program_name)
-{
-	ofstream ofile(ofile_name.c_str());
-	open_check(ofile, ofile_name);
-	ofile << regex_replace(mmgp_c.str(), regex(program_name_hook), program_name);
+	ofile << regex_replace(regex_replace(ss.str(), regex(program_name_hook), program_name),
+			regex(num_threads_hook), to_string<int>(num_threads));
 }
 
 class define_pass_struct {
@@ -371,10 +368,11 @@ string parse_command_line(int argc, char* argv[])
 		desc.add_options()
 		("help,h", "print usage message")
 		("infile,i", value<string>(&src_name), "input filename")
-		("astout,a", value<bool>(&print_ast)->zero_tokens()->default_value(false), "print the ast");
+		("astout,a", value<bool>(&print_ast)->zero_tokens()->default_value(false), "print the ast")
+		("num_threads,n", value<int>(&num_threads)->default_value(6), "set number of SPE threads");
 
 		positional_options_description p;
-		p.add("infile", 1);
+		p.add("infile", -1);
 
 		variables_map vm;
 		store(command_line_parser(argc, argv).options(desc).positional(p).run(), vm);
@@ -386,7 +384,7 @@ string parse_command_line(int argc, char* argv[])
 		}
 	} 
 
-	catch(exception& e) {
+	catch (exception& e) {
 		cerr << "error: exception " << e.what() << endl;
 		exit(1);
 	}
@@ -397,6 +395,8 @@ string parse_command_line(int argc, char* argv[])
 int main(int argc, char* argv[])
 {
 	string src_name = parse_command_line(argc, argv);
+
+	cout << "path is " << path << endl;
 
 	// Do all of the input and parsing.
 	sslist ppe_src_blocks;
