@@ -11,6 +11,11 @@ nesting is not compiled away, and remains in the executable.
 Consequently, including debugging information makes an order of
 magnitude difference in executable size.
 
+Cellgen also relies on other Boost libraries, but they should be
+installed on most Linux systems.
+
+Other than that, a simple "make" should do.
+
 
 Usage
 -----
