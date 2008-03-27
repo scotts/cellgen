@@ -142,135 +142,6 @@ inline void _wait_SPE(int num){
 
 }
 
-/* The next four functions are equivalent to _wait_SPET()
- * and _wait_SPE(), except that they are used in the
- * case when a global reduction needs to be performed.
- * Two versions are available, for double and integer
- * reduction. Parameters:
- * 1. cont - pointer to the variable that should contain 
- *           the sum of the returning values from all SPEs.
- * 2. num - the SPE number (the work can be distributed 
- *          among multiple SPEs). */ 
-
-void _prediction(){
-        
-    /* Getting the total execution time */
-    total_time = get_tb() - total_time;
- 
-    double init_Thpu, init_Tapu, init_g, init_o;
-    double Thpu, Tapu, Tmpi=0, Tgap, Tsca;
-    double time, ctsw, cont_swch;
-
-    /* Estimated number of processes per a single
-     * execution context */
-    double proc_per_core[]={0,1.0,1.0,1.0,1.0,2.0,2.0,2.0,2.0,3.0,3.0,3.0,3.0,4.0,4.0,4.0,4.0,4.0};
-    /* Relation between the context sitching 
-     * overhead and the number of processes */
-    double ctsw_over[]={0,0.0,0.0,0.0,0.0,1.0,1.0,1.0,1.0,2.0,2.0,2.0,2.0,3.0,3.0,3.0,3.0};
-    /* Overhead caused by the MPI messages
-     * (measured with mpptest */
-    double mpi_over[]={0,0,16.0,70.0,118.0,167.0,173.0,215.0,265.0,385.0,632.0,600.0,573.0,590.0,674.0,740.0,842.0};
-    int i,j;
-    
-    unsigned long long ppe_Tot, spe_Tot, spe_Sca, ppe_Num;
-    ppe_Tot=0; spe_Tot=0 ; spe_Sca=0; ppe_Num=0;
-        
-    for(i=1; i<4; i++){
-        /* Total time spent on an SPE,
-         * measured from the PPE (used to
-         * estimate the gap) */
-        ppe_Tot += ppe_T[i];
-        /* Total time spent on an SPE */
-        spe_Tot += spe_T[i];
-        /* Total time if the SPE loop
-         * (this part scales with the
-         * number of SPEs) */
-        spe_Sca += spe_L[i];
-        /* Total number of SPE invocations */
-        ppe_Num += ppe_N[i];
-    }
-    
-    /* Translate clock ticks into seconds */
-    init_Thpu = (double)(total_time - ppe_Tot)/TB;
-    init_Tapu = (double)spe_Sca/TB;
-    init_g = (double)(ppe_Tot - spe_Tot)/TB;
-    init_o = (double)(spe_Tot - spe_Sca)/TB;
-
-    //printf("%f %f %f %f %llu %llu\n", init_Thpu,init_Tapu,init_g,init_o, MPI_calls, ppe_Num);
-    
-    
-    /* Since the inital sampling is with 8 SPE threads,
-     * adjust the SPE timing and the gap (the number
-     * of SPEs in the sampling phase can be changed) */
-    init_Tapu*=8;
-    init_g/=8;
-
-    /* Determine the total number of context switches */
-    ctsw = ppe_Num;
-    cont_swch=0;
-
-    double min = 0;
-    int minI=0, minJ=0;
-   
-    /* Calculate the timings (i represents 
-     * the number of processes, j represents 
-     * the number of SPEs per a process) */
-    for(i=1;i<NUM_SPE;i++){
-        for(j=1; i*j<NUM_SPE; j++){
-
-            /* If the number of processes is larger
-             * than 1, we need to add some contention, MPI,
-             * and context switch overhead */
-            if (i>1){
-                /* PPE Time */
-                Thpu = 1.28*(init_Thpu)*proc_per_core[i]; 
-                /* MPI Time */
-                Tmpi = mpi_over[i]*MPI_calls/1000000;
-                /* Context switch time, estimated time for 
-                 * a single context switch is 1.5us */
-                cont_swch = 1*(ctsw/100000)*ctsw_over[i];
-            }
-            else Thpu = init_Thpu;
-            
-            /* Calculate the total SPE time */
-            Tgap = j*init_g;
-            Tsca = init_Tapu/(i*j);
-            Tapu = Tsca + init_o + cont_swch;
-
-            /* Check if context switch overhead is larger 
-             * than the time spent on an SPE */           
-            if (cont_swch > Tapu) Tapu = 1*(ctsw/100000)*ctsw_over[i];
-            else Tapu = Tsca;
-
-            /* Calculate the final (predicted) time */
-            prediction[i][j] = Thpu + Tmpi + Tapu + Tgap + init_o + cont_swch; 
-
-	    //printf("%d x %d, Predicted Time %f, THPU %f, MPI %f, TLIK %f, TAPU %f, CTSWC %f, TC %f, o %f\n",i,j,prediction[i][j],Thpu,Tmpi,init_Tapu/(i*j),Tapu+Tgap+init_o+cont_swch,cont_swch,Tgap,init_o);
-
-            if (i==1 && j==1){
-                min = prediction[i][j];
-                minI=1;
-                minJ=1;
-            }
-            else if (prediction[i][j]<min){
-                min = prediction[i][j];
-                minI=i;
-                minJ=j;
-            }
-	}
-    }
-
-    FILE *f = fopen("PBPI_Cell.configuration","w");
-    /* Number of processes */
-    fprintf(f,"%d\n",minI);
-    /* Number of SPEs */
-    fprintf(f,"%d\n",minJ);
-    /* Sampling phase */
-    fprintf(f,"%d\n",0);
-    fclose(f);
-    
-}
-
 inline void _empty() {}
 
 void MMGP_init(int num_threads)
@@ -286,13 +157,15 @@ void MMGP_init(int num_threads)
     TB = 14318000;
 
     MMGP_offload = &_empty;
-    MMGP_prediction = &_empty;
-    //MMGP_reduction = &_reductionD; 
     MMGP_create_threads = &_create_threads;
     MMGP_wait_SPE = &_wait_SPE;
     MMGP_start_SPE = &_start_SPE;
     MMGP_create_threads = &_create_threads;
 }
 
-
+__attribute__((constructor)) void initialize_MMGP()
+{
+	MMGP_init(NUM_THREADS_HOOK);
+	MMGP_create_threads();
+}
 
