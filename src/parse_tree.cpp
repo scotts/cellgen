@@ -96,11 +96,8 @@ add_expr make_add_expr(const string& type, const list<add_expr>& indices)
 
 		add_expr last(indices.front());
 		for (++n, ++i; n != dimensions.end() && i != indices.end(); ++n, ++i) {
-			cout << last.str() << endl;
-			cout << "ivar: " << i->ivar() << endl;
 			last = add_expr(mult_expr(paren_expr(new add_expr(last)), "*", *n), "+", mult_expr(i->str()));
 		}
-		cout << last.str() << endl;
 		last.ivar(indices.front().ivar());
 		return last;
 	}
@@ -244,6 +241,7 @@ struct array_op {
 		string val(node.value.begin(), node.value.end());
 
 		if (node.value.id() == ids::identifier) {
+			// FIXME: do we need this or not?
 			//if (cond.find(val) != cond.end()) {
 				lmult.lhs(val);
 				add.lhs(lmult);
@@ -400,7 +398,14 @@ struct gen_in: public xformer {
 	void unroll_me(int u) { unroll = u; }
 };
 
-typedef multimap<ast_node*, gen_in*> bind_gen_in;
+struct less_gen_in {
+	bool operator()(const gen_in* a, const gen_in* b)
+	{
+		return (a->v) < (b->v);
+	}
+};
+
+typedef map<gen_in*, ast_node*, less_gen_in> bind_gen_in;
 
 struct for_compound_op {
 	const symtbl& shared; 
@@ -422,7 +427,7 @@ struct for_compound_op {
 			// which variables are in, which are out, and which are inout
 			for (varset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
-					in.insert(bind_gen_in::value_type(&node, new gen_in(*i, unroll)));
+					in.insert(bind_gen_in::value_type(new gen_in(*i, unroll), &node));
 					seen.insert(*i);
 				}
 			}
@@ -518,23 +523,20 @@ struct make_reduction_declare: unary_function<const region_variable*, xformer*> 
 	}
 };
 
-struct void_less {
+struct bind_gen_in_void_less {
 	bool operator()(const void* v, const bind_gen_in::value_type& p)
 	{
-		if (v < p.first) return true;
-		else return false;
+		return v < p.first->v;
 	}
 
 	bool operator()(const bind_gen_in::value_type& p, const void* v)
 	{
-		if (p.first < v) return true;
-		else return false;
+		return p.first->v < v;
 	}
 
 	bool operator()(const bind_gen_in::value_type& a, const bind_gen_in::value_type& b)
 	{
-		if (a.first < b.first) return true; 
-		else return false;
+		return a.first->v < b.first->v;
 	}
 };
 
@@ -606,29 +608,31 @@ struct parallel_for_op {
 		else if (node.value.id() == ids::compound) {
 			bind_gen_in lazy_in;
 			varset pre_out;
+			for_all(node.children, for_compound_op(shared, cond, pre_out, lazy_in, NO_UNROLL));
 
-			for_compound_op o(shared, cond, pre_out, lazy_in, NO_UNROLL);
-			for_all(node.children, &o);
-
+			// lazy_inout = intersection(lazy_in, pre_out)
 			bind_gen_in lazy_inout;
-			set_intersection_all(lazy_in, pre_out, 
-					inserter(lazy_inout, lazy_inout.begin()), void_less());
-			set_difference_all(pre_out, lazy_inout, 
-					inserter(out, out.begin()), void_less());
+			set_intersection_all(lazy_in, pre_out,
+					inserter(lazy_inout, lazy_inout.begin()), bind_gen_in_void_less());
 
+			// out = pre_out - lazy_inout
+			set_difference_all(pre_out, lazy_inout, 
+					inserter(out, out.begin()), bind_gen_in_void_less());
+
+			// diff_in = lazy_in - lazy_inout
 			bind_gen_in diff_in;
 			set_difference_all(lazy_in, lazy_inout, 
-					inserter(diff_in, diff_in.begin()), void_less());
+					inserter(diff_in, diff_in.begin()), bind_gen_in_void_less());
 
 			// Lazily call gen_in on both in and inout variables.
 			for (bind_gen_in::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
-				i->first->value.xformations.push_back(i->second);
-				in.insert(i->second->v);
+				i->second->value.xformations.push_back(i->first);
+				in.insert(i->first->v);
 			}
 
 			for (bind_gen_in::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
-				i->first->value.xformations.push_back(i->second);
-				inout.insert(i->second->v);
+				i->second->value.xformations.push_back(i->first);
+				inout.insert(i->first->v);
 			}
 
 			// Finally, we know what kind of buffers the variables need.
