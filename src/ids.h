@@ -25,6 +25,8 @@ namespace ids {
 	static const int multiplicative_expression = 19;
 	static const int multiplicative_expression_helper = 20;
 	static const int selection_statement = 21;
+	static const int additive_expression = 22;
+	static const int additive_expression_helper = 23;
 	static const int any_rule = INT_MAX;
 };
 

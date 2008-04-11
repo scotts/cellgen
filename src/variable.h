@@ -8,7 +8,7 @@
 #include <sstream>
 using namespace std;
 
-#include "mult_expr.h"
+#include "math_exprs.h"
 
 const string pass_var = "pass";
 
@@ -39,7 +39,7 @@ public:
 	virtual string actual() const { return pass_var + "." + name(); }
 	virtual string formal() const { return declare(); }
 
-	bool is_pointer() const { return _type.find("*") != string::npos; }
+	bool is_non_scalar() const { return _type.find("*") != string::npos || _type.find("[") != string::npos; }
 };
 
 
@@ -69,7 +69,7 @@ const string default_buff_size("80");
 
 class region_variable: public variable {
 	int region_num;
-	mult_expr _math;
+	add_expr _math;
 	int _depth; // What type of buffering? Zero means scalar; support single, double and triple.
 
 public:
@@ -88,8 +88,8 @@ public:
 		return ss.str();
 	}
 
-	mult_expr math() const { return _math; }
-	void math(mult_expr m) { _math = m; }
+	add_expr math() const { return _math; }
+	void math(add_expr m) { _math = m; }
 
 	int depth() const { return _depth; }
 	void depth(int d) { _depth = d; }
@@ -145,15 +145,16 @@ public:
 	string type() const
 	{
 		string noptr = v->type();
-		size_t pos = noptr.find('*');
+		size_t star = v->type().find('*');
+		size_t bracket = v->type().find('['); 
+		size_t pos = (star == string::npos) ? bracket : star;
 		if (pos == string::npos) {
 			cerr	<< "error: variable " << v->name() 
-				<< " can't be made into a buffer because it is not a pointer." 
+				<< " can't be made into a buffer because it is a scalar." 
 				<< endl;
 			exit(1);
 		}
-		noptr.replace(pos, strlen("*"), "");
-		return noptr;
+		return v->type().substr(0, pos);
 	}
 
 	string declare() const

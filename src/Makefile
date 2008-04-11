@@ -4,22 +4,27 @@
 # the nested templates used by Spirit.
 DEBUG = -ggdb
 OPT = #-O3
+CXXFLAGS = -Wall $(DEBUG) $(OPT)
 
 BOOST_LIBS = -lboost_program_options -lboost_regex
+LDFLAGS = -lstdc++ $(BOOST_LIBS)
+
+OBJS = main.o cellgen_grammar.o parse_tree.o math_exprs.o
+
+# All implementations need access to these declarations/defintions.
+COMMON_INCLUDES = variable.h math_exprs.h spe_region.h utility.h
 
 all: cellgen
-
 clean:
 			rm -rf cellgen *.o
 
-cellgen:		main.o cellgen_grammar.o parse_tree.o
-			$(CXX) $(DEBUG) $(OPT) -Wall main.o cellgen_grammar.o parse_tree.o -o cellgen -lstdc++ $(BOOST_LIBS)
+cellgen:		$(OBJS)
+			$(CXX) $(CXXFLAGS) $(OBJS) -o cellgen $(LDFLAGS)
 
-main.o:			main.cpp streamops.h spe_region.h utility.h cellgen_grammar.o parse_tree.o
-			$(CXX) $(DEBUG) $(OPT) -Wall -DTEMPLATE_DIR=\"$(PWD)/../template_code/\" -c main.cpp 
+main.o:			main.cpp cellgen_grammar.h streamops.h $(COMMON_INCLUDES)
+			$(CXX) $(CXXFLAGS) -DTEMPLATE_DIR=\"$(PWD)/../template_code/\" -c main.cpp 
 
-cellgen_grammar.o:	cellgen_grammar.cpp cellgen_grammar.h c_grammar.h parse_tree.h variable.h mult_expr.h spe_region.h skip.h utility.h
-			$(CXX) $(DEBUG) $(OPT) -Wall -c cellgen_grammar.cpp
+cellgen_grammar.o:	cellgen_grammar.cpp cellgen_grammar.h parse_tree.h c_grammar.h skip.h $(COMMON_INCLUDES)
+parse_tree.o:		parse_tree.cpp parse_tree.h ids.h $(COMMON_INCLUDES)
+math_exprs.o:		math_exprs.cpp math_exprs.h 
 
-parse_tree.o:		parse_tree.cpp parse_tree.h ids.h variable.h mult_expr.h spe_region.h utility.h
-			$(CXX) $(DEBUG) $(OPT) -Wall -c parse_tree.cpp

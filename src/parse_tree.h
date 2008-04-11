@@ -65,7 +65,6 @@ struct xformer_factory {
 			typename node_t::container_t c;
 			for (typename Container::const_iterator i = nodes.begin();
 				i != nodes.end(); ++i) {
-				assert(i->children.size() == 0);
 				c.insert(c.end(), i->value.begin(), i->value.end());
 			}
 			return node_t(c.begin(), c.end());

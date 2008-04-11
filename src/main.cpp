@@ -46,7 +46,7 @@ const string var_hook			= "VAR";
 const string op_hook			= "OP";
 const string num_threads_hook		= "NUM_THREADS_HOOK";
 
-const string pass_assign		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
+const string struct_pass_var		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
 const string mmgp_spe_stop		= "MMGP_SPE_stop();";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
@@ -261,13 +261,13 @@ public:
 	}
 };
 
-class make_pass_assign {
+class pass_assign {
 	stringstream& out;
 public:
-	make_pass_assign(stringstream& o): out(o) {}
+	pass_assign(stringstream& o): out(o) {}
 	void operator()(const region_variable* v)
 	{
-		out	<< pass_assign << v->name() 
+		out	<< struct_pass_var << v->name() 
 			<< " = " << v->definition() << ";" 
 			<< endl;
 	}
@@ -297,9 +297,9 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 			id_ss << loop_num++;
 
 			stringstream passes;
-			for_all((*r)->priv(), make_pass_assign(passes));
-			for_all((*r)->shared(), make_pass_assign(passes));
-			for_all((*r)->reductions(), make_pass_assign(passes));
+			for_all((*r)->priv(), pass_assign(passes));
+			for_all((*r)->shared(), pass_assign(passes));
+			for_all((*r)->reductions(), pass_assign(passes));
 
 			string fork_str = regex_replace(ppe_fork.str(), regex(loop_hook), id_ss.str());
 			string passes_str = regex_replace(passes.str(), regex(loop_hook), id_ss.str());
@@ -395,8 +395,6 @@ string parse_command_line(int argc, char* argv[])
 int main(int argc, char* argv[])
 {
 	string src_name = parse_command_line(argc, argv);
-
-	cout << "path is " << path << endl;
 
 	// Do all of the input and parsing.
 	sslist ppe_src_blocks;

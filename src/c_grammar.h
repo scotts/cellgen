@@ -1036,7 +1036,7 @@ struct c_grammar: public grammar<c_grammar> {
                 /*argument_expression_list,*/ unary_expression, unary_operator,
                 cast_expression,
                 /*multiplicative_expression,*/ /*multiplicative_expression_helper,*/
-                additive_expression, additive_expression_helper,
+                /*additive_expression,*/ /*additive_expression_helper,*/
                 shift_expression, shift_expression_helper,
                 /*relational_expression,*/ relational_expression_helper,
                 equality_expression, equality_expression_helper,
@@ -1081,6 +1081,8 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::multiplicative_expression> > multiplicative_expression;
 	rule<ScannerT, parser_tag<ids::multiplicative_expression_helper> > multiplicative_expression_helper;
 	rule<ScannerT, parser_tag<ids::selection_statement> > selection_statement;
+	rule<ScannerT, parser_tag<ids::additive_expression> > additive_expression;
+	rule<ScannerT, parser_tag<ids::additive_expression_helper> > additive_expression_helper;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

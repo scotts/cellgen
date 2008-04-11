@@ -84,6 +84,12 @@ public:
 		else if (node.value.id() == ids::multiplicative_expression_helper) {
 			rule = "multiplicative_expression_helper";
 		}
+		else if (node.value.id() == ids::additive_expression) {
+			rule = "additive_expression";
+		}
+		else if (node.value.id() == ids::additive_expression_helper) {
+			rule = "additive_expression_helper";
+		}
 		else {
 			stringstream ss;
 			ss << node.value.id();
@@ -431,7 +437,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 		cerr << "error: parse of " << src_name << " failed." << endl;
 		exit(-1);
 	}
-
+	
 	traverse_ast(p->trees, spe_regions);
 
 	spelist::iterator s = spe_regions.begin();

@@ -51,10 +51,62 @@ bool is_multop(string s)
 	return s == "*" || s == "/" || s == "%";
 }
 
-bool is_equals(ast_node& node)
+bool is_addop(string s)
+{
+	return s == "+" || s == "-";
+}
+
+bool is_ident_or_const(const ast_node& node)
+{
+	return node.value.id() == ids::identifier || node.value.id() == ids::int_constant_dec;
+}
+
+bool is_equals(const ast_node& node)
 {
 	string str(node.value.begin(), node.value.end());
 	return str.find("=") != string::npos;
+}
+
+add_expr make_add_expr(const string& type, const list<add_expr>& indices)
+{
+	if (indices.size() > 1) {
+		list<string> dimensions;
+		string dim;
+		bool capture = false;
+		for (string::const_iterator c = type.begin(); c != type.end(); ++c) {
+			if (*c == ']') {
+				capture = false;
+				dimensions.push_back(dim);
+				dim = "";
+			}
+
+			if (capture) {
+				dim += *c;
+			}
+
+			if (*c == '[') {
+				capture = true;
+			}
+
+		}
+
+		// combine l and dimensions to get correct expression
+		list<string>::const_iterator n = dimensions.begin();
+		list<add_expr>::const_iterator i = indices.begin();
+
+		add_expr last(indices.front());
+		for (++n, ++i; n != dimensions.end() && i != indices.end(); ++n, ++i) {
+			cout << last.str() << endl;
+			cout << "ivar: " << i->ivar() << endl;
+			last = add_expr(mult_expr(paren_expr(new add_expr(last)), "*", *n), "+", mult_expr(i->str()));
+		}
+		cout << last.str() << endl;
+		last.ivar(indices.front().ivar());
+		return last;
+	}
+	else {
+		return indices.front();
+	}
 }
 
 template <class F>
@@ -76,27 +128,29 @@ descend<F> make_descend(F f)
 }
 
 class to_buffer_space: public xformer {
-	string math;
-	string rem;
 	const region_variable* v;
+	add_expr add;
 public:
-	to_buffer_space(const string& m, const string& r, const region_variable* v): math(m), rem(r), v(v) {}
+	to_buffer_space(const region_variable* v, add_expr a): v(v), add(a) {}
 	string operator()(const string& old)
 	{
-		return old + "[((" + math + ")" + rem + ")%" + buffer_adaptor(v).size() + "]";
+		return old + 
+			orig_adaptor(v).name() + 
+			"[(" + add.str() + ")%" + buffer_adaptor(v).size() + "]";
 	}
 
-	xformer* clone() const { return new to_buffer_space(math, rem, v); }
+	xformer* clone() const { return new to_buffer_space(v, add); }
 };
 
 struct mult_op {
 	const symset& cond;
 	bool& found_cond;
-	mult_expr& math;
+	mult_expr& mult;
+	string& id;
 	bool found_op;
 
-	mult_op(const symset& c, bool& f, mult_expr& m):
-		cond(c), found_cond(f), math(m), found_op(false)
+	mult_op(const symset& c, bool& f, mult_expr& m, string& i):
+		cond(c), found_cond(f), mult(m), id(i), found_op(false)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -104,54 +158,113 @@ struct mult_op {
 
 		if (node.value.id() == ids::identifier) {
 			if (cond.find(val) != cond.end()) {
-				math.ivar(val);
+				id = val;
 				found_cond = true;
 			}
 		}
 
 		if (is_multop(val)) {
-			math.op(val);
+			mult.op(val);
 			found_op = true;
 		}
 		else if (!found_op) {
-			math.build_lhs(val);
+			mult.build_lhs(val);
 		}
 		else {
-			math.build_rhs(val);
+			mult.build_rhs(val);
 		}
 
 		for_all(node.children, this);
 	}
 };
 
+struct add_op {
+	const symset& cond;
+	bool& found_cond;
+	add_expr& add;
+	bool found_op;
+
+	add_op(const symset& c, bool& f, add_expr& a):
+		cond(c), found_cond(f), add(a), found_op(false)
+		{}
+	void operator()(ast_node& node)
+	{
+		string val(node.value.begin(), node.value.end());
+
+		if (node.value.id() == ids::multiplicative_expression) {
+			mult_expr mult;
+			string id;
+			mult_op o(cond, found_cond, mult, id);
+			for_all(node.children, &o);
+
+			add.ivar(id);
+			if (!found_op) {
+				add.lhs(mult);
+			}
+			else {
+				add.rhs(mult);
+			}
+		}
+		else if (is_ident_or_const(node)) {
+			mult_expr mult;
+			mult.lhs(val);
+
+			if (node.value.id() == ids::identifier) {
+				add.ivar(val);
+			}
+
+			if (!found_op) {
+				add.lhs(mult);
+			}
+			else {
+				add.rhs(mult);
+			}
+		}
+		else if (is_addop(val)) {
+			add.op(val);
+			found_op = true;
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
 struct array_op {
 	const symset& cond;
 	bool& found_cond;
-	mult_expr& math;
-	string rem;
+	add_expr& add;
+	mult_expr lmult;
 
-	array_op(const symset& c, bool& f, mult_expr& m):
-		cond(c), found_cond(f), math(m)
+	array_op(const symset& c, bool& f, add_expr& a):
+		cond(c), found_cond(f), add(a)
 		{}
 	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
 
 		if (node.value.id() == ids::identifier) {
-			if (cond.find(val) != cond.end()) {
-				math.ivar(val);
+			//if (cond.find(val) != cond.end()) {
+				lmult.lhs(val);
+				add.lhs(lmult);
+				add.ivar(val);
+
 				found_cond = true;
-			}
+			//}
 		}
-		else if (node.value.id() == ids::multiplicative_expression) {
-			mult_op o(cond, found_cond, math);
+		else if (node.value.id() == ids::additive_expression) {
+			add_op o(cond, found_cond, add);
 			for_all(node.children, &o);
 		}
-		else {
-			if (found_cond && !is_bracket(val)){
-				rem += val;
-			}
+		else if (node.value.id() == ids::multiplicative_expression) {
+			string id;
+			mult_op o(cond, found_cond, lmult, id);
+			for_all(node.children, &o);
 
+			add.lhs(lmult);
+			add.ivar(id);
+		}
+		else {
 			for_all(node.children, this);
 		}
 	}
@@ -164,6 +277,7 @@ struct postfix_op {
 	bool found_cond;
 	bool found_shared;
 	region_variable* var;
+	list<add_expr> accesses;
 	
 	postfix_op(const symtbl& s, const symset& c, varset& l):
 		shared(s), cond(c), lst(l), found_cond(false), found_shared(false)
@@ -182,18 +296,11 @@ struct postfix_op {
 			}
 		}
 		else if (node.value.id() == ids::array_index) {
-			mult_expr math;
-			array_op o(cond, found_cond, math);
+			add_expr a;
+			array_op o(cond, found_cond, a);
 			for_all(node.children, &o);
 
-			if (found_shared && found_cond) {
-				var->math(math);
-				node.value.xformations.push_back(new to_buffer_space(math.as_written(), o.rem, var)); 
-				
-				// If we don't do this, redundant printing. The to_buffer_space xformer
-				// is a reduction of all the children.
-				node.children.clear(); 
-			}
+			accesses.push_back(a);
 		}
 		else {
 			for_all(node.children, this);
@@ -213,6 +320,17 @@ struct handness {
 		if (node.value.id() == ids::postfix_expression) {
 			postfix_op o(shared, cond, lst);
 			for_all(node.children, &o);
+
+			if (o.found_shared && o.found_cond) {
+				add_expr add = make_add_expr(o.var->type(), o.accesses);
+				o.var->math(add);
+				node.value.xformations.push_back(new to_buffer_space(o.var, add)); 
+				
+				// If we don't do this, redundant printing. The to_buffer_space xformer
+				// is a reduction of all the children.
+				node.children.clear(); 
+			}
+
 		}
 		else {
 			for_all(node.children, this);
@@ -262,7 +380,7 @@ struct gen_in: public xformer {
 		string if_statement;
 
 		if (!unroll) {
-			if_statement = "if (!((" + v->math().as_written() + ")%" + buff.size() + "))"; 
+			if_statement = "if (!((" + v->math().lhs().str() + ")%" + buff.size() + "))"; 
 		}
 
 		return old + if_statement + "{\n" 
@@ -270,7 +388,7 @@ struct gen_in: public xformer {
 				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
 				"mfc_get(" + 
 					buff.name() + "[" + next.name() + "]," 
-					"(unsigned long)(" + v->name() + "+((" + v->math().as_written() + ")+" + buff.size() + "))," 
+					"(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff.size() + "))," 
 					"sizeof(" + buff.type() + ") *" + buff.size() + "," +
 					next.name() + ", 0, 0);\n" +
 				orig.name() + "=" + buff.name() + "[old];\n"
@@ -393,7 +511,7 @@ public:
 	xformer* clone() const { return new reduction_declare(v); }
 };
 
-struct create_reduction_declare: unary_function<const region_variable*, xformer*> {
+struct make_reduction_declare: unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new reduction_declare(v);
@@ -420,14 +538,14 @@ struct void_less {
 	}
 };
 
-struct create_gen_out: public unary_function<const region_variable*, xformer*> {
+struct make_gen_out: public unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new gen_out(v, NO_UNROLL);
 	}
 };
 
-struct create_gen_final_out: public unary_function<const region_variable*, xformer*> {
+struct make_gen_final_out: public unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new gen_final_out(v, NO_UNROLL);
@@ -452,20 +570,20 @@ public:
 	assign_depth(int d): d(d) {}
 	void operator()(region_variable* v)
 	{
-		if (v->is_pointer()) {
+		if (v->is_non_scalar()) {
 			v->depth(d);
 		}
 	}
 };
 
-struct for_op {
+struct parallel_for_op {
 	const symtbl& shared;
 	symset& cond;
 	varset& in;
 	varset& out;
 	varset& inout;
 	int unroll;
-	for_op(const symtbl& s, symset& c, varset& i, varset& o, varset& io, int u): 
+	parallel_for_op(const symtbl& s, symset& c, varset& i, varset& o, varset& io, int u): 
 		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(ast_node& node)
 	{
@@ -519,10 +637,10 @@ struct for_op {
 			for_all(inout, assign_depth(3));
 
 			xformerlist& xformations = node.children.back().value.xformations;
-			append(xformations, fmap(create_gen_out(), inout));
-			append(xformations, fmap(create_gen_out(), out));
-			append(xformations, fmap(create_gen_final_out(), inout));
-			append(xformations, fmap(create_gen_final_out(), out));
+			append(xformations, fmap(make_gen_out(), inout));
+			append(xformations, fmap(make_gen_out(), out));
+			append(xformations, fmap(make_gen_final_out(), inout));
+			append(xformations, fmap(make_gen_final_out(), out));
 		}
 		else {
 			for_all(node.children, this);
@@ -742,7 +860,7 @@ struct compound {
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			for_op o(shared, cond, in, out, inout, unroll);
+			parallel_for_op o(shared, cond, in, out, inout, unroll);
 			for_all(node.children, &o);
 		}
 		else {
@@ -767,7 +885,7 @@ struct reduction_assign: public xformer {
 	xformer* clone() const { return new reduction_assign(v); }
 };
 
-struct create_reduction_assign: unary_function<const region_variable*, xformer*> {
+struct make_reduction_assign: unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new reduction_assign(v);
@@ -794,7 +912,7 @@ public:
 	xformer* clone() const { return new init_buffers(v); }
 };
 
-struct create_init_buffers: public unary_function<const region_variable*, xformer*> {
+struct make_init_buffers: public unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new init_buffers(v);
@@ -822,7 +940,7 @@ public:
 	xformer* clone() const { return new in_init_buffers(v); }
 };
 
-struct create_in_init_buffers: public unary_function<const region_variable*, xformer*> {
+struct make_in_init_buffers: public unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new in_init_buffers(v);
@@ -837,7 +955,7 @@ public:
 	string operator()(const string& old)
 	{
 		string ret;
-		if (v->is_pointer()) {
+		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
 			orig_adaptor orig(v);
 
@@ -856,7 +974,7 @@ public:
 	xformer* clone() const { return new init_private_buffers(v); }
 };
 
-struct create_init_private_buffers: public unary_function<const region_variable*, xformer*> {
+struct make_init_private_buffers: public unary_function<const region_variable*, xformer*> {
 	xformer* operator()(const region_variable* v)
 	{
 		return new init_private_buffers(v);
@@ -947,11 +1065,11 @@ struct cell_region {
 					inserter(combined, combined.begin()));
 			front_xforms.push_back(new compute_bounds((for_all(combined, max_buffer()).max)));
 
-			append(front_xforms, fmap(create_init_buffers(), (*region)->out()));
-			append(front_xforms, fmap(create_in_init_buffers(), (*region)->in()));
-			append(front_xforms, fmap(create_in_init_buffers(), (*region)->inout()));
-			append(front_xforms, fmap(create_init_private_buffers(), (*region)->priv()));
-			append(front_xforms, fmap(create_reduction_declare(), (*region)->reductions()));
+			append(front_xforms, fmap(make_init_buffers(), (*region)->out()));
+			append(front_xforms, fmap(make_in_init_buffers(), (*region)->in()));
+			append(front_xforms, fmap(make_in_init_buffers(), (*region)->inout()));
+			append(front_xforms, fmap(make_init_private_buffers(), (*region)->priv()));
+			append(front_xforms, fmap(make_reduction_declare(), (*region)->reductions()));
 
 			// Order matters; unroll_boundaries generates code that depends on 
 			// code generated from compute_bounds.
@@ -960,7 +1078,7 @@ struct cell_region {
 			}
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
-			append(back_xforms, fmap(create_reduction_assign(), (*region)->reductions()));
+			append(back_xforms, fmap(make_reduction_assign(), (*region)->reductions()));
 
 			++region;
 		}
