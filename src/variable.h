@@ -97,6 +97,8 @@ public:
 
 class private_variable: public region_variable {
 public:
+	private_variable(const string& t, const string& l, const string& a):
+		region_variable(t, l, a) {}
 	private_variable(const string& t, const string& l, const string& a, int r):
 		region_variable(t, l, a, r) {}
 
@@ -104,9 +106,13 @@ public:
 };
 
 class shared_variable: public region_variable {
+	list<string> _dimensions;	// Dimensions for multidimensional array
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
 		region_variable(t, l, a, r)
+		{}
+	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
+		region_variable(t, l, a, r), _dimensions(d)
 		{}
 
 	virtual string name() const
@@ -115,6 +121,8 @@ public:
 		ss << region_variable::name() << "_adr";
 		return ss.str(); 
 	}
+
+	list<string> dimensions() const { return _dimensions; }
 };
 
 class reduction_variable: public region_variable {
@@ -200,7 +208,10 @@ public:
 };
 
 typedef set<region_variable*>		varset;
-typedef map<string, region_variable*>	symtbl;
+typedef set<private_variable*>		privset;
+typedef set<shared_variable*>		sharedset;
+typedef set<reduction_variable*>	reduceset;
+typedef map<string, shared_variable*>	symtbl;
 typedef set<string>			symset;
 
 #endif // VARIABLE_H

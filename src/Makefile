@@ -4,7 +4,7 @@
 # the nested templates used by Spirit.
 DEBUG = -ggdb
 OPT = #-O3
-CXXFLAGS = -Wall $(DEBUG) $(OPT)
+CXXFLAGS = -Wall $(DEBUG) $(OPT) 
 
 BOOST_LIBS = -lboost_program_options -lboost_regex
 LDFLAGS = -lstdc++ $(BOOST_LIBS)

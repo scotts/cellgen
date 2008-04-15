@@ -106,45 +106,117 @@ public:
 };
 
 template <class T>
-class vars_op {
-	varset*& vars;
-	symtbl*& tbl;
+class vars_op_base {
+protected:
+	set<T*>& vars;
 	spelist& regions;
 
-public:
-	vars_op(varset*& v, symtbl*& t, spelist& r): vars(v), tbl(t), regions(r)
-	{
-		vars = new varset;
-		tbl = new symtbl;
-	}
-
-	varset* pickup_vars()
-	{
-		varset* temp = vars;
-		vars = new varset;
-		return temp;
-	}
-
-	symtbl* pickup_symbols()
-	{
-		symtbl* temp = tbl;
-		tbl = new symtbl;
-		return temp;
-	}
-
-	void operator()(fileiter first, const fileiter& last) const
+	void assign(fileiter first, const fileiter& last, string& t, string& l, string& d) const
 	{
 		stringstream ss;
 		while (first != last) {
 			ss << *first++;
 		}
 
-		string type, local, equals, definition;
-		ss >> type >> local >> equals >> definition;
+		string equals;
+		ss >> t >> l >> equals >> d;
+	}
 
-		T* v = new T(type, local, definition, regions.size() + 1);
-		vars->insert(v);
-		(*tbl)[local] = v;
+public:
+	vars_op_base(set<T*>& v, spelist& r): vars(v), regions(r) {}
+
+	set<T*> pickup_vars()
+	{
+		set<T*> temp = vars;
+		vars.clear();
+		return temp;
+	}
+
+	set<T*>& current_set()
+	{
+		return vars;
+	}
+};
+
+template <class T>
+class vars_op: public vars_op_base<T> {
+public:
+	vars_op(set<T*>& v, spelist& r): vars_op_base<T>(v, r) {}
+
+	void operator()(fileiter first, const fileiter& last) const
+	{
+		string type, local, definition;
+		this->assign(first, last, type, local, definition);
+
+		T* v = new T(type, local, definition, this->regions.size() + 1);
+		this->vars.insert(v);
+	}
+};
+
+void print_string(const string& str)
+{
+	cout << str << " ";
+}
+
+template <>
+class vars_op<shared_variable>: public vars_op_base<shared_variable> {
+	symtbl& tbl;
+public:
+	vars_op(sharedset& v, symtbl& t, spelist& r): vars_op_base<shared_variable>(v, r), tbl(t) {}
+
+	symtbl pickup_symbols()
+	{
+		symtbl temp = tbl;
+		tbl.clear();
+		return temp;
+	}
+
+	void operator()(fileiter first, const fileiter& last) const
+	{
+		string type, local, definition;
+		this->assign(first, last, type, local, definition);
+
+		// Check if we point to a multidimensional array.
+		//
+		// The below should work. And it does! On another machine. I suspect 
+		// the version of boost installed on monza is broken. But Centos
+		// doesn't have any new boost packages, and far too many people 
+		// depend on monza right now for me to wipe Centos and put on Fedora.
+		// So I have to put up with this ugly state machine. Sigh.
+		//
+		//sregex_token_iterator a(definition.begin(), definition.end(), regex("\\d+"));
+		//sregex_token_iterator z;
+		//copy(a, z, back_inserter(dimensions));
+
+		list<string> dimensions;
+		if (definition.find("[") != string::npos) {
+			string dim;
+			bool capture = false;
+			for (string::const_iterator c = definition.begin(); c != definition.end(); ++c) {
+				if (*c == ']') {
+					capture = false;
+					dimensions.push_back(dim);
+					dim = "";
+				}
+
+				if (capture) {
+					dim += *c;
+				}
+
+				if (*c == '[') {
+					capture = true;
+				}
+			}
+
+			definition = definition.substr(0, definition.find("["));
+			cout << "vars_op: definition " << definition << ", dimensions ";
+			for_all(dimensions, print_string);
+			cout << endl;
+		}
+
+		shared_variable* v = new shared_variable(type, local, definition, dimensions, this->regions.size() + 1);
+		this->vars.insert(v);
+		tbl[local] = v;
 	}
 };
 
@@ -154,6 +226,7 @@ class scalar_op {
 
 public:
 	scalar_op(T& s): scalar(s) {}
+
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
@@ -202,12 +275,13 @@ public:
 	}
 };
 
+template <class T>
 class assign_var {
-	varset*& vars;
+	vars_op<T>& op;
 	string local;
 
 public:
-	assign_var(varset*& v, string l): vars(v), local(l) {}
+	assign_var(vars_op<T>& o, string l): op(o), local(l) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
@@ -215,24 +289,22 @@ public:
 			ss << *first++;
 		}
 
-		vars->insert(new region_variable("int", local, ss.str()));
+		op.current_set().insert(new T("int", local, ss.str()));
 	}
 };
 
 struct create_spe_region {
 	spelist&			regions;
-	assign_var&			start_op;
-	assign_var&			stop_op;
 	vars_op<private_variable>&	priv_op;
 	vars_op<shared_variable>&	shared_op;
 	vars_op<reduction_variable>&	reduce_def_op;
 	scalar_op<string>&		reduce_op_op;
 	scalar_op<int>&			unroll_op;
 
-	create_spe_region(spelist& r, assign_var& start, assign_var& stop, vars_op<private_variable>& p, 
+	create_spe_region(spelist& r, vars_op<private_variable>& p, 
 			vars_op<shared_variable>& s, vars_op<reduction_variable>& rd, 
 			scalar_op<string>& ro, scalar_op<int>& uo):
-		regions(r), start_op(start), stop_op(stop), priv_op(p), shared_op(s), 
+		regions(r), priv_op(p), shared_op(s), 
 		reduce_def_op(rd), reduce_op_op(ro), unroll_op(uo)
 		{}
 	void operator()(fileiter first, const fileiter& last) const
@@ -252,43 +324,37 @@ struct create_spe_region {
  */
 struct cellgen_grammar: public grammar<cellgen_grammar> {
 	push_back_op<sslist>		ppe_op;
-	assign_var			start_op;
-	assign_var			stop_op;
 	vars_op<private_variable>	priv_op;
+	assign_var<private_variable>	start_op;
+	assign_var<private_variable>	stop_op;
 	vars_op<shared_variable>	shared_op;
 	vars_op<reduction_variable>	reduce_def_op;
 	scalar_op<string>		reduce_op_op;
 	scalar_op<int>			unroll_op;
 	create_spe_region		region_op;
 
-	stringstream*	loop_pickup;
-	varset*	priv_vars;
-	varset*	shared_vars;
-	varset*	reduce_vars;
-	symtbl*		shared_tbl;
-	symtbl*		private_tbl;
-	symtbl*		reduction_tbl;
-	string		op;
-	int		unroll;
-	
+	privset privs;
+	sharedset shared;
+	reduceset reduces;
+	symtbl symbols;
+	string op;
+	int unroll;
+
 	cellgen_grammar(sslist& ppe, spelist& regions):
 		ppe_op(ppe),
-		start_op(priv_vars, "SPE_start"),
-		stop_op(priv_vars, "SPE_stop"),
-		priv_op(priv_vars, private_tbl, regions),
-		shared_op(shared_vars, shared_tbl, regions),
-		reduce_def_op(reduce_vars, reduction_tbl, regions),
+		priv_op(privs, regions),
+		start_op(priv_op, "SPE_start"),
+		stop_op(priv_op, "SPE_stop"),
+		shared_op(shared, symbols, regions),
+		reduce_def_op(reduces, regions),
 		reduce_op_op(op),
 		unroll_op(unroll),
 		region_op(regions,
-			start_op, 
-			stop_op, 
 			priv_op, 
 			shared_op,
 			reduce_def_op,
 			reduce_op_op,
-			unroll_op),
-		unroll(0)
+			unroll_op)
 		{}
 
 	template <typename ScannerT>

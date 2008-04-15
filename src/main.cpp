@@ -184,7 +184,7 @@ class define_buffers {
 	ostream& out;
 public:
 	define_buffers(ostream& o): out(o) {}
-	void operator()(const region_variable* v)
+	void operator()(const shared_variable* v)
 	{
 		out << buffer_adaptor(v).declare() << ";" << endl;
 	}
@@ -216,13 +216,13 @@ class define_private_buffers {
 	ostream& out;
 public:
 	define_private_buffers(ostream& o): out(o) {}
-	void operator()(const region_variable* v)
+	void operator()(const private_variable* v)
 	{
 		if (v->depth() > 0) {
 			out << buffer_adaptor(v).declare() << ";" << endl;
 		}
 	}
-	void operator()(const spe_region* region)
+	void operator()(spe_region* region)
 	{
 		for_all(region->priv(), this);
 	}
@@ -233,7 +233,7 @@ class define_buff_size {
 	const int unroll;
 public:
 	define_buff_size(ostream& o, const int u): out(o), unroll(u) {}
-	void operator()(const region_variable* v)
+	void operator()(const shared_variable* v)
 	{
 		if (v->depth() > 0 ) {
 			string def;
@@ -248,6 +248,13 @@ public:
 			out << pound_define(buffer_adaptor(v).size(), def).define();
 		}
 	}
+	void operator()(const private_variable* v)
+	{
+		if (v->depth() > 0 ) {
+			out << pound_define(buffer_adaptor(v).size(), default_buff_size).define();
+		}
+	}
+
 };
 
 class define_region_buff_sizes {
@@ -309,7 +316,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 				string str = regex_replace(
 						mmgp_reduction, 
 						regex(var_hook), 
-						"&" + (*((*r)->reductions()->begin()))->definition());
+						"&" + (*((*r)->reductions().begin()))->definition());
 				file << regex_replace(str, regex(op_hook), (*r)->reduction_op());
 			}
 			else {

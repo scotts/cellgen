@@ -8,36 +8,37 @@ typedef list<spe_region*> spelist;
 #include "parse_tree.h"
 
 class spe_region {
-	varset* _priv;
-	varset* _shared;
-	varset _in;		// _in + _out + _inout = _shared
-	varset _out;
-	varset _inout;
-	varset* _reductions;
+	privset _priv;
+	sharedset _shared;
+	sharedset _in;		// _in + _out + _inout = _shared
+	sharedset _out;
+	sharedset _inout;
+	reduceset _reductions;
 	string _reduction_op;
-	symtbl* _symbols;
+	symtbl _symbols;
 	ast_node* _ast_root;
 	int _unroll;
 
 public:
-	spe_region(varset* v, varset* d, varset* r, string o, symtbl* s, int u):
-		_priv(v), _shared(d), _reductions(r), _reduction_op(o), _symbols(s), _unroll(u)
+	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const symtbl& sy, int u):
+		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _symbols(sy), _unroll(u)
 	{
-		assert(v);
-		assert(d);
-		assert(r);
-		assert(s);
 		assert(_unroll >= 0);
+		if (_reductions.size() > 0) {
+			assert(_reduction_op != "");
+		}
 	}
 
-	varset*	priv()		const { return _priv; }
-	varset*	shared()	const { return _shared; }
-	varset&	in()		{ return _in; }
-	varset&	out()		{ return _out; }
-	varset&	inout()		{ return _inout; }
-	varset*	reductions()	const { return _reductions; }
-	string		reduction_op()	const { return _reduction_op; }
-	int		unroll()	const { return _unroll; }
+	privset& priv()			{ return _priv; }
+	sharedset& shared()		{ return _shared; }
+	sharedset& in()			{ return _in; }
+	sharedset& out()		{ return _out; }
+	sharedset& inout()		{ return _inout; }
+	reduceset& reductions()		{ return _reductions; }
+	symtbl& symbols()		{ return _symbols; }
+
+	string reduction_op() const	{ return _reduction_op; }
+	int unroll() const		{ return _unroll; }
 
 	void ast_root(ast_node* a)
 	{
@@ -49,12 +50,6 @@ public:
 	{
 		assert(_ast_root);
 		return _ast_root;
-	}
-
-	symtbl* symbols()
-	{
-		assert(_symbols);
-		return _symbols;
 	}
 };
 
