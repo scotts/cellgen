@@ -153,11 +153,6 @@ public:
 	}
 };
 
-void print_string(const string& str)
-{
-	cout << str << " ";
-}
-
 template <>
 class vars_op<shared_variable>: public vars_op_base<shared_variable> {
 	symtbl& tbl;
@@ -209,9 +204,6 @@ public:
 			}
 
 			definition = definition.substr(0, definition.find("["));
-			cout << "vars_op: definition " << definition << ", dimensions ";
-			for_all(dimensions, print_string);
-			cout << endl;
 		}
 
 		shared_variable* v = new shared_variable(type, local, definition, dimensions, this->regions.size() + 1);

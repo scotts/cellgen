@@ -81,9 +81,26 @@ typedef ast_match::node_t				ast_node;
 
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
+	virtual void unroll_me(int u) {}
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
-	virtual void unroll_me(int u) {}
+};
+
+#include "spe_region.h"
+
+const int NO_UNROLL = 0;
+
+class unrollable_xformer: public xformer {
+protected:
+	int unroll;
+	symset inductions;
+public:
+	unrollable_xformer(const symset& i): unroll(NO_UNROLL), inductions(i) {}
+	//unrollable_xformer(): unroll(NO_UNROLL) {}
+	virtual void unroll_me(int u)
+	{
+		unroll = u;
+	}
 };
 
 inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
@@ -91,8 +108,6 @@ inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
 	out << rid.to_long();
 	return out;
 }
-
-#include "spe_region.h"
 
 void traverse_ast(ast& trees, spelist& regions);
 

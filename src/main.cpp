@@ -238,9 +238,7 @@ public:
 		if (v->depth() > 0 ) {
 			string def;
 			if (unroll) {
-				stringstream ss;
-				ss << unroll;
-				def = "(" + ss.str() + v->math().factor() + ")";
+				def = "(" + to_string<int>(unroll) + v->math().factor() + ")";
 			}
 			else {
 				def = default_buff_size;
@@ -300,16 +298,15 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 		file << (*b)->str();
 		if (++b != blocks.end()) {
 
-			stringstream id_ss;
-			id_ss << loop_num++;
+			string id = to_string<int>(loop_num++);
 
 			stringstream passes;
 			for_all((*r)->priv(), pass_assign(passes));
 			for_all((*r)->shared(), pass_assign(passes));
 			for_all((*r)->reductions(), pass_assign(passes));
 
-			string fork_str = regex_replace(ppe_fork.str(), regex(loop_hook), id_ss.str());
-			string passes_str = regex_replace(passes.str(), regex(loop_hook), id_ss.str());
+			string fork_str = regex_replace(ppe_fork.str(), regex(loop_hook), id);
+			string passes_str = regex_replace(passes.str(), regex(loop_hook), id);
 			file << regex_replace(fork_str, regex(pass_assign_hook), passes_str);
 
 			if ((*r)->reduction_op() != "") {
@@ -320,7 +317,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 				file << regex_replace(str, regex(op_hook), (*r)->reduction_op());
 			}
 			else {
-				file << regex_replace(mmgp_wait, regex(loop_hook), id_ss.str());
+				file << regex_replace(mmgp_wait, regex(loop_hook), id);
 			}
 
 			++r;
@@ -349,7 +346,6 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 
 	stringstream ss;
 	ss << spe_dec.str() << endl;
-		//<< buff_size.define() << endl;
 
 	for_all(regions, define_region_buff_sizes(ss));
 	for_all(regions, define_in_and_out_buffers(ss));

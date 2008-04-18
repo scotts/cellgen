@@ -17,8 +17,6 @@ using namespace boost;
 #include "spe_region.h"
 #include "utility.h"
 
-const int NO_UNROLL = 0;
-
 xformerlist_data::xformerlist_data(const xformerlist_data& o): char_data(o)
 {
 	for (xformerlist::const_iterator i = o.xformations.begin(); i != o.xformations.end(); ++i) {
@@ -121,27 +119,27 @@ public:
 			"[(" + add.str() + ")%" + buffer_adaptor(v).size() + "]";
 	}
 
-	xformer* clone() const { return new to_buffer_space(v, add); }
+	xformer* clone() const { return new to_buffer_space(*this); }
 };
 
 struct mult_op {
-	const symset& cond;
-	bool& found_cond;
+	const symset& inductions;
+	bool& found_induction;
 	mult_expr& mult;
 	string& id;
 	bool found_op;
 
-	mult_op(const symset& c, bool& f, mult_expr& m, string& i):
-		cond(c), found_cond(f), mult(m), id(i), found_op(false)
+	mult_op(const symset& ind, bool& f, mult_expr& m, string& i):
+		inductions(ind), found_induction(f), mult(m), id(i), found_op(false)
 		{}
 	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
 
 		if (node.value.id() == ids::identifier) {
-			if (cond.find(val) != cond.end()) {
+			if (inductions.find(val) != inductions.end()) {
 				id = val;
-				found_cond = true;
+				found_induction = true;
 			}
 		}
 
@@ -161,13 +159,13 @@ struct mult_op {
 };
 
 struct add_op {
-	const symset& cond;
-	bool& found_cond;
+	const symset& inductions;
+	bool& found_induction;
 	add_expr& add;
 	bool found_op;
 
-	add_op(const symset& c, bool& f, add_expr& a):
-		cond(c), found_cond(f), add(a), found_op(false)
+	add_op(const symset& i, bool& f, add_expr& a):
+		inductions(i), found_induction(f), add(a), found_op(false)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -176,7 +174,7 @@ struct add_op {
 		if (node.value.id() == ids::multiplicative_expression) {
 			mult_expr mult;
 			string id;
-			mult_op o(cond, found_cond, mult, id);
+			mult_op o(inductions, found_induction, mult, id);
 			for_all(node.children, &o);
 
 			add.ivar(id);
@@ -213,13 +211,13 @@ struct add_op {
 };
 
 struct array_op {
-	const symset& cond;
-	bool& found_cond;
+	const symset& inductions;
+	bool& found_induction;
 	add_expr& add;
 	mult_expr lmult;
 
-	array_op(const symset& c, bool& f, add_expr& a):
-		cond(c), found_cond(f), add(a)
+	array_op(const symset& i, bool& f, add_expr& a):
+		inductions(i), found_induction(f), add(a)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -227,21 +225,21 @@ struct array_op {
 
 		if (node.value.id() == ids::identifier) {
 			// FIXME: do we need this or not?
-			//if (cond.find(val) != cond.end()) {
+			if (inductions.find(val) != inductions.end()) {
 				lmult.lhs(val);
 				add.lhs(lmult);
 				add.ivar(val);
 
-				found_cond = true;
-			//}
+				found_induction = true;
+			}
 		}
 		else if (node.value.id() == ids::additive_expression) {
-			add_op o(cond, found_cond, add);
+			add_op o(inductions, found_induction, add);
 			for_all(node.children, &o);
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
 			string id;
-			mult_op o(cond, found_cond, lmult, id);
+			mult_op o(inductions, found_induction, lmult, id);
 			for_all(node.children, &o);
 
 			add.lhs(lmult);
@@ -255,15 +253,15 @@ struct array_op {
 
 struct postfix_op {
 	const symtbl& shared;
-	const symset& cond;
+	const symset& inductions;
 	sharedset& lst;
-	bool found_cond;
+	bool found_induction;
 	bool found_shared;
 	shared_variable* var;
 	list<add_expr> accesses;
 	
-	postfix_op(const symtbl& s, const symset& c, sharedset& l):
-		shared(s), cond(c), lst(l), found_cond(false), found_shared(false)
+	postfix_op(const symtbl& s, const symset& i, sharedset& l):
+		shared(s), inductions(i), lst(l), found_induction(false), found_shared(false)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -280,7 +278,7 @@ struct postfix_op {
 		}
 		else if (node.value.id() == ids::array_index) {
 			add_expr a;
-			array_op o(cond, found_cond, a);
+			array_op o(inductions, found_induction, a);
 			for_all(node.children, &o);
 
 			accesses.push_back(a);
@@ -293,18 +291,18 @@ struct postfix_op {
 
 struct handness {
 	const symtbl& shared;
-	const symset& cond;
+	const symset& inductions;
 	sharedset& vars;
-	handness(const symtbl& s, const symset& c, sharedset& l):
-		shared(s), cond(c), vars(l)
+	handness(const symtbl& s, const symset& i, sharedset& l):
+		shared(s), inductions(i), vars(l)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::postfix_expression) {
-			postfix_op o(shared, cond, vars);
+			postfix_op o(shared, inductions, vars);
 			for_all(node.children, &o);
 
-			if (o.found_shared && o.found_cond) {
+			if (o.found_shared && o.found_induction) {
 				add_expr add = make_add_expr(o.var->dimensions(), o.accesses);
 				o.var->math(add);
 				node.value.xformations.push_back(new to_buffer_space(o.var, add)); 
@@ -323,11 +321,11 @@ struct handness {
 
 struct expression_statement_op {
 	const symtbl& shared;
-	const symset& cond;
+	const symset& inductions;
 	sharedset& out;
 	sharedset in;
-	expression_statement_op(const symtbl& s, const symset& c, sharedset& o):
-		shared(s), cond(c), out(o)
+	expression_statement_op(const symtbl& s, const symset& i, sharedset& o):
+		shared(s), inductions(i), out(o)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -340,8 +338,8 @@ struct expression_statement_op {
 				}
 			}
 
-			for_each(node.children.begin(), e, handness(shared, cond, out));
-			for_each(e, node.children.end(), handness(shared, cond, in));
+			for_each(node.children.begin(), e, handness(shared, inductions, out));
+			for_each(e, node.children.end(), handness(shared, inductions, in));
 		}
 		else {
 			for_all(node.children, this);
@@ -349,11 +347,10 @@ struct expression_statement_op {
 	}
 };
 
-struct gen_in: public xformer {
+struct gen_in: public unrollable_xformer {
 	shared_variable* v;
-	int unroll;
-	gen_in(shared_variable* _v, int u): 
-		v(_v), unroll(u) {}
+
+	gen_in(shared_variable* v, const symset& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
@@ -379,8 +376,7 @@ struct gen_in: public xformer {
 			"}\n";
 	}
 
-	xformer* clone() const { return new gen_in(v, unroll); }
-	void unroll_me(int u) { unroll = u; }
+	xformer* clone() const { return new gen_in(*this); }
 };
 
 struct less_gen_in {
@@ -392,30 +388,47 @@ struct less_gen_in {
 
 typedef map<gen_in*, ast_node*, less_gen_in> bind_gen_in;
 
+struct serial_for_op {
+	const symtbl& shared;
+	symset inductions;
+	bind_gen_in& in;
+	sharedset& out;
+
+	serial_for_op(const symtbl& s, const symset& ind, bind_gen_in& i, sharedset& o):
+		shared(s), inductions(ind), in(i), out(o) {}
+	void operator()(ast_node& node);
+};
+
+
 struct for_compound_op {
 	const symtbl& shared; 
-	const symset& cond;
-	sharedset& out;
+	const symset& inductions;
 	bind_gen_in& in;
+	sharedset& out;
 	int unroll;
 	sharedset seen;
-	for_compound_op(const symtbl& s, symset& c, sharedset& o, bind_gen_in& l, int u): 
-		shared(s), cond(c), out(o), in(l), unroll(u)
+
+	for_compound_op(const symtbl& s, symset& ind, bind_gen_in& i, sharedset& o, int u): 
+		shared(s), inductions(ind), in(i), out(o), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
-			expression_statement_op o(shared, cond, out);
+			expression_statement_op o(shared, inductions, out);
 			for_all(node.children, &o);
 
 			// Store the function object somewhere, and call it later once I know 
 			// which variables are in, which are out, and which are inout
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
-					in.insert(bind_gen_in::value_type(new gen_in(*i, unroll), &node));
+					in.insert(bind_gen_in::value_type(new gen_in(*i, inductions), &node));
 					seen.insert(*i);
 				}
 			}
+		}
+		else if (node.value.id() == ids::for_loop) {
+			serial_for_op o(shared, inductions, in, out);
+			for_all(node.children, &o);
 		}
 		else {
 			for_all(node.children, this);
@@ -423,11 +436,27 @@ struct for_compound_op {
 	}
 };
 
-struct gen_out: public xformer {
-	const shared_variable* v;
-	int unroll;
+void serial_for_op::operator()(ast_node& node)
+{
+	if (node.value.id() == ids::identifier) {
+		// Note that inductions is local to serial_for_op; the induction 
+		// variables of enclosing scopes were copied in, yet those scopes 
+		// will remain ignorant of our induction variables.
+		inductions.insert(string(node.value.begin(), node.value.end()));
+	}
+	else if (node.value.id() == ids::compound) {
+		for_compound_op o(shared, inductions, in, out, NO_UNROLL);
+		for_all(node.children, &o);
+	}
+	else {
+		for_all(node.children, this);
+	}
+}
 
-	gen_out(const shared_variable* v, int u): v(v), unroll(u) {}
+struct gen_out: public unrollable_xformer {
+	const shared_variable* v;
+
+	gen_out(const shared_variable* v, const symset& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -456,15 +485,13 @@ struct gen_out: public xformer {
 			"} \n" + old;
 	}
 
-	xformer* clone() const { return new gen_out(v, unroll); }
-	void unroll_me(int u) { unroll = u; }
+	xformer* clone() const { return new gen_out(*this); }
 };
 
-struct gen_final_out: public xformer {
+struct gen_final_out: public unrollable_xformer {
 	const shared_variable* v;
-	int unroll;
 
-	gen_final_out(const shared_variable* v, int u): v(v), unroll(u) {}
+	gen_final_out(const shared_variable* v, const symset& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -485,8 +512,7 @@ struct gen_final_out: public xformer {
 		return old + ret;
 	}
 
-	xformer* clone() const { return new gen_final_out(v, unroll); }
-	void unroll_me(int u) { unroll = u; }
+	xformer* clone() const { return new gen_final_out(*this); }
 };
 
 class reduction_declare: public xformer {
@@ -498,13 +524,24 @@ public:
 		return old + orig_adaptor(v).declare() + "; \n";
 	}
 
-	xformer* clone() const { return new reduction_declare(v); }
+	xformer* clone() const { return new reduction_declare(*this); }
 };
 
-struct make_reduction_declare: unary_function<const reduction_variable*, xformer*> {
-	xformer* operator()(const reduction_variable* v)
+template <class X, class V>
+struct make_xformer: public unary_function<const V*, xformer*> {
+	xformer* operator()(const V* v)
 	{
-		return new reduction_declare(v);
+		return new X(v);
+	}
+};
+
+template <class X, class V>
+struct make_unrollable: public unary_function<const V*, xformer*> {
+	const symset& inductions;
+	make_unrollable(const symset& i): inductions(i) {}
+	xformer* operator()(const V* v)
+	{
+		return new X(v, inductions);
 	}
 };
 
@@ -525,20 +562,6 @@ struct bind_gen_in_void_less {
 	}
 };
 
-struct make_gen_out: public unary_function<const shared_variable*, xformer*> {
-	xformer* operator()(const shared_variable* v)
-	{
-		return new gen_out(v, NO_UNROLL);
-	}
-};
-
-struct make_gen_final_out: public unary_function<const shared_variable*, xformer*> {
-	xformer* operator()(const shared_variable* v)
-	{
-		return new gen_final_out(v, NO_UNROLL);
-	}
-};
-
 class variable_name: public xformer {
 	const variable v;
 public:
@@ -548,7 +571,7 @@ public:
 		return v.name();
 	}
 
-	xformer* clone() const { return new variable_name(v); }
+	xformer* clone() const { return new variable_name(*this); }
 };
 
 class assign_depth {
@@ -565,20 +588,20 @@ public:
 
 struct parallel_for_op {
 	const symtbl& shared;
-	symset& cond;
+	symset& inductions;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
 	int unroll;
-	parallel_for_op(const symtbl& s, symset& c, sharedset& i, sharedset& o, sharedset& io, int u): 
-		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
+	parallel_for_op(const symtbl& s, symset& ind, sharedset& i, sharedset& o, sharedset& io, int u): 
+		shared(s), inductions(ind), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(ast_node& node)
 	{
 		// if unroll, need to change iteration parameters
 		if (node.value.id() == ids::identifier) {
 			string ident(node.value.begin(), node.value.end());
 			if (ident != "SPE_start" && ident != "SPE_stop") {
-				cond.insert(ident);
+				inductions.insert(ident);
 			}
 
 			if (unroll) {
@@ -593,7 +616,7 @@ struct parallel_for_op {
 		else if (node.value.id() == ids::compound) {
 			bind_gen_in lazy_in;
 			sharedset pre_out;
-			for_compound_op o(shared, cond, pre_out, lazy_in, NO_UNROLL);
+			for_compound_op o(shared, inductions, lazy_in, pre_out, NO_UNROLL);
 			for_all(node.children, &o);
 
 			// lazy_inout = intersection(lazy_in, pre_out)
@@ -627,10 +650,10 @@ struct parallel_for_op {
 			for_all(inout, assign_depth(3));
 
 			xformerlist& xformations = node.children.back().value.xformations;
-			append(xformations, fmap(make_gen_out(), inout));
-			append(xformations, fmap(make_gen_out(), out));
-			append(xformations, fmap(make_gen_final_out(), inout));
-			append(xformations, fmap(make_gen_final_out(), out));
+			append(xformations, fmap(make_unrollable<gen_out, shared_variable>(inductions), out));
+			append(xformations, fmap(make_unrollable<gen_out, shared_variable>(inductions), inout));
+			append(xformations, fmap(make_unrollable<gen_final_out, shared_variable>(inductions), out));
+			append(xformations, fmap(make_unrollable<gen_final_out, shared_variable>(inductions), inout));
 		}
 		else {
 			for_all(node.children, this);
@@ -638,21 +661,21 @@ struct parallel_for_op {
 	}
 };
 
-struct unroll_xformation {
+struct unroll_single {
 	const int unroll;
-	unroll_xformation(const int u): unroll(u) {}
+	unroll_single(const int u): unroll(u) {}
 	void operator()(xformer* xformer)
 	{
 		xformer->unroll_me(unroll);
 	}
 };
 
-struct transform_all {
+struct unroll_all {
 	const int unroll;
-	transform_all(const int u): unroll(u) {}
+	unroll_all(const int u): unroll(u) {}
 	void operator()(ast_node& node)
 	{
-		for_all(node.value.xformations, unroll_xformation(unroll));
+		for_all(node.value.xformations, unroll_single(unroll));
 		for_all(node.children, this);
 	}
 };
@@ -750,23 +773,23 @@ string var_increment(const string& old, const string var)
 	return old + "++" + var + ";";
 }
 
-struct cond_increment: public xformer {
-	symset cond;
-	cond_increment(symset c): cond(c) {}
+struct induction_increment: public xformer {
+	symset inductions;
+	induction_increment(const symset& i): inductions(i) {}
 	string operator()(const string& old)
 	{
-		return accumulate_all(cond, old, var_increment);
+		return accumulate_all(inductions, old, var_increment);
 	}
 
-	xformer* clone() const { return new cond_increment(cond); }
+	xformer* clone() const { return new induction_increment(*this); }
 };
 
 struct unroll_for_op {
 	const symtbl& shared;
-	symset& cond;
+	symset& inductions;
 	const int unroll;
-	unroll_for_op(const symtbl& s, symset& c, const int u): 
-		shared(s), cond(c), unroll(u) {}
+	unroll_for_op(const symtbl& s, symset& i, const int u): 
+		shared(s), inductions(i), unroll(u) {}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::expression_statement) {
@@ -776,18 +799,18 @@ struct unroll_for_op {
 			for_all(node.children, match_identifier("SPE_stop", new variable_name(unrolled)));
 		}
 		else if (node.value.id() == ids::postfix_expression) {
-			for (symset::iterator i = cond.begin(); i != cond.end(); ++i) {
+			for (symset::iterator i = inductions.begin(); i != inductions.end(); ++i) {
 				for_all(node.children, make_descend(wipeout_identifier(*i, node)));
 			}
 		}
 		else if (node.value.id() == ids::compound) {
-			for_all(node.children, transform_all(unroll));
+			for_all(node.children, unroll_all(unroll));
 
 			list<ast_node> to_copy;
 			for_all(node.children, copy_expressions(to_copy));
 
 			if (!to_copy.empty()) {
-				to_copy.front().value.xformations.push_back(new cond_increment(cond));
+				to_copy.front().value.xformations.push_back(new induction_increment(inductions));
 			}
 
 			// We copy it unroll-1 times because the first iteration
@@ -798,7 +821,7 @@ struct unroll_for_op {
 
 					// All "inner" iterations don't need any in/out xformations, 
 					// but the final iteration needs out xformations. The final node 
-					// of the final iteration needs an increment so the condition 
+					// of the final iteration needs an increment so the induction 
 					// variable is correct for the next iteration.
 					descend< remove_xforms<gen_in> >()(copy);
 					if (i < unroll - 2) {
@@ -806,7 +829,7 @@ struct unroll_for_op {
 						remove_xforms<gen_final_out>()(copy);
 					}
 					else if (next(j) == to_copy.end()) {
-						copy.value.xformations.push_front(new cond_increment(cond));
+						copy.value.xformations.push_front(new induction_increment(inductions));
 					}
 
 					node.children.insert(node.children.end() - 1, copy);
@@ -835,22 +858,22 @@ public:
 		return old + "compute_bounds(&SPE_start, &SPE_stop," + size + ");";
 	}
 
-	xformer* clone() const { return new compute_bounds(v); }
+	xformer* clone() const { return new compute_bounds(*this); }
 };
 
 struct compound {
 	const symtbl& shared;
-	symset& cond;
+	symset& inductions;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
 	int unroll;
-	compound(const symtbl& s, symset& c, sharedset& i, sharedset& o, sharedset& io, int u): 
-		shared(s), cond(c), in(i), out(o), inout(io), unroll(u) {}
+	compound(const symtbl& s, symset& ind, sharedset& i, sharedset& o, sharedset& io, int u): 
+		shared(s), inductions(ind), in(i), out(o), inout(io), unroll(u) {}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			parallel_for_op o(shared, cond, in, out, inout, unroll);
+			parallel_for_op o(shared, inductions, in, out, inout, unroll);
 			for_all(node.children, &o);
 		}
 		else {
@@ -872,14 +895,7 @@ struct reduction_assign: public xformer {
 		return "*" + v->name() + "=" + orig_adaptor(v).name() + "; \n" + old;
 	}
 
-	xformer* clone() const { return new reduction_assign(v); }
-};
-
-struct make_reduction_assign: unary_function<const reduction_variable*, xformer*> {
-	xformer* operator()(const reduction_variable* v)
-	{
-		return new reduction_assign(v);
-	}
+	xformer* clone() const { return new reduction_assign(*this); }
 };
 
 class init_buffers: public xformer {
@@ -899,14 +915,7 @@ public:
 			orig.name() + " = " + buff.name() + "[" + next.name() + "]; \n";
 	}
 
-	xformer* clone() const { return new init_buffers(v); }
-};
-
-struct make_init_buffers: public unary_function<const shared_variable*, xformer*> {
-	xformer* operator()(const shared_variable* v)
-	{
-		return new init_buffers(v);
-	}
+	xformer* clone() const { return new init_buffers(*this); }
 };
 	
 class in_init_buffers: public xformer {
@@ -927,14 +936,7 @@ public:
 				next.name() + ", 0, 0); \n";
 	}
 
-	xformer* clone() const { return new in_init_buffers(v); }
-};
-
-struct make_in_init_buffers: public unary_function<const shared_variable*, xformer*> {
-	xformer* operator()(const shared_variable* v)
-	{
-		return new in_init_buffers(v);
-	}
+	xformer* clone() const { return new in_init_buffers(*this); }
 };
 
 class init_private_buffers: public xformer {
@@ -961,14 +963,7 @@ public:
 		return old + ret;
 	}
 
-	xformer* clone() const { return new init_private_buffers(v); }
-};
-
-struct make_init_private_buffers: public unary_function<const private_variable*, xformer*> {
-	xformer* operator()(const private_variable* v)
-	{
-		return new init_private_buffers(v);
-	}
+	xformer* clone() const { return new init_private_buffers(*this); }
 };
 
 class unroll_boundaries: public xformer {
@@ -986,7 +981,7 @@ public:
 			epilouge.define() + ";";
 	}
 
-	xformer* clone() const { return new unroll_boundaries(unroll); }
+	xformer* clone() const { return new unroll_boundaries(*this); }
 };
 
 string remove_multop(const string& str)
@@ -1027,11 +1022,11 @@ struct cell_region {
 			for_all((*region)->priv(), assign_depth(1));
 
 			// We only support one for loop per cell_region & compound 
-			// statement, so we might as well define cond here and just 
+			// statement, so we might as well define inductions here and just 
 			// deal with supporting multiple loops in one region when it's 
 			// needed.
-			symset cond;
-			compound o((*region)->symbols(), cond,
+			symset inductions;
+			compound o((*region)->symbols(), inductions,
 					(*region)->in(), (*region)->out(), (*region)->inout(), 
 					(*region)->unroll());
 
@@ -1039,7 +1034,7 @@ struct cell_region {
 				ast_node::tree_iterator unroll_pos = for_all_duplicate(node.children, &o, is_for_loop);
 
 				if (unroll_pos != node.children.end()) {
-					unroll_for_op((*region)->symbols(), cond, (*region)->unroll())(*unroll_pos);
+					unroll_for_op((*region)->symbols(), inductions, (*region)->unroll())(*unroll_pos);
 				}
 			}
 			else {
@@ -1055,11 +1050,11 @@ struct cell_region {
 					inserter(combined, combined.begin()));
 			front_xforms.push_back(new compute_bounds((for_all(combined, max_buffer()).max)));
 
-			append(front_xforms, fmap(make_init_buffers(), (*region)->out()));
-			append(front_xforms, fmap(make_in_init_buffers(), (*region)->in()));
-			append(front_xforms, fmap(make_in_init_buffers(), (*region)->inout()));
-			append(front_xforms, fmap(make_init_private_buffers(), (*region)->priv()));
-			append(front_xforms, fmap(make_reduction_declare(), (*region)->reductions()));
+			append(front_xforms, fmap(make_xformer<init_buffers, shared_variable>(), (*region)->out()));
+			append(front_xforms, fmap(make_xformer<in_init_buffers, shared_variable>(), (*region)->in()));
+			append(front_xforms, fmap(make_xformer<in_init_buffers, shared_variable>(), (*region)->inout()));
+			append(front_xforms, fmap(make_xformer<init_private_buffers, private_variable>(), (*region)->priv()));
+			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
 
 			// Order matters; unroll_boundaries generates code that depends on 
 			// code generated from compute_bounds.
@@ -1068,7 +1063,7 @@ struct cell_region {
 			}
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
-			append(back_xforms, fmap(make_reduction_assign(), (*region)->reductions()));
+			append(back_xforms, fmap(make_xformer<reduction_assign, reduction_variable>(), (*region)->reductions()));
 
 			++region;
 		}

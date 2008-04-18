@@ -54,8 +54,10 @@ template <class O, class T>
 T inv_accumulate_all(const list<O*>& ops, T init)
 {
 	for (typename list<O*>::const_iterator i = ops.begin(); i != ops.end(); ++i) {
+		//cout << *i << ", ";
 		init = (*(*i))(init);
 	}
+	//if (ops.begin() != ops.end()) cout << endl;
 	return init;
 }
 

@@ -125,6 +125,8 @@ string mult_expr::next_iteration(const string& ivar) const
 	}
 }
 
+class ivar_not_found: public exception {};
+
 string mult_expr::factor(const string& ivar) const
 {
 	if (_lhs.str().find(ivar) != string::npos) {
@@ -134,7 +136,7 @@ string mult_expr::factor(const string& ivar) const
 		return _op + _lhs.str();
 	}
 	else {
-		return "";
+		throw ivar_not_found();
 	}
 }
 
@@ -155,25 +157,30 @@ string add_expr::next_iteration(const string& ivar) const
 	if (_lhs.str().find(_ivar) != string::npos) {
 		return _lhs.next_iteration(ivar);
 	}
-	else {
+	else if (_rhs.str().find(_ivar) != string::npos) {
 		return _rhs.next_iteration(ivar);
+	}
+	else {
+		throw ivar_not_found();
 	}
 }
 
 string add_expr::next_iteration() const
 {
 	assert(_ivar != "");
-	assert(_lhs.str().find(_ivar) != string::npos || _lhs.str().find(_ivar) != string::npos);
 	return next_iteration(_ivar);
 }
 
 string add_expr::factor() const
 {
 	if (_lhs.str().find(_ivar) != string::npos) {
-		return _op + _rhs.str();
+		return _lhs.factor(_ivar);
+	}
+	else if (_rhs.str().find(_ivar) != string::npos) {
+		return _rhs.factor(_ivar);
 	}
 	else {
-		return _op + _lhs.str();
+		throw ivar_not_found();
 	}
 }
 
