@@ -27,7 +27,34 @@ namespace ids {
 	static const int selection_statement = 21;
 	static const int additive_expression = 22;
 	static const int additive_expression_helper = 23;
-	static const int any_rule = INT_MAX;
+	static const int last = 23;
+
+	static const string __mappings[] = { "",
+		"identifier",
+		"declaration_list",
+		"declaration",
+		"array_index",
+		"argument_expression_list",
+		"postfix_expression_helper",
+		"postfix_expression",
+		"statement_list",
+		"statement",
+		"relational_expression",
+		"assignment_expression",
+		"expression_helper",
+		"expression",
+		"expression_statement",
+		"for_loop",
+		"compound",
+		"cell_region",
+		"int_constant_dec",
+		"multiplicative_expression",
+		"multiplicative_expression_helper",
+		"selection_statement",
+		"additive_expression",
+		"additive_expression_helper"
+	};
+	static const vector<string> mappings(&__mappings[0], &__mappings[last-1]);
 };
 
 #endif	// IDS_H

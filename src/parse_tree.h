@@ -79,14 +79,14 @@ typedef ast_match::tree_iterator			ast_iterator;
 typedef ast_match::container_t				ast;
 typedef ast_match::node_t				ast_node;
 
+#include "spe_region.h"
+
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
-	virtual void unroll_me(int u) {}
+	virtual void unroll_me(const symset& i, int u) {}
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 };
-
-#include "spe_region.h"
 
 const int NO_UNROLL = 0;
 
@@ -96,10 +96,13 @@ protected:
 	symset inductions;
 public:
 	unrollable_xformer(const symset& i): unroll(NO_UNROLL), inductions(i) {}
-	//unrollable_xformer(): unroll(NO_UNROLL) {}
-	virtual void unroll_me(int u)
+	virtual void unroll_me(const symset& other, int u)
 	{
-		unroll = u;
+		symset diff;
+		set_difference_all(inductions, other, inserter(diff, diff.begin()));
+		if (diff.empty()) {
+			unroll = u;
+		}
 	}
 };
 

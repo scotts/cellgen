@@ -29,71 +29,11 @@ public:
 	void operator()(const ast_node& node)
 	{
 		string rule = "";
-
-		if (     node.value.id() == ids::for_loop) { 
-			rule = "for_loop"; 
-		}
-		else if (node.value.id() == ids::identifier) { 
-			rule = "IDENTIFIER"; 
-		}
-		else if (node.value.id() == ids::array_index) { 
-			rule = "array_index"; 
-		}
-		else if (node.value.id() == ids::declaration) { 
-			rule = "declaration"; 
-		}
-		else if (node.value.id() == ids::cell_region) { 
-			rule = "cell_region"; 
-		}
-		else if (node.value.id() == ids::compound) { 
-			rule = "compound"; 
-		}
-		else if (node.value.id() == ids::postfix_expression) { 
-			rule = "postfix_expression"; 
-		}
-		else if (node.value.id() == ids::expression_statement) { 
-			rule = "expression_statement"; 
-		}
-		else if (node.value.id() == ids::expression) { 
-			rule = "expression"; 
-		}
-		else if (node.value.id() == ids::statement) { 
-			rule = "statement"; 
-		}
-		else if (node.value.id() == ids::declaration_list) { 
-			rule = "declaration_list"; 
-		}
-		else if (node.value.id() == ids::expression_helper) { 
-			rule = "expression_helper"; 
-		}
-		else if (node.value.id() == ids::relational_expression) { 
-			rule = "relational_expression"; 
-		}
-		else if (node.value.id() == ids::argument_expression_list) { 
-			rule = "argument_expression_list"; 
-		}
-		else if (node.value.id() == ids::postfix_expression_helper) { 
-			rule = "postfix_expression_helper"; 
-		}
-		else if (node.value.id() == ids::int_constant_dec) { 
-			rule = "int_constant_dec"; 
-		}
-		else if (node.value.id() == ids::multiplicative_expression) {
-			rule = "multiplicative_expression";
-		}
-		else if (node.value.id() == ids::multiplicative_expression_helper) {
-			rule = "multiplicative_expression_helper";
-		}
-		else if (node.value.id() == ids::additive_expression) {
-			rule = "additive_expression";
-		}
-		else if (node.value.id() == ids::additive_expression_helper) {
-			rule = "additive_expression_helper";
+		if (node.value.id() < ids::mappings.size()) {
+			rule = ids::mappings[node.value.id().to_long()];
 		}
 		else {
-			stringstream ss;
-			ss << node.value.id();
-			rule = ss.str();
+			rule = to_string<long>(node.value.id().to_long());
 		}
 
 		cout << tabs << level	<< ":" 

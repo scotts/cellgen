@@ -54,10 +54,8 @@ template <class O, class T>
 T inv_accumulate_all(const list<O*>& ops, T init)
 {
 	for (typename list<O*>::const_iterator i = ops.begin(); i != ops.end(); ++i) {
-		//cout << *i << ", ";
 		init = (*(*i))(init);
 	}
-	//if (ops.begin() != ops.end()) cout << endl;
 	return init;
 }
 
@@ -127,7 +125,7 @@ I next(I i)
 }
 
 template <class Container1, class Container2, class Out, class Comp>
-Out set_intersection_all(Container1& c1, Container2& c2, Out o, Comp co)
+Out set_intersection_all(const Container1& c1, const Container2& c2, Out o, Comp co)
 {
 	return set_intersection(c1.begin(), c1.end(),
 				c2.begin(), c2.end(),
@@ -142,8 +140,16 @@ Out set_intersection_all(Container1* c1, Container2* c2, Out o, Comp co)
 				o, co);
 }
 
+template <class Container1, class Container2, class Out>
+Out set_difference_all(const Container1& c1, const Container2& c2, Out o)
+{
+	return set_difference(c1.begin(), c1.end(),
+				c2.begin(), c2.end(),
+				o);
+}
+
 template <class Container1, class Container2, class Out, class Comp>
-Out set_difference_all(Container1& c1, Container2& c2, Out o, Comp co)
+Out set_difference_all(const Container1& c1, const Container2& c2, Out o, Comp co)
 {
 	return set_difference(c1.begin(), c1.end(),
 				c2.begin(), c2.end(),
@@ -159,7 +165,7 @@ Out set_difference_all(Container1* c1, Container2* c2, Out o)
 }
 
 template <class Container1, class Container2, class Out>
-Out set_union_all(Container1& c1, Container2& c2, Out o)
+Out set_union_all(const Container1& c1, const Container2& c2, Out o)
 {
 	return set_union(c1.begin(), c1.end(),
 			c2.begin(), c2.end(),
@@ -167,7 +173,7 @@ Out set_union_all(Container1& c1, Container2& c2, Out o)
 }
 
 template <class Container1, class Container2, class Container3, class Out>
-Out set_union_all(Container1& c1, Container2& c2, Container3& c3, Out o)
+Out set_union_all(const Container1& c1, const Container2& c2, const Container3& c3, Out o)
 {
 	typename Out::container_type temp1;
 	set_union_all(c1, c2, inserter(temp1, temp1.begin()));

@@ -311,7 +311,6 @@ struct handness {
 				// is a reduction of all the children.
 				node.children.clear(); 
 			}
-
 		}
 		else {
 			for_all(node.children, this);
@@ -391,11 +390,12 @@ typedef map<gen_in*, ast_node*, less_gen_in> bind_gen_in;
 struct serial_for_op {
 	const symtbl& shared;
 	symset inductions;
-	bind_gen_in& in;
+	sharedset& in;
 	sharedset& out;
+	sharedset& inout;
 
-	serial_for_op(const symtbl& s, const symset& ind, bind_gen_in& i, sharedset& o):
-		shared(s), inductions(ind), in(i), out(o) {}
+	serial_for_op(const symtbl& s, const symset& ind, sharedset& i, sharedset& o, sharedset& io):
+		shared(s), inductions(ind), in(i), out(o), inout(io) {}
 	void operator()(ast_node& node);
 };
 
@@ -403,13 +403,15 @@ struct serial_for_op {
 struct for_compound_op {
 	const symtbl& shared; 
 	const symset& inductions;
-	bind_gen_in& in;
+	bind_gen_in& lazy_in;
+	sharedset& in;
 	sharedset& out;
+	sharedset& inout;
 	int unroll;
 	sharedset seen;
 
-	for_compound_op(const symtbl& s, symset& ind, bind_gen_in& i, sharedset& o, int u): 
-		shared(s), inductions(ind), in(i), out(o), unroll(u)
+	for_compound_op(const symtbl& s, symset& ind, bind_gen_in& li, sharedset& i, sharedset& o, sharedset& io, int u): 
+		shared(s), inductions(ind), lazy_in(li), in(i), out(o), inout(io), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -421,13 +423,13 @@ struct for_compound_op {
 			// which variables are in, which are out, and which are inout
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
-					in.insert(bind_gen_in::value_type(new gen_in(*i, inductions), &node));
+					lazy_in.insert(bind_gen_in::value_type(new gen_in(*i, inductions), &node));
 					seen.insert(*i);
 				}
 			}
 		}
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(shared, inductions, in, out);
+			serial_for_op o(shared, inductions, in, out, inout);
 			for_all(node.children, &o);
 		}
 		else {
@@ -435,23 +437,6 @@ struct for_compound_op {
 		}
 	}
 };
-
-void serial_for_op::operator()(ast_node& node)
-{
-	if (node.value.id() == ids::identifier) {
-		// Note that inductions is local to serial_for_op; the induction 
-		// variables of enclosing scopes were copied in, yet those scopes 
-		// will remain ignorant of our induction variables.
-		inductions.insert(string(node.value.begin(), node.value.end()));
-	}
-	else if (node.value.id() == ids::compound) {
-		for_compound_op o(shared, inductions, in, out, NO_UNROLL);
-		for_all(node.children, &o);
-	}
-	else {
-		for_all(node.children, this);
-	}
-}
 
 struct gen_out: public unrollable_xformer {
 	const shared_variable* v;
@@ -545,23 +530,6 @@ struct make_unrollable: public unary_function<const V*, xformer*> {
 	}
 };
 
-struct bind_gen_in_void_less {
-	bool operator()(const void* v, const bind_gen_in::value_type& p)
-	{
-		return v < p.first->v;
-	}
-
-	bool operator()(const bind_gen_in::value_type& p, const void* v)
-	{
-		return p.first->v < v;
-	}
-
-	bool operator()(const bind_gen_in::value_type& a, const bind_gen_in::value_type& b)
-	{
-		return a.first->v < b.first->v;
-	}
-};
-
 class variable_name: public xformer {
 	const variable v;
 public:
@@ -585,6 +553,85 @@ public:
 		}
 	}
 };
+
+struct bind_gen_in_void_less {
+	bool operator()(const void* v, const bind_gen_in::value_type& p)
+	{
+		return v < p.first->v;
+	}
+
+	bool operator()(const bind_gen_in::value_type& p, const void* v)
+	{
+		return p.first->v < v;
+	}
+
+	bool operator()(const bind_gen_in::value_type& a, const bind_gen_in::value_type& b)
+	{
+		return a.first->v < b.first->v;
+	}
+};
+
+void serial_for_op::operator()(ast_node& node)
+{
+	if (node.value.id() == ids::identifier) {
+		// Note that inductions is local to serial_for_op; the induction 
+		// variables of enclosing scopes were copied in, yet those scopes 
+		// will remain ignorant of our induction variables.
+		inductions.insert(string(node.value.begin(), node.value.end()));
+	}
+	else if (node.value.id() == ids::compound) {
+		/*
+		for_compound_op o(shared, inductions, in, out, NO_UNROLL);
+		for_all(node.children, &o);
+		*/
+		bind_gen_in lazy_in;
+		sharedset pre_out;
+		for_compound_op o(shared, inductions, lazy_in, in, pre_out, inout, NO_UNROLL);
+		for_all(node.children, &o);
+
+		// lazy_inout = intersection(lazy_in, pre_out)
+		bind_gen_in lazy_inout;
+		set_intersection_all(lazy_in, pre_out, 
+				inserter(lazy_inout, lazy_inout.begin()), 
+				bind_gen_in_void_less());
+
+		// out = pre_out - lazy_inout
+		set_difference_all(pre_out, lazy_inout, 
+				inserter(out, out.begin()), 
+				bind_gen_in_void_less());
+
+		// diff_in = lazy_in - lazy_inout
+		bind_gen_in diff_in;
+		set_difference_all(lazy_in, lazy_inout, 
+				inserter(diff_in, diff_in.begin()), 
+				bind_gen_in_void_less());
+
+		// Lazily call gen_in on both in and inout variables.
+		for (bind_gen_in::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
+			i->second->value.xformations.push_back(i->first);
+			in.insert(i->first->v);
+		}
+
+		for (bind_gen_in::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
+			i->second->value.xformations.push_back(i->first);
+			inout.insert(i->first->v);
+		}
+
+		// Finally, we know what kind of buffers the variables need.
+		for_all(in, assign_depth(2));
+		for_all(out, assign_depth(2));
+		for_all(inout, assign_depth(3));
+
+		xformerlist& xformations = node.children.back().value.xformations;
+		append(xformations, fmap(make_unrollable<gen_out, shared_variable>(inductions), out));
+		append(xformations, fmap(make_unrollable<gen_out, shared_variable>(inductions), inout));
+		append(xformations, fmap(make_unrollable<gen_final_out, shared_variable>(inductions), out));
+		append(xformations, fmap(make_unrollable<gen_final_out, shared_variable>(inductions), inout));
+	}
+	else {
+		for_all(node.children, this);
+	}
+}
 
 struct parallel_for_op {
 	const symtbl& shared;
@@ -614,46 +661,16 @@ struct parallel_for_op {
 			}
 		}
 		else if (node.value.id() == ids::compound) {
-			bind_gen_in lazy_in;
-			sharedset pre_out;
-			for_compound_op o(shared, inductions, lazy_in, pre_out, NO_UNROLL);
-			for_all(node.children, &o);
-
-			// lazy_inout = intersection(lazy_in, pre_out)
-			bind_gen_in lazy_inout;
-			set_intersection_all(lazy_in, pre_out,
-					inserter(lazy_inout, lazy_inout.begin()), bind_gen_in_void_less());
-
-			// out = pre_out - lazy_inout
-			set_difference_all(pre_out, lazy_inout, 
-					inserter(out, out.begin()), bind_gen_in_void_less());
-
-			// diff_in = lazy_in - lazy_inout
-			bind_gen_in diff_in;
-			set_difference_all(lazy_in, lazy_inout, 
-					inserter(diff_in, diff_in.begin()), bind_gen_in_void_less());
-
-			// Lazily call gen_in on both in and inout variables.
-			for (bind_gen_in::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
-				i->second->value.xformations.push_back(i->first);
-				in.insert(i->first->v);
-			}
-
-			for (bind_gen_in::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
-				i->second->value.xformations.push_back(i->first);
-				inout.insert(i->first->v);
-			}
-
-			// Finally, we know what kind of buffers the variables need.
-			for_all(in, assign_depth(2));
-			for_all(out, assign_depth(2));
-			for_all(inout, assign_depth(3));
-
-			xformerlist& xformations = node.children.back().value.xformations;
-			append(xformations, fmap(make_unrollable<gen_out, shared_variable>(inductions), out));
-			append(xformations, fmap(make_unrollable<gen_out, shared_variable>(inductions), inout));
-			append(xformations, fmap(make_unrollable<gen_final_out, shared_variable>(inductions), out));
-			append(xformations, fmap(make_unrollable<gen_final_out, shared_variable>(inductions), inout));
+			// TODO: So... I think some of this is actually common to serial_for_op. I'll 
+			// need to figure out what happens to all for loops, and what happens to only 
+			// parallel for loops.
+			// ...
+			// So at the point of creating a gen_in, I know the inductions for that nested 
+			// loop. But the first point at which I can have access to both is here, 
+			// in parallel_for_op, after I've called them. So maybe once I've created the 
+			// xformations, I go through and change them. But at that point, do I need
+			// inductions to be contained in the xformation?
+			serial_for_op(shared, inductions, in, out, inout)(node);
 		}
 		else {
 			for_all(node.children, this);
@@ -662,20 +679,22 @@ struct parallel_for_op {
 };
 
 struct unroll_single {
+	const symset& inductions;
 	const int unroll;
-	unroll_single(const int u): unroll(u) {}
+	unroll_single(const symset& i, const int u): inductions(i), unroll(u) {}
 	void operator()(xformer* xformer)
 	{
-		xformer->unroll_me(unroll);
+		xformer->unroll_me(inductions, unroll);
 	}
 };
 
 struct unroll_all {
+	const symset& inductions;
 	const int unroll;
-	unroll_all(const int u): unroll(u) {}
+	unroll_all(const symset& i, const int u): inductions(i), unroll(u) {}
 	void operator()(ast_node& node)
 	{
-		for_all(node.value.xformations, unroll_single(unroll));
+		for_all(node.value.xformations, unroll_single(inductions, unroll));
 		for_all(node.children, this);
 	}
 };
@@ -804,7 +823,7 @@ struct unroll_for_op {
 			}
 		}
 		else if (node.value.id() == ids::compound) {
-			for_all(node.children, unroll_all(unroll));
+			for_all(node.children, unroll_all(inductions, unroll));
 
 			list<ast_node> to_copy;
 			for_all(node.children, copy_expressions(to_copy));

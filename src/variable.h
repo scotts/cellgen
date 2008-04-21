@@ -69,7 +69,6 @@ const string default_buff_size("80");
 
 class region_variable: public variable {
 	int region_num;
-	add_expr _math;
 	int _depth; // What type of buffering? Zero means scalar; support single, double and triple.
 
 public:
@@ -88,8 +87,6 @@ public:
 		return ss.str();
 	}
 
-	add_expr math() const { return _math; }
-	void math(add_expr m) { _math = m; }
 
 	int depth() const { return _depth; }
 	void depth(int d) { _depth = d; }
@@ -106,7 +103,9 @@ public:
 };
 
 class shared_variable: public region_variable {
+	add_expr _math;
 	list<string> _dimensions;	// Dimensions for multidimensional array
+
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
 		region_variable(t, l, a, r)
@@ -114,6 +113,9 @@ public:
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
 		region_variable(t, l, a, r), _dimensions(d)
 		{}
+
+	add_expr math() const { return _math; }
+	void math(add_expr m) { _math = m; }
 
 	virtual string name() const
 	{
