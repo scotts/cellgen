@@ -132,6 +132,14 @@ Out set_intersection_all(const Container1& c1, const Container2& c2, Out o, Comp
 				o, co);
 }
 
+template <class Container1, class Container2, class Out>
+Out set_intersection_all(const Container1& c1, const Container2& c2, Out o)
+{
+	return set_intersection(c1.begin(), c1.end(),
+				c2.begin(), c2.end(),
+				o);
+}
+
 template <class Container1, class Container2, class Out, class Comp>
 Out set_intersection_all(Container1* c1, Container2* c2, Out o, Comp co)
 {

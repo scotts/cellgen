@@ -390,33 +390,48 @@ typedef map<gen_in*, ast_node*, less_gen_in> bind_gen_in;
 struct serial_for_op {
 	const symtbl& shared;
 	symset inductions;
-	sharedset& in;
-	sharedset& out;
-	sharedset& inout;
+	sharedset in;
+	sharedset out;
+	sharedset inout;
 
-	serial_for_op(const symtbl& s, const symset& ind, sharedset& i, sharedset& o, sharedset& io):
-		shared(s), inductions(ind), in(i), out(o), inout(io) {}
+	serial_for_op(const symtbl& s, const symset& ind):
+		shared(s), inductions(ind) {}
 	void operator()(ast_node& node);
 };
 
+void print_variable(const variable* v)
+{
+	cout << v->name() << " ";
+}
+
+template <class T>
+struct erase_from_set: unary_function<T, void> {
+	set<T>& container;
+	erase_from_set(set<T>& c): container(c) {}
+	void operator()(T value)
+	{
+		container.erase(value);
+	}
+};
 
 struct for_compound_op {
 	const symtbl& shared; 
 	const symset& inductions;
 	bind_gen_in& lazy_in;
+	sharedset& pre_out;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
 	int unroll;
 	sharedset seen;
 
-	for_compound_op(const symtbl& s, symset& ind, bind_gen_in& li, sharedset& i, sharedset& o, sharedset& io, int u): 
-		shared(s), inductions(ind), lazy_in(li), in(i), out(o), inout(io), unroll(u)
+	for_compound_op(const symtbl& s, symset& ind, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, int u): 
+		shared(s), inductions(ind), lazy_in(li), pre_out(po), in(i), out(o), inout(io), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
-			expression_statement_op o(shared, inductions, out);
+			expression_statement_op o(shared, inductions, pre_out);
 			for_all(node.children, &o);
 
 			// Store the function object somewhere, and call it later once I know 
@@ -429,8 +444,20 @@ struct for_compound_op {
 			}
 		}
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(shared, inductions, in, out, inout);
+			serial_for_op o(shared, inductions);
 			for_all(node.children, &o);
+
+			// inout += o.inout + intersection(o.in + in, o.out + out)
+			in.insert(o.in.begin(), o.in.end());
+			out.insert(o.out.begin(), o.out.end());
+			inout.insert(o.inout.begin(), o.inout.end());
+			set_intersection_all(in, out, inserter(inout, inout.begin()));
+
+			// in -= inout
+			for_all(inout, erase_from_set<shared_variable*>(in));
+
+			// out -= inout
+			for_all(inout, erase_from_set<shared_variable*>(out));
 		}
 		else {
 			for_all(node.children, this);
@@ -573,6 +600,7 @@ struct bind_gen_in_void_less {
 
 void serial_for_op::operator()(ast_node& node)
 {
+
 	if (node.value.id() == ids::identifier) {
 		// Note that inductions is local to serial_for_op; the induction 
 		// variables of enclosing scopes were copied in, yet those scopes 
@@ -580,13 +608,9 @@ void serial_for_op::operator()(ast_node& node)
 		inductions.insert(string(node.value.begin(), node.value.end()));
 	}
 	else if (node.value.id() == ids::compound) {
-		/*
-		for_compound_op o(shared, inductions, in, out, NO_UNROLL);
-		for_all(node.children, &o);
-		*/
 		bind_gen_in lazy_in;
 		sharedset pre_out;
-		for_compound_op o(shared, inductions, lazy_in, in, pre_out, inout, NO_UNROLL);
+		for_compound_op o(shared, inductions, lazy_in, pre_out, in, out, inout, NO_UNROLL);
 		for_all(node.children, &o);
 
 		// lazy_inout = intersection(lazy_in, pre_out)
@@ -661,16 +685,20 @@ struct parallel_for_op {
 			}
 		}
 		else if (node.value.id() == ids::compound) {
-			// TODO: So... I think some of this is actually common to serial_for_op. I'll 
-			// need to figure out what happens to all for loops, and what happens to only 
-			// parallel for loops.
-			// ...
-			// So at the point of creating a gen_in, I know the inductions for that nested 
-			// loop. But the first point at which I can have access to both is here, 
-			// in parallel_for_op, after I've called them. So maybe once I've created the 
-			// xformations, I go through and change them. But at that point, do I need
-			// inductions to be contained in the xformation?
-			serial_for_op(shared, inductions, in, out, inout)(node);
+			serial_for_op o(shared, inductions);
+			o(node);
+
+			// inout += o.inout + intersection(o.in + in, o.out + out)
+			in.insert(o.in.begin(), o.in.end());
+			out.insert(o.out.begin(), o.out.end());
+			inout.insert(o.inout.begin(), o.inout.end());
+			set_intersection_all(in, out, inserter(inout, inout.begin()));
+
+			// in -= inout
+			for_all(inout, erase_from_set<shared_variable*>(in));
+
+			// out -= inout
+			for_all(inout, erase_from_set<shared_variable*>(out));
 		}
 		else {
 			for_all(node.children, this);
@@ -1062,13 +1090,7 @@ struct cell_region {
 
 			xformerlist& front_xforms = node.children.front().value.xformations;
 
-			// We're assuming here that all buffers have the same size, so 
-			// using any of (in ^ out ^ inout) should be valid.
-			sharedset combined;
-			set_union_all((*region)->in(), (*region)->out(), (*region)->inout(), 
-					inserter(combined, combined.begin()));
-			front_xforms.push_back(new compute_bounds((for_all(combined, max_buffer()).max)));
-
+			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer()).max)));
 			append(front_xforms, fmap(make_xformer<init_buffers, shared_variable>(), (*region)->out()));
 			append(front_xforms, fmap(make_xformer<in_init_buffers, shared_variable>(), (*region)->in()));
 			append(front_xforms, fmap(make_xformer<in_init_buffers, shared_variable>(), (*region)->inout()));
