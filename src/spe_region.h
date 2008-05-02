@@ -17,6 +17,7 @@ class spe_region {
 	string _reduction_op;
 	symtbl _symbols;
 	ast_node* _ast_root;
+	string _induction;
 	int _unroll;
 
 public:
@@ -39,6 +40,12 @@ public:
 
 	string reduction_op() const	{ return _reduction_op; }
 	int unroll() const		{ return _unroll; }
+	string induction() const	{ return _induction; }
+
+	void induction(const string& i)
+	{
+		_induction = i;
+	}
 
 	void ast_root(ast_node* a)
 	{

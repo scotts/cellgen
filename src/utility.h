@@ -29,6 +29,18 @@ F for_all(C* c, F f)
 	return for_each(c->begin(), c->end(), f);
 }
 
+template <class C, class P>
+typename C::const_iterator find_if_all(const C& c, P p)
+{
+	return find_if(c.begin(), c.end(), p);
+}
+
+template <class C, class P>
+typename C::iterator find_if_all(C& c, P p)
+{
+	return find_if(c.begin(), c.end(), p);
+}
+
 template <class C, class T, class F>
 T accumulate_all(C& c, T init, F f)
 {

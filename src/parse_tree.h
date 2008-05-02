@@ -83,26 +83,30 @@ typedef ast_match::node_t				ast_node;
 
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
-	virtual void unroll_me(const symset& i, int u) {}
+	virtual void unroll_me(int u) {}
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 };
 
 const int NO_UNROLL = 0;
 
-class unrollable_xformer: public xformer {
+class induction_xformer: public xformer {
+protected:
+	string induction;
+public:
+	induction_xformer(const string& i): induction(i) {}
+};
+
+class unrollable_xformer: public induction_xformer {
 protected:
 	int unroll;
-	symset inductions;
 public:
-	unrollable_xformer(const symset& i): unroll(NO_UNROLL), inductions(i) {}
-	virtual void unroll_me(const symset& other, int u)
+	unrollable_xformer(const string& i): induction_xformer(i), unroll(NO_UNROLL) {}
+	virtual void unroll_me(int u)
 	{
-		symset diff;
-		set_difference_all(inductions, other, inserter(diff, diff.begin()));
-		if (diff.empty()) {
-			unroll = u;
-		}
+		// TODO: Do I need to know induction information to determine if 
+		// unrolling needs to happen? I used to think so. Now I'm not sure.
+		unroll = u;
 	}
 };
 

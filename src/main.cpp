@@ -37,6 +37,7 @@ const string mmgp_h_iname		= path + "MMGP/" + mmgp_h_oname;
 const string mmgp_c_iname		= path + "MMGP/" + mmgp_c_oname;
 const string mmgp_spu_h_iname		= path + "MMGP/MMGP_spu.h";
 
+const string timing_h			= path + "timing.h";
 const string loop_hook			= "LOOP_ID";
 const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
@@ -230,15 +231,16 @@ public:
 
 class define_buff_size {
 	ostream& out;
+	const string& induction;
 	const int unroll;
 public:
-	define_buff_size(ostream& o, const int u): out(o), unroll(u) {}
+	define_buff_size(ostream& o, const string& i, const int u): out(o), induction(i), unroll(u) {}
 	void operator()(const shared_variable* v)
 	{
 		if (v->depth() > 0 ) {
 			string def;
 			if (unroll) {
-				def = "(" + to_string<int>(unroll) + v->math().factor() + ")";
+				def = "(" + to_string<int>(unroll) + v->math().factor(induction) + ")";
 			}
 			else {
 				def = default_buff_size;
@@ -261,8 +263,8 @@ public:
 	define_region_buff_sizes(ostream& o): out(o) {}
 	void operator()(spe_region* region)
 	{
-		for_all(region->priv(), define_buff_size(out, region->unroll()));
-		for_all(region->shared(), define_buff_size(out, region->unroll()));
+		for_all(region->priv(), define_buff_size(out, region->induction(), region->unroll()));
+		for_all(region->shared(), define_buff_size(out, region->induction(), region->unroll()));
 	}
 };
 
@@ -424,17 +426,20 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	no_dot.replace(pos, strlen(".cellgen"), "");
+	const string ppe_oname = no_dot + ".c";
+	const string spe_oname = "spu/" + no_dot + "_spe.c";
 
 	print_file(mmgp_h_iname, mmgp_h_oname, no_dot);
 	print_file(mmgp_c_iname, mmgp_c_oname, no_dot);
 
 	print_pass_struct(spe_regions);
-	print_ppe(no_dot + ".c", ppe_src_blocks, ppe_prolouge, ppe_fork, 
-			spe_regions);
-	print_spe("spu/" + no_dot + "_spe.c", spe_declarations, spe_main, 
-			spe_regions);
+	print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions);
+	print_spe(spe_oname, spe_declarations, spe_main, spe_regions);
 	
 	system(string("cp " + mmgp_spu_h_iname + " spu/").c_str());
+	system(string("cp " + timing_h + " spu/").c_str());
+
+	system(string("indent " + ppe_oname + " " + spe_oname).c_str());
 
 	return 0;
 }

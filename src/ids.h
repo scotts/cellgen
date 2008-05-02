@@ -27,7 +27,8 @@ namespace ids {
 	static const int selection_statement = 21;
 	static const int additive_expression = 22;
 	static const int additive_expression_helper = 23;
-	static const int last = 23;
+	static const int init_declarator = 24;
+	static const int last = 24;
 
 	static const string __mappings[] = { "",
 		"identifier",
@@ -52,9 +53,10 @@ namespace ids {
 		"multiplicative_expression_helper",
 		"selection_statement",
 		"additive_expression",
-		"additive_expression_helper"
+		"additive_expression_helper",
+		"init_declarator",
 	};
-	static const vector<string> mappings(&__mappings[0], &__mappings[last-1]);
+	static const vector<string> mappings(&__mappings[0], &__mappings[last+1]);
 };
 
 #endif	// IDS_H

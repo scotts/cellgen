@@ -154,8 +154,6 @@ void MMGP_init(int num_threads)
     /* SPEs will be enumerated from 1 to NUM_SPE+1 */
     NUM_SPE++;
 
-    TB = 14318000;
-
     MMGP_offload = &_empty;
     MMGP_create_threads = &_create_threads;
     MMGP_wait_SPE = &_wait_SPE;

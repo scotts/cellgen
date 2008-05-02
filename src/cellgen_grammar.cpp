@@ -32,9 +32,6 @@ public:
 		if (node.value.id() < ids::mappings.size()) {
 			rule = ids::mappings[node.value.id().to_long()];
 		}
-		else {
-			rule = to_string<long>(node.value.id().to_long());
-		}
 
 		cout << tabs << level	<< ":" 
 					<< string(node.value.begin(), node.value.end()) 
@@ -44,6 +41,21 @@ public:
 		for_all(node.children, astout(level + 1, tabs + "  "));
 	}
 };
+
+/*
+ * This is hackish, but I don't want to embed the entire grammar for 
+ * declarations here.
+ */
+bool is_type_word(const string& w)
+{
+	return	w == "unsigned" || w == "signed" || 
+		w == "char" || w == "char*" ||
+		w == "short" || w == "short*" ||
+		w == "int" || w == "int*" ||
+		w == "long" || w == "long*" ||
+		w == "float" || w == "float*" ||
+		w == "double" || w == "double*";
+}
 
 template <class T>
 class vars_op_base {
@@ -58,8 +70,22 @@ protected:
 			ss << *first++;
 		}
 
+		string temp;
+		string agg;
+		while (true) {
+			ss >> temp;
+			if (is_type_word(temp)) {
+				agg += temp + " ";
+			}
+			else {
+				break;
+			}
+		}
+		t = agg;
+		l = temp;
+
 		string equals;
-		ss >> t >> l >> equals >> d;
+		ss >> equals >> d;
 	}
 
 public:
@@ -435,7 +461,11 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 		cerr << "error: parse of " << src_name << " failed." << endl;
 		exit(-1);
 	}
-	
+
+	if (print_ast) {
+		for_all(p->trees, astout(0, ""));
+	}
+
 	traverse_ast(p->trees, spe_regions);
 
 	spelist::iterator s = spe_regions.begin();
@@ -444,10 +474,6 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 			(*s)->ast_root(&(*a));	
 			++s;
 		}
-	}
-
-	if (print_ast) {
-		for_all(p->trees, astout(0, ""));
 	}
 }
 

@@ -129,6 +129,7 @@ class ivar_not_found: public exception {};
 
 string mult_expr::factor(const string& ivar) const
 {
+	//cout << "\tmult_expr::factor(): " << _lhs.str() << endl;
 	if (_lhs.str().find(ivar) != string::npos) {
 		return _op + _rhs.str();
 	}
@@ -136,7 +137,8 @@ string mult_expr::factor(const string& ivar) const
 		return _op + _lhs.str();
 	}
 	else {
-		throw ivar_not_found();
+		// See comment in add_expr::factor().
+		return "";
 	}
 }
 
@@ -152,35 +154,33 @@ string add_expr::str() const
 
 string add_expr::next_iteration(const string& ivar) const
 {
-	// Not sure if ONLY doing the side with ivar works 
-	// in the general case.
-	if (_lhs.str().find(_ivar) != string::npos) {
+	if (_lhs.str().find(ivar) != string::npos) {
 		return _lhs.next_iteration(ivar);
 	}
-	else if (_rhs.str().find(_ivar) != string::npos) {
+	else if (_rhs.str().find(ivar) != string::npos) {
 		return _rhs.next_iteration(ivar);
 	}
 	else {
+		// Design decision: we're saying it's nonsense to ask 
+		// for the "next iteration" when the induction variable 
+		// is not in the expression.
 		throw ivar_not_found();
 	}
 }
 
-string add_expr::next_iteration() const
+string add_expr::factor(const string& ivar) const
 {
-	assert(_ivar != "");
-	return next_iteration(_ivar);
-}
-
-string add_expr::factor() const
-{
-	if (_lhs.str().find(_ivar) != string::npos) {
-		return _lhs.factor(_ivar);
+	//cout << "\tadd_expr::factor(): lhs " << _lhs.str() << ", rhs " << _rhs.str() << ", ivar " << ivar << endl;
+	if (_lhs.str().find(ivar) != string::npos) {
+		return _lhs.factor(ivar);
 	}
-	else if (_rhs.str().find(_ivar) != string::npos) {
-		return _rhs.factor(_ivar);
+	else if (_rhs.str().find(ivar) != string::npos) {
+		return _rhs.factor(ivar);
 	}
 	else {
-		throw ivar_not_found();
+		// Design decision: we're saying it's valid to call 
+		// factor() on an expression without an induction variable.
+		return "";
 	}
 }
 

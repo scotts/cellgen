@@ -59,17 +59,14 @@ public:
 	string factor(const string& ivar) const;
 };
 
-class ivar_not_set: public exception {};
-
 class add_expr {
 	mult_expr _lhs;
 	string _op;
 	mult_expr _rhs;
-	string _ivar;
 	
 public:
 	add_expr() {}
-	add_expr(const add_expr& o): _lhs(o._lhs), _op(o._op), _rhs(o._rhs), _ivar(o._ivar) {}
+	add_expr(const add_expr& o): _lhs(o._lhs), _op(o._op), _rhs(o._rhs) {}
 	add_expr(const mult_expr& m): _lhs(m) {}
 	add_expr(const mult_expr& l, const string& o, const mult_expr& r):
 		_lhs(l), _op(o), _rhs(r) {}
@@ -77,17 +74,14 @@ public:
 	void lhs(const mult_expr& e)	{ _lhs = e; }
 	void op(const string& o)	{ _op = o; }
 	void rhs(const mult_expr& e)	{ _rhs = e; }
-	void ivar(const string& i)	{ _ivar = i; }
 
 	mult_expr lhs() const	{ return _lhs; }
 	string op() const	{ return _op; }
 	mult_expr rhs() const	{ return _rhs; }
-	string ivar() const	{ return _ivar; }
 
 	string str() const;
 	string next_iteration(const string& ivar) const;
-	string next_iteration() const;
-	string factor() const;
+	string factor(const string& ivar) const;
 };
 
 #endif	// MULT_EXPR_H
