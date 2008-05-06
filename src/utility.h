@@ -71,23 +71,10 @@ T inv_accumulate_all(const list<O*>& ops, T init)
 	return init;
 }
 
-template <class C, class F, class P>
-typename C::iterator for_all_duplicate(C& c, F f, P pred)
+template <class C, class O>
+O copy_all(C& c, O o)
 {
-	for (typename C::iterator i = c.begin(); i != c.end(); ++i) {
-		f(*i);
-		if (pred(*i)) {
-			return c.insert(i, *i);
-		}
-	}
-
-	return c.end();
-}
-
-template <class C, class F, class P>
-typename C::iterator for_all_duplicate(C& c, F* f, P pred)
-{
-	return for_all_duplicate(c, *f, pred);
+	return copy(c.begin(), c.end(), o);
 }
 
 template <class S, class F>

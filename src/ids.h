@@ -1,7 +1,13 @@
 #ifndef IDS_H
 #define IDS_H
 
+#include <string>
 #include <limits>
+#include <utility>
+using namespace std;
+
+#include <boost/spirit/core/non_terminal/parser_id.hpp>
+using namespace boost::spirit;
 
 namespace ids {
 	static const int identifier = 1;
@@ -28,7 +34,10 @@ namespace ids {
 	static const int additive_expression = 22;
 	static const int additive_expression_helper = 23;
 	static const int init_declarator = 24;
-	static const int last = 24;
+	static const int declarator = 25;
+	static const int pointer = 26;
+	static const int declaration_specifiers = 27;
+	static const int last = 27;
 
 	static const string __mappings[] = { "",
 		"identifier",
@@ -55,8 +64,25 @@ namespace ids {
 		"additive_expression",
 		"additive_expression_helper",
 		"init_declarator",
+		"declarator",
+		"pointer",
+		"declaration_specifiers"
+		
 	};
-	static const vector<string> mappings(&__mappings[0], &__mappings[last+1]);
+	static const vector<string> mappings(__mappings, __mappings + last + 1);
+
+	inline string rule_string(const parser_id& i)
+	{
+		string rule;
+		if (i.to_long() < mappings.size()) {
+			rule = mappings[i.to_long()];
+		}
+		else {
+			rule = to_string<long>(i.to_long());
+		}
+
+		return rule;
+	}
 };
 
 #endif	// IDS_H

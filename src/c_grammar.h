@@ -1048,13 +1048,13 @@ struct c_grammar: public grammar<c_grammar> {
                 conditional_expression, conditional_expression_helper,
                 /*assignment_expression,*/ assignment_operator,
                 expression, expression_helper, constant_expression, /*declaration,*/
-                declaration_specifiers, init_declarator_list, /*init_declarator,*/
+                /*declaration_specifiers,*/ init_declarator_list, /*init_declarator,*/
                 storage_class_specifier, type_specifier, struct_or_union_specifier,
                 struct_or_union, struct_declaration_list, struct_declaration,
                 specifier_qualifier_list, struct_declarator_list,
                 struct_declarator, enum_specifier, enumerator_list, enumerator,
-                type_qualifier, declarator,
-                direct_declarator, direct_declarator_helper, pointer,
+                type_qualifier, /*declarator,*/
+                direct_declarator, direct_declarator_helper, /*pointer,*/
                 type_qualifier_list, parameter_type_list, parameter_list,
                 parameter_declaration, identifier_list, type_name,
                 abstract_declarator,
@@ -1084,6 +1084,9 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::additive_expression> > additive_expression;
 	rule<ScannerT, parser_tag<ids::additive_expression_helper> > additive_expression_helper;
 	rule<ScannerT, parser_tag<ids::init_declarator> > init_declarator;
+	rule<ScannerT, parser_tag<ids::declarator> > declarator;
+	rule<ScannerT, parser_tag<ids::pointer> > pointer;
+	rule<ScannerT, parser_tag<ids::declaration_specifiers> > declaration_specifiers;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

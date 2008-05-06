@@ -399,7 +399,7 @@ string parse_command_line(int argc, char* argv[])
 
 int main(int argc, char* argv[])
 {
-	string src_name = parse_command_line(argc, argv);
+	const string src_name = parse_command_line(argc, argv);
 
 	// Do all of the input and parsing.
 	sslist ppe_src_blocks;

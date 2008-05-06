@@ -36,22 +36,27 @@ xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
 	return *this;
 }
 
-bool is_constant(ast_node& node)
+bool is_constant(const ast_node& node)
 {
 	return node.value.id() == ids::int_constant_dec;
 }
 
-bool is_bracket(string s)
+bool is_declaration(const ast_node& node)
+{
+	return node.value.id() == ids::declaration;
+}
+
+bool is_bracket(const string& s)
 {
 	return s == ")" || s == "(" || s == "{" || s == "}" || s == "<" || s == ">" || s == "[" || s == "]";
 }
 
-bool is_multop(string s)
+bool is_multop(const string& s)
 {
 	return s == "*" || s == "/" || s == "%";
 }
 
-bool is_addop(string s)
+bool is_addop(const string& s)
 {
 	return s == "+" || s == "-";
 }
@@ -65,6 +70,13 @@ bool is_equals(const ast_node& node)
 {
 	string str(node.value.begin(), node.value.end());
 	return str.find("=") != string::npos;
+}
+
+bool is_type_specifier(const ast_node& node)
+{
+	string s(node.value.begin(), node.value.end());
+	return	s == "void" || s == "char" || s == "short" || s == "int" || s == "long" ||
+		s == "float" || s == "double" || s == "signed" || s == "unsigned";
 }
 
 add_expr make_add_expr(const list<string>& dimensions, const list<add_expr>& indices)
@@ -866,9 +878,6 @@ struct wipeout_identifier {
 				root.children.clear();
 			}
 		}
-		else {
-			for_all(node.children, this);
-		}
 	}
 };
 
@@ -881,6 +890,78 @@ struct variable_increment: public xformer {
 	}
 
 	xformer* clone() const { return new variable_increment(*this); }
+};
+
+struct wipeout_declarations {
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::declaration) {
+			node.value.xformations.push_back(new nop);
+			node.children.clear();
+		}
+	}
+};
+
+struct init_declarations_to_expressions {
+	void operator()(ast_node& node)
+	{
+		if (	node.value.id() == ids::declaration_specifiers || 
+			node.value.id() == ids::pointer || is_type_specifier(node))
+		{
+			node.value.xformations.push_back(new nop);
+			node.children.clear();
+		}
+	}
+};
+
+bool is_const_declaration(const ast_node& node)
+{
+	if (node.value.id() == ids::declaration_specifiers) {
+		if (node.children.empty()) {
+			return false;
+		}
+		const ast_node& front = node.children.front();
+		return "const" == string(front.value.begin(), front.value.end());
+	}
+	else {
+		for (ast_node::const_tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
+			if (is_const_declaration(*i)) {
+				return true;
+			}
+		}
+		return false;
+	}
+}
+
+bool is_pure_declaration(const ast_node& node)
+{
+	if (node.value.id() == ids::init_declarator) {
+		return false;
+	}
+	else {
+		for (ast_node::const_tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
+			if (!is_pure_declaration(*i)) {
+				return false;
+			}
+		}
+		return true;
+	}
+}
+
+struct wipeout_const_and_pure_declarations {
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::declaration) {
+			if (is_const_declaration(node) || is_pure_declaration(node)) {
+				node.value.xformations.push_back(new nop);
+				node.children.clear();
+			}
+
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
 };
 
 struct unroll_for_op {
@@ -904,7 +985,12 @@ struct unroll_for_op {
 			for_all(node.children, unroll_all(unroll));
 
 			list<ast_node> to_copy;
-			for_all(node.children, copy_expressions(to_copy));
+			//for_all(node.children, copy_expressions(to_copy));
+			copy_all(node.children, back_inserter(to_copy));
+
+			// First iteration doesn't need sending out stuff.
+			for_all(node.children, remove_xforms<gen_out>());
+			for_all(node.children, remove_xforms<gen_final_out>());
 
 			if (!to_copy.empty()) {
 				to_copy.front().value.xformations.push_back(new variable_increment(induction));
@@ -915,6 +1001,8 @@ struct unroll_for_op {
 			for (int i = 0; i < unroll - 1; ++i) {
 				for (list<ast_node>::iterator j = to_copy.begin(); j != to_copy.end(); ++j) {
 					ast_node copy = *j;
+					for_all(copy.children, wipeout_const_and_pure_declarations());
+					descend<init_declarations_to_expressions>()(copy);
 
 					// All "inner" iterations don't need any in/out xformations, 
 					// but the final iteration needs out xformations. The final node 
@@ -1117,6 +1205,25 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	}
 };
 
+template <class Pred>
+ast_node::tree_iterator find_and_duplicate(ast_node& node, Pred p)
+{
+	ast_node::tree_iterator i = find_if_all(node.children, p);
+	if (i != node.children.end()) {
+		return node.children.insert(i, *i);
+	}
+	else {
+		for (i = node.children.begin(); i != node.children.end(); ++i) {
+			ast_node::tree_iterator j = find_and_duplicate(*i, p);
+			if (j != i->children.end()) {
+				return j;
+			}
+		}
+	}
+
+	return node.children.end();
+}
+
 struct cell_region {
 	spelist::iterator region;
 
@@ -1127,20 +1234,18 @@ struct cell_region {
 			// Only depth we know before any tree traversal.
 			for_all((*region)->priv(), assign_depth(1));
 
+			// Assumption: one parallel induction variable.
 			string par_induction;
 			compound o((*region)->symbols(), par_induction,
 					(*region)->in(), (*region)->out(), (*region)->inout(), 
 					(*region)->unroll());
 
-			if ((*region)->unroll()) {
-				ast_node::tree_iterator unroll_pos = for_all_duplicate(node.children, &o, is_for_loop);
+			for_all(node.children, &o);
 
-				if (unroll_pos != node.children.end()) {
-					unroll_for_op((*region)->symbols(), par_induction, (*region)->unroll())(*unroll_pos);
-				}
-			}
-			else {
-				for_all(node.children, &o);
+			if ((*region)->unroll()) {
+				ast_node::tree_iterator unroll_pos = find_and_duplicate(node, is_for_loop);
+				assert(unroll_pos != node.children.end());
+				unroll_for_op((*region)->symbols(), par_induction, (*region)->unroll())(*unroll_pos);
 			}
 
 			xformerlist& front_xforms = node.children.front().value.xformations;

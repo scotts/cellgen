@@ -28,14 +28,9 @@ public:
 	astout(int l, string t): level(l), tabs(t) {}
 	void operator()(const ast_node& node)
 	{
-		string rule = "";
-		if (node.value.id() < ids::mappings.size()) {
-			rule = ids::mappings[node.value.id().to_long()];
-		}
-
 		cout << tabs << level	<< ":" 
 					<< string(node.value.begin(), node.value.end()) 
-					<< " [" << rule << "]" 
+					<< " [" << ids::rule_string(node.value.id()) << "]" 
 					<<  endl;
 
 		for_all(node.children, astout(level + 1, tabs + "  "));
