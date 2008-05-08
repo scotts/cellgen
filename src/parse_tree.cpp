@@ -911,6 +911,9 @@ struct init_declarations_to_expressions {
 			node.value.xformations.push_back(new nop);
 			node.children.clear();
 		}
+		else if (node.value.id() != ids::compound) { // new scopes can keep their declarations
+			for_all(node.children, this);
+		}
 	}
 };
 
@@ -958,7 +961,7 @@ struct wipeout_const_and_pure_declarations {
 			}
 
 		}
-		else {
+		else if (node.value.id() != ids::compound) { // new scopes can keep their declarations
 			for_all(node.children, this);
 		}
 	}
@@ -978,7 +981,7 @@ struct unroll_for_op {
 			descend< remove_xforms<variable_name> >()(node);
 			for_all(node.children, match_identifier("SPE_stop", new variable_name(unrolled)));
 		}
-		else if (node.value.id() == ids::postfix_expression) {
+		else if (node.value.id() == ids::postfix_expression || node.value.id() == ids::unary_expression) {
 			for_all(node.children, make_descend(wipeout_identifier(induction, node)));
 		}
 		else if (node.value.id() == ids::compound) {
@@ -1002,7 +1005,7 @@ struct unroll_for_op {
 				for (list<ast_node>::iterator j = to_copy.begin(); j != to_copy.end(); ++j) {
 					ast_node copy = *j;
 					for_all(copy.children, wipeout_const_and_pure_declarations());
-					descend<init_declarations_to_expressions>()(copy);
+					for_all(copy.children, init_declarations_to_expressions());
 
 					// All "inner" iterations don't need any in/out xformations, 
 					// but the final iteration needs out xformations. The final node 

@@ -1033,7 +1033,7 @@ struct c_grammar: public grammar<c_grammar> {
     // nonterminals
         rule<ScannerT>
                 primary_expression, /*postfix_expression,*/ /*postfix_expression_helper,*/
-                /*argument_expression_list,*/ unary_expression, unary_operator,
+                /*argument_expression_list,*/ /*unary_expression,*/ unary_operator,
                 cast_expression,
                 /*multiplicative_expression,*/ /*multiplicative_expression_helper,*/
                 /*additive_expression,*/ /*additive_expression_helper,*/
@@ -1087,6 +1087,7 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::declarator> > declarator;
 	rule<ScannerT, parser_tag<ids::pointer> > pointer;
 	rule<ScannerT, parser_tag<ids::declaration_specifiers> > declaration_specifiers;
+	rule<ScannerT, parser_tag<ids::unary_expression> > unary_expression;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

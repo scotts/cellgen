@@ -37,7 +37,8 @@ namespace ids {
 	static const int declarator = 25;
 	static const int pointer = 26;
 	static const int declaration_specifiers = 27;
-	static const int last = 27;
+	static const int unary_expression = 28;
+	static const int last = 28;
 
 	static const string __mappings[] = { "",
 		"identifier",
@@ -66,7 +67,8 @@ namespace ids {
 		"init_declarator",
 		"declarator",
 		"pointer",
-		"declaration_specifiers"
+		"declaration_specifiers",
+		"unary_expression"
 		
 	};
 	static const vector<string> mappings(__mappings, __mappings + last + 1);
