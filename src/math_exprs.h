@@ -45,11 +45,13 @@ public:
 
 	void lhs(const string& s)	{ _lhs = s; }
 	void lhs(add_expr* a)		{ _lhs = a; }
+	void lhs(const paren_expr& p)	{ _lhs = p; }
 
 	void op(const string& s)	{ _op = s; }
 
 	void rhs(const string& s)	{ _rhs = s; }
 	void rhs(add_expr* a)		{ _rhs = a; }
+	void rhs(const paren_expr& p)	{ _rhs = p; }
 
 	void build_lhs(const string& s) { _lhs += s; }
 	void build_rhs(const string& s) { _rhs += s; }

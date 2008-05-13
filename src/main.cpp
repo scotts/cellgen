@@ -159,7 +159,7 @@ void print_file(const string& ifile_name, const string& ofile_name, const string
 	ofstream ofile(ofile_name.c_str());
 	open_check(ofile, ofile_name);
 	ofile << regex_replace(regex_replace(ss.str(), regex(program_name_hook), program_name),
-			regex(num_threads_hook), to_string<int>(num_threads));
+			regex(num_threads_hook), to_string(num_threads));
 }
 
 class define_pass_struct {
@@ -233,14 +233,21 @@ class define_buff_size {
 	ostream& out;
 	const string& induction;
 	const int unroll;
+	const int buffer;
 public:
-	define_buff_size(ostream& o, const string& i, const int u): out(o), induction(i), unroll(u) {}
+	define_buff_size(ostream& o, const string& i, const int u, const int b):
+		out(o), induction(i), unroll(u), buffer(b) {}
 	void operator()(const shared_variable* v)
 	{
 		if (v->depth() > 0 ) {
 			string def;
-			if (unroll) {
-				def = "(" + to_string<int>(unroll) + v->math().factor(induction) + ")";
+
+			// User specified buffer overrides fitting buffer to unrolling
+			if (buffer) {
+				def = "(" + to_string(buffer) + ")";
+			}
+			else if (unroll) {
+				def = "(" + to_string(unroll) + v->math().factor(induction) + ")";
 			}
 			else {
 				def = default_buff_size;
@@ -263,8 +270,8 @@ public:
 	define_region_buff_sizes(ostream& o): out(o) {}
 	void operator()(spe_region* region)
 	{
-		for_all(region->priv(), define_buff_size(out, region->induction(), region->unroll()));
-		for_all(region->shared(), define_buff_size(out, region->induction(), region->unroll()));
+		for_all(region->priv(), define_buff_size(out, region->induction(), region->unroll(), region->buffer()));
+		for_all(region->shared(), define_buff_size(out, region->induction(), region->unroll(), region->buffer()));
 	}
 };
 
@@ -300,7 +307,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 		file << (*b)->str();
 		if (++b != blocks.end()) {
 
-			string id = to_string<int>(loop_num++);
+			string id = to_string(loop_num++);
 
 			stringstream passes;
 			for_all((*r)->priv(), pass_assign(passes));

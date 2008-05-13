@@ -80,7 +80,7 @@ namespace ids {
 			rule = mappings[i.to_long()];
 		}
 		else {
-			rule = to_string<long>(i.to_long());
+			rule = to_string(i.to_long());
 		}
 
 		return rule;

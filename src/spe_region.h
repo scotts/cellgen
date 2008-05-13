@@ -19,12 +19,15 @@ class spe_region {
 	ast_node* _ast_root;
 	string _induction;
 	int _unroll;
+	int _buffer;
+	bool _dma_unroll;
 
 public:
-	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const symtbl& sy, int u):
-		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _symbols(sy), _unroll(u)
+	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const symtbl& sy, int u, int b, bool d):
+		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _symbols(sy), _unroll(u), _buffer(b), _dma_unroll(d)
 	{
 		assert(_unroll >= 0);
+		assert(_buffer >= 0);
 		if (_reductions.size() > 0) {
 			assert(_reduction_op != "");
 		}
@@ -40,6 +43,8 @@ public:
 
 	string reduction_op() const	{ return _reduction_op; }
 	int unroll() const		{ return _unroll; }
+	int buffer() const		{ return _buffer; }
+	bool dma_unroll() const		{ return _dma_unroll; }
 	string induction() const	{ return _induction; }
 
 	void induction(const string& i)

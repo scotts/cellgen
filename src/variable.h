@@ -8,6 +8,7 @@
 #include <sstream>
 using namespace std;
 
+#include "utility.h"
 #include "math_exprs.h"
 
 const string pass_var = "pass";
@@ -79,14 +80,12 @@ public:
 
 	virtual string name() const
 	{
-		stringstream ss;
-		ss << variable::name();
+		string region;
 		if (region_num > 0) {
-			ss << region_num;
+			region = to_string(region_num);
 		}
-		return ss.str();
+		return variable::name() + region;
 	}
-
 
 	int depth() const { return _depth; }
 	void depth(int d) { _depth = d; }
@@ -119,9 +118,7 @@ public:
 
 	virtual string name() const
 	{
-		stringstream ss;
-		ss << region_variable::name() << "_adr";
-		return ss.str(); 
+		return region_variable::name() + "_adr"; 
 	}
 
 	list<string> dimensions() const { return _dimensions; }
@@ -180,9 +177,7 @@ public:
 
 	string depth() const
 	{
-		stringstream ss;
-		ss << v->depth();
-		return ss.str();
+		return to_string(v->depth());
 	}
 
 	string size() const

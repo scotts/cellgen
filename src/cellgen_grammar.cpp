@@ -1,6 +1,7 @@
 #include <list>
 #include <iostream>
 #include <sstream>
+#include <typeinfo>
 using namespace std;
 
 #undef BOOST_SPIRIT_THREADSAFE // performance optimization
@@ -20,6 +21,11 @@ using namespace boost::spirit;
 const c_compound_grammar c_compound;
 const skip_grammar skip;
 
+void print_xform_names(xformer* x)
+{
+	cout << x->class_name() << " ";
+}
+
 class astout {
 	int level;
 	string tabs;
@@ -30,8 +36,10 @@ public:
 	{
 		cout << tabs << level	<< ":" 
 					<< string(node.value.begin(), node.value.end()) 
-					<< " [" << ids::rule_string(node.value.id()) << "]" 
-					<<  endl;
+					<< " [" << ids::rule_string(node.value.id()) << "]";
+		cout << " ( ";
+		for_all(node.value.xformations, print_xform_names);
+		cout << ")" << endl;
 
 		for_all(node.children, astout(level + 1, tabs + "  "));
 	}
@@ -253,12 +261,14 @@ struct create_spe_region {
 	vars_op<reduction_variable>&	reduce_def_op;
 	scalar_op<string>&		reduce_op_op;
 	scalar_op<int>&			unroll_op;
+	scalar_op<int>&			buffer_op;
+	scalar_op<bool>&		dma_unroll_op;
 
 	create_spe_region(spelist& r, vars_op<private_variable>& p, 
 			vars_op<shared_variable>& s, vars_op<reduction_variable>& rd, 
-			scalar_op<string>& ro, scalar_op<int>& uo):
+			scalar_op<string>& ro, scalar_op<int>& uo, scalar_op<int>& bo, scalar_op<bool>& d):
 		regions(r), priv_op(p), shared_op(s), 
-		reduce_def_op(rd), reduce_op_op(ro), unroll_op(uo)
+		reduce_def_op(rd), reduce_op_op(ro), unroll_op(uo), buffer_op(bo), dma_unroll_op(d)
 		{}
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -267,7 +277,10 @@ struct create_spe_region {
 						reduce_def_op.pickup_vars(),
 						reduce_op_op.pickup(),
 						shared_op.pickup_symbols(),
-						unroll_op.pickup());
+						unroll_op.pickup(),
+						buffer_op.pickup(),
+						dma_unroll_op.pickup()
+						);
 		regions.push_back(r);
 	}
 };
@@ -276,6 +289,15 @@ struct create_spe_region {
  * 3: Allow program to start with cell region.
  */
 struct cellgen_grammar: public grammar<cellgen_grammar> {
+	privset		privs;
+	sharedset	shared;
+	reduceset	reduces;
+	symtbl		symbols;
+	string		op;
+	int		unroll;
+	int		buffer;
+	bool		dma_unroll;
+
 	push_back_op<sslist>		ppe_op;
 	vars_op<private_variable>	priv_op;
 	assign_var<private_variable>	start_op;
@@ -284,16 +306,12 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	vars_op<reduction_variable>	reduce_def_op;
 	scalar_op<string>		reduce_op_op;
 	scalar_op<int>			unroll_op;
+	scalar_op<int>			buffer_op;
+	scalar_op<bool>			dma_unroll_op;
 	create_spe_region		region_op;
 
-	privset privs;
-	sharedset shared;
-	reduceset reduces;
-	symtbl symbols;
-	string op;
-	int unroll;
-
 	cellgen_grammar(sslist& ppe, spelist& regions):
+		unroll(0), buffer(0), dma_unroll(false),
 		ppe_op(ppe),
 		priv_op(privs, regions),
 		start_op(priv_op, "SPE_start"),
@@ -302,12 +320,16 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		reduce_def_op(reduces, regions),
 		reduce_op_op(op),
 		unroll_op(unroll),
+		buffer_op(buffer),
+		dma_unroll_op(dma_unroll),
 		region_op(regions,
 			priv_op, 
 			shared_op,
 			reduce_def_op,
 			reduce_op_op,
-			unroll_op)
+			unroll_op,
+			buffer_op,
+			dma_unroll_op)
 		{}
 
 	template <typename ScannerT>
@@ -318,7 +340,9 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			start_code, start_priv, stop_code, stop_priv,
 			priv_code, priv_list, priv_dec, priv_dec_f,
 			shared_code, shared_list, shared_dec, shared_dec_f,
-			unrolled_code, unroll_num;
+			unrolled_code, unroll_num,
+			buffer_code, buffer_num,
+			dma_unroll_code, dma_val;
 
 		rule<ScannerT, parser_tag<ids::cell_region> >
 			pragma_code;
@@ -349,7 +373,10 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			| 	stop_code
 			|	reduction
 			| 	shared_code
-			|	unrolled_code;
+			|	unrolled_code
+			|	buffer_code
+			|	dma_unroll_code
+			;
 
 			start_code = 
 				no_node_d[strlit<>("SPE_start(")] >> start_priv >> no_node_d[chlit<>(')')];
@@ -432,9 +459,16 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			unrolled_code = 
 				no_node_d[strlit<>("unroll(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
 
-			unroll_num = no_node_d[
-				int_p
-				];
+			unroll_num = no_node_d[int_p];
+
+			buffer_code =
+				no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
+
+			buffer_num = no_node_d[int_p];
+
+			dma_unroll_code = no_node_d[strlit<>("dma_unroll(")] >> dma_val[self.dma_unroll_op] >> no_node_d[chlit<>(')')];
+
+			dma_val = no_node_d[int_p];
 		}
 	};
 };
@@ -443,7 +477,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 {
 	fileiter first(src_name);
 	if (!first) {
-		cout << "Unable to open " << src_name << endl;
+		cerr << "Unable to open " << src_name << endl;
 		exit(-1);
 	}
 	fileiter last = first.make_end();
@@ -457,11 +491,11 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
 		exit(-1);
 	}
 
+	traverse_ast(p->trees, spe_regions);
+
 	if (print_ast) {
 		for_all(p->trees, astout(0, ""));
 	}
-
-	traverse_ast(p->trees, spe_regions);
 
 	spelist::iterator s = spe_regions.begin();
 	for (ast_iterator a = (*p->trees.begin()).children.begin(); a != (*p->trees.begin()).children.end(); ++a) {

@@ -17,7 +17,6 @@ using namespace boost;
 #include "spe_region.h"
 #include "utility.h"
 
-
 xformerlist_data::xformerlist_data(const xformerlist_data& o): char_data(o)
 {
 	for (xformerlist::const_iterator i = o.xformations.begin(); i != o.xformations.end(); ++i) {
@@ -29,6 +28,7 @@ xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
 {
 	char_data::operator=(rhs);
 
+	xformations.clear();
 	for (xformerlist::const_iterator i = rhs.xformations.begin(); i != rhs.xformations.end(); ++i) {
 		xformations.push_back((*i)->clone());
 	}
@@ -132,6 +132,7 @@ public:
 	}
 
 	xformer* clone() const { return new to_buffer_space(*this); }
+	string class_name() const { return "to_buffer_space"; }
 };
 
 struct mult_op {
@@ -148,25 +149,41 @@ struct mult_op {
 	{
 		string val(node.value.begin(), node.value.end());
 
-		if (node.value.id() == ids::identifier) {
-			if (inductions.find(val) != inductions.end()) {
-				id = val;
-				found_induction = true;
+		if (node.value.id() == ids::multiplicative_expression) {
+			mult_expr m;
+			mult_op o(inductions, found_induction, m, id);
+			for_all(node.children, &o);
+
+			paren_expr p(new add_expr(m));
+			if (!found_op) {
+				mult.lhs(p);
+			}
+			else {
+				mult.rhs(p);
 			}
 		}
-
-		if (is_multop(val)) {
+		else if (is_multop(val)) {
 			mult.op(val);
 			found_op = true;
 		}
-		else if (!found_op) {
-			mult.build_lhs(val);
+		else if (node.value.id() == ids::identifier || is_constant(node)) {
+			if (node.value.id() == ids::identifier) {
+				if (inductions.find(val) != inductions.end()) {
+					id = val;
+					found_induction = true;
+				}
+			}
+
+			if (!found_op) {
+				mult.build_lhs(val);
+			}
+			else {
+				mult.build_rhs(val);
+			}
 		}
 		else {
-			mult.build_rhs(val);
+			for_all(node.children, this);
 		}
-
-		for_all(node.children, this);
 	}
 };
 
@@ -376,6 +393,7 @@ struct gen_in: public unrollable_xformer {
 	}
 
 	xformer* clone() const { return new gen_in(*this); }
+	string class_name() const { return "gen_in"; }
 };
 
 struct less_gen_in {
@@ -429,7 +447,7 @@ struct serial_for_op {
 
 void print_variable(const variable* v)
 {
-	cout << v->name() << " ";
+	cout << v->name() << "(" << v << ") ";
 }
 
 pair<ast_iterator, ast_node*> find_equals(ast_node& node)
@@ -562,6 +580,7 @@ struct gen_out: public unrollable_xformer {
 	}
 
 	xformer* clone() const { return new gen_out(*this); }
+	string class_name() const { return "gen_out"; }
 };
 
 struct gen_final_out: public unrollable_xformer {
@@ -593,6 +612,7 @@ struct gen_final_out: public unrollable_xformer {
 	}
 
 	xformer* clone() const { return new gen_final_out(*this); }
+	string class_name() const { return "gen_final_out"; }
 };
 
 class reduction_declare: public xformer {
@@ -605,6 +625,7 @@ public:
 	}
 
 	xformer* clone() const { return new reduction_declare(*this); }
+	string class_name() const { return "reduction_declare"; }
 };
 
 template <class X, class V>
@@ -638,6 +659,7 @@ public:
 	}
 
 	xformer* clone() const { return new variable_name(*this); }
+	string class_name() const { return "variable_name"; }
 };
 
 class assign_depth {
@@ -710,11 +732,6 @@ void serial_for_op::operator()(ast_node& node)
 			i->second->value.xformations.push_back(i->first);
 			inout.insert(i->first->v);
 		}
-
-		// Finally, we know what kind of buffers the variables need.
-		for_all(in, assign_depth(2));
-		for_all(out, assign_depth(2));
-		for_all(inout, assign_depth(3));
 	}
 	else {
 		for_all(node.children, this);
@@ -819,28 +836,13 @@ struct remove_xforms {
 	}
 };
 
-struct copy_expressions {
-	list<ast_node>& nodes;
-	copy_expressions(list<ast_node>& n): nodes(n) {}
-	void operator()(ast_node& node)
-	{
-		if (!has_declaration(node)) {
-			nodes.push_back(node);
-
-			// This is the first unrolled section, so we don't need 
-			// any of the sending stuff.
-			remove_xforms<gen_out>()(node);
-			remove_xforms<gen_final_out>()(node);
-		}
-	}
-};
-
 struct nop: public xformer {
 	string operator()(const string&)
 	{
 		return "";
 	}
 	xformer* clone() const { return new nop; }
+	string class_name() const { return "nop"; }
 };
 
 struct match_identifier {
@@ -890,6 +892,7 @@ struct variable_increment: public xformer {
 	}
 
 	xformer* clone() const { return new variable_increment(*this); }
+	string class_name() const { return "variable_increment"; }
 };
 
 struct wipeout_declarations {
@@ -971,8 +974,9 @@ struct unroll_for_op {
 	const symtbl& shared;
 	const string& induction;
 	const int unroll;
-	unroll_for_op(const symtbl& s, const string& i, const int u): 
-		shared(s), induction(i), unroll(u) {}
+	const bool dma_unroll;
+	unroll_for_op(const symtbl& s, const string& i, const int u, const bool d): 
+		shared(s), induction(i), unroll(u), dma_unroll(d) {}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::expression_statement) {
@@ -988,7 +992,6 @@ struct unroll_for_op {
 			for_all(node.children, unroll_all(unroll));
 
 			list<ast_node> to_copy;
-			//for_all(node.children, copy_expressions(to_copy));
 			copy_all(node.children, back_inserter(to_copy));
 
 			// First iteration doesn't need sending out stuff.
@@ -996,6 +999,7 @@ struct unroll_for_op {
 			for_all(node.children, remove_xforms<gen_final_out>());
 
 			if (!to_copy.empty()) {
+				// front or back?
 				to_copy.front().value.xformations.push_back(new variable_increment(induction));
 			}
 
@@ -1011,9 +1015,13 @@ struct unroll_for_op {
 					// but the final iteration needs out xformations. The final node 
 					// of the final iteration needs an increment so the induction 
 					// variable is correct for the next iteration.
-					descend< remove_xforms<gen_in> >()(copy);
+					if (!dma_unroll) {
+						descend< remove_xforms<gen_in> >()(copy);
+					}
 					if (i < unroll - 2) {
-						remove_xforms<gen_out>()(copy);
+						if (!dma_unroll) {
+							remove_xforms<gen_out>()(copy);
+						}
 						remove_xforms<gen_final_out>()(copy);
 					}
 					else if (next(j) == to_copy.end()) {
@@ -1047,6 +1055,7 @@ public:
 	}
 
 	xformer* clone() const { return new compute_bounds(*this); }
+	string class_name() const { return "compute_bounds"; }
 };
 
 struct compound {
@@ -1090,6 +1099,7 @@ struct reduction_assign: public xformer {
 	}
 
 	xformer* clone() const { return new reduction_assign(*this); }
+	string class_name() const { return "reduction_assign"; }
 };
 
 class init_buffers: public xformer {
@@ -1110,6 +1120,7 @@ public:
 	}
 
 	xformer* clone() const { return new init_buffers(*this); }
+	string class_name() const { return "init_buffers"; }
 };
 	
 class in_init_buffers: public induction_xformer {
@@ -1122,8 +1133,6 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		//cout << v->name() << ": " << v->math().str() << endl;
-
 		return	init_buffers(v)(old) +
 			"mfc_get(" +
 				buff.name() + "[" + next.name() + "], " 
@@ -1133,6 +1142,7 @@ public:
 	}
 
 	xformer* clone() const { return new in_init_buffers(*this); }
+	string class_name() const { return "in_init_buffers"; }
 };
 
 class init_private_buffers: public xformer {
@@ -1160,6 +1170,7 @@ public:
 	}
 
 	xformer* clone() const { return new init_private_buffers(*this); }
+	string class_name() const { return "init_private_buffers"; }
 };
 
 class unroll_boundaries: public xformer {
@@ -1178,6 +1189,7 @@ public:
 	}
 
 	xformer* clone() const { return new unroll_boundaries(*this); }
+	string class_name() const { return "unroll_boundaries"; }
 };
 
 string remove_multop(const string& str)
@@ -1234,8 +1246,6 @@ struct cell_region {
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::compound) {
-			// Only depth we know before any tree traversal.
-			for_all((*region)->priv(), assign_depth(1));
 
 			// Assumption: one parallel induction variable.
 			string par_induction;
@@ -1245,10 +1255,15 @@ struct cell_region {
 
 			for_all(node.children, &o);
 
+			for_all((*region)->priv(), assign_depth(1));
+			for_all((*region)->in(), assign_depth(2));
+			for_all((*region)->out(), assign_depth(2));
+			for_all((*region)->inout(), assign_depth(3));
+
 			if ((*region)->unroll()) {
 				ast_node::tree_iterator unroll_pos = find_and_duplicate(node, is_for_loop);
 				assert(unroll_pos != node.children.end());
-				unroll_for_op((*region)->symbols(), par_induction, (*region)->unroll())(*unroll_pos);
+				unroll_for_op((*region)->symbols(), par_induction, (*region)->unroll(), (*region)->dma_unroll())(*unroll_pos);
 			}
 
 			xformerlist& front_xforms = node.children.front().value.xformations;

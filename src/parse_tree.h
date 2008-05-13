@@ -86,6 +86,7 @@ struct xformer: public unary_function<const string&, string> {
 	virtual void unroll_me(int u) {}
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
+	virtual string class_name() const = 0; // For debugging purposes only.
 };
 
 const int NO_UNROLL = 0;
