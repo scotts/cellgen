@@ -137,6 +137,7 @@ struct c_grammar: public grammar<c_grammar> {
             TYPEDEF =    strlit<>("typedef");
             UNION =      strlit<>("union");
             UNSIGNED =   strlit<>("unsigned");
+	    VECTOR =     strlit<>("vector");
             VOID =       strlit<>("void");
             VOLATILE =   strlit<>("volatile");
             WHILE =      strlit<>("while");
@@ -747,6 +748,7 @@ struct c_grammar: public grammar<c_grammar> {
                 | DOUBLE
                 | SIGNED
                 | UNSIGNED
+		| VECTOR
                 | struct_or_union_specifier
                 | enum_specifier
         //        | TYPE_NAME
@@ -1028,7 +1030,7 @@ struct c_grammar: public grammar<c_grammar> {
                 STRING_LITERAL_PART, STRING_LITERAL, INT_CONSTANT_HEX, INT_CONSTANT,
                 INT_CONSTANT_OCT, /*INT_CONSTANT_DEC,*/ INT_CONSTANT_CHAR,
                 FLOAT_CONSTANT,FLOAT_CONSTANT_1, FLOAT_CONSTANT_2, FLOAT_CONSTANT_3,
-                CONSTANT;
+                CONSTANT, VECTOR;
 
     // nonterminals
         rule<ScannerT>

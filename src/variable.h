@@ -43,6 +43,7 @@ public:
 	bool is_non_scalar() const { return _type.find("*") != string::npos || _type.find("[") != string::npos; }
 };
 
+const variable prev("int", "prev", "0");
 
 class const_variable: public variable {
 public:

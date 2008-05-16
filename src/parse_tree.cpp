@@ -374,21 +374,27 @@ struct gen_in: public unrollable_xformer {
 		orig_adaptor orig(v);
 
 		string if_statement;
+		string wait;
 
 		if (!unroll) {
 			if_statement = "if (!((" + v->math().lhs().str() + ")%" + buff.size() + "))"; 
 		}
 
-		return old + if_statement + "{\n" 
-				"int old=" + next.name() + ";\n" +
-				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n"
+		if (v->depth() == 3) {
+			wait = "MMGP_SPE_dma_wait(" + next.name() + ");";
+		}
+
+		return old + if_statement + "{\n" +
+				prev.name() + "=" + next.name() + ";\n" +
+				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n" + 
+				wait +
 				"mfc_get(" + 
 					buff.name() + "[" + next.name() + "]," 
 					"(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff.size() + "))," 
 					"sizeof(" + buff.type() + ") *" + buff.size() + "," +
 					next.name() + ", 0, 0);\n" +
-				orig.name() + "=" + buff.name() + "[old];\n"
-				"MMGP_SPE_dma_wait(old);\n"
+				orig.name() + "=" + buff.name() + "[" + prev.name() + "];\n"
+				"MMGP_SPE_dma_wait(" + prev.name() + ");\n"
 			"}\n";
 	}
 
@@ -555,26 +561,25 @@ struct gen_out: public unrollable_xformer {
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
+		next_adaptor next(v);
 		string var_switch;
 		string if_statement;
 
 		if (v->depth() < 3) {
-			next_adaptor next(v);
-
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
-					orig.name() + "=" + buff.name() + "[" + next.name() + "];";
+					orig.name() + "=" + buff.name() + "[" + next.name() + "]; \n" +
+					"MMGP_SPE_dma_wait(" + next.name() + ");";
 		}
 
 		if (!unroll) {
 			if_statement = "if (!(" + v->math().next_iteration(induction) + "%" + buff.size() + "))";
 		}
 
-		return if_statement + "{\n"
-					"MMGP_SPE_dma_wait(out_tag); \n"
+		return if_statement + "{\n" +
 					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
 							"+" + v->math().next_iteration(induction) + "-" + buff.size() + "),"
-						"sizeof(" + buff.type() + ")*" + buff.size() + ","
-						"out_tag, 0, 0); \n" +
+						"sizeof(" + buff.type() + ")*" + buff.size() + "," +
+						next.name() + ", 0, 0); \n" +
 					var_switch +
 			"} \n" + old;
 	}
@@ -589,23 +594,27 @@ struct gen_final_out: public unrollable_xformer {
 	gen_final_out(const shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
-		buffer_adaptor buff(v);
-		orig_adaptor orig(v);
 		string ret;
 
 		if (!unroll) {
+			buffer_adaptor buff(v);
+			orig_adaptor orig(v);
+			next_adaptor next(v);
+
 			ret = "if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")) {" +
-					"MMGP_SPE_dma_wait(out_tag); \n"
+					prev.name() + "=" + next.name() + ";" +
+					next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
 					"mfc_put(" + orig.name() + "," 
 						"(unsigned long)(" + v->name() +
 							"+(SPE_stop" + v->math().factor(induction) + ")-(((SPE_stop-SPE_start)" + 
 							v->math().factor(induction) + ")%" + 
 							buff.size() + ")),"
 						"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) +
-						")%" + buff.size() + "),"
-						"out_tag, 0, 0"
+						")%" + buff.size() + ")," +
+						next.name() + ", 0, 0"
 					"); \n" +
-				"MMGP_SPE_dma_wait(out_tag); \n }";
+					"MMGP_SPE_dma_wait(" + prev.name() + "); \n" +
+					"MMGP_SPE_dma_wait(" + next.name() + "); \n }";
 		}
 
 		return old + ret;
@@ -1239,6 +1248,16 @@ ast_node::tree_iterator find_and_duplicate(ast_node& node, Pred p)
 	return node.children.end();
 }
 
+struct declare_prev: public xformer {
+	string operator()(const string& old)
+	{
+		return old + prev.define() + ";";
+	}
+
+	xformer* clone() const { return new declare_prev(*this); }
+	string class_name() const { return "declare_prev"; }
+};
+
 struct cell_region {
 	spelist::iterator region;
 
@@ -1267,7 +1286,7 @@ struct cell_region {
 			}
 
 			xformerlist& front_xforms = node.children.front().value.xformations;
-
+			front_xforms.push_back(new declare_prev());
 			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(o.par_induction)).max)));
 			append(front_xforms, fmap(make_xformer<init_buffers, shared_variable>(), (*region)->out()));
 			append(front_xforms, fmap(make_induction<in_init_buffers, shared_variable>(par_induction), (*region)->in()));
