@@ -85,6 +85,6 @@ unsigned long long MPI_calls;
 unsigned long long ppe_T[20], ppe_N[20],  total_time, start_time;
 unsigned long long spe_L[20], spe_T[20];
 unsigned long long COMM_rec[10], MPI_total, MPI_count;
-int __SPE_threads,N;
+int __SPE_threads;
 double prediction[20][20];
 int NUM_SPE;

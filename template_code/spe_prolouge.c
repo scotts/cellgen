@@ -1,3 +1,4 @@
+#include "stddef.h"
 #include "../pass_struct.h"
 #include <spu_intrinsics.h>
 #include <spu_mfcio.h>

@@ -1154,6 +1154,15 @@ public:
 	string class_name() const { return "in_init_buffers"; }
 };
 
+class in_init_buffers_wait: public xformer {
+	string operator()(const string& old)
+	{
+		return old + "MMGP_SPE_wait(0);";
+	}
+	xformer* clone() const { return new in_init_buffers_wait(*this); }
+	string class_name() const { return "in_init_buffers_wait"; }
+};
+
 class init_private_buffers: public xformer {
 	const private_variable* v;
 
@@ -1279,6 +1288,8 @@ struct cell_region {
 			for_all((*region)->out(), assign_depth(2));
 			for_all((*region)->inout(), assign_depth(3));
 
+			(*region)->induction(par_induction);
+
 			if ((*region)->unroll()) {
 				ast_node::tree_iterator unroll_pos = find_and_duplicate(node, is_for_loop);
 				assert(unroll_pos != node.children.end());
@@ -1291,6 +1302,7 @@ struct cell_region {
 			append(front_xforms, fmap(make_xformer<init_buffers, shared_variable>(), (*region)->out()));
 			append(front_xforms, fmap(make_induction<in_init_buffers, shared_variable>(par_induction), (*region)->in()));
 			append(front_xforms, fmap(make_induction<in_init_buffers, shared_variable>(par_induction), (*region)->inout()));
+			front_xforms.push_back(new in_init_buffers_wait());
 			append(front_xforms, fmap(make_xformer<init_private_buffers, private_variable>(), (*region)->priv()));
 			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
 
@@ -1303,7 +1315,6 @@ struct cell_region {
 			xformerlist& back_xforms = node.children.back().value.xformations;
 			append(back_xforms, fmap(make_xformer<reduction_assign, reduction_variable>(), (*region)->reductions()));
 
-			(*region)->induction(par_induction);
 			++region;
 		}
 		else {
