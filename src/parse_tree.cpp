@@ -7,10 +7,6 @@
 #include <map>
 using namespace std;
 
-#include <boost/function.hpp>
-#include <boost/regex.hpp>
-using namespace boost;
-
 #include "parse_tree.h"
 #include "ids.h"
 #include "variable.h"
