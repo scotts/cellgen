@@ -33,22 +33,24 @@ const string pass_struct_iname		= path + pass_struct_oname;
 
 const string mmgp_h_oname		= "MMGP.h";
 const string mmgp_c_oname		= "MMGP.c";
+const string mmgp_spu_h_oname		= "spu/MMGP_spu.h";
 const string mmgp_h_iname		= path + "MMGP/" + mmgp_h_oname;
 const string mmgp_c_iname		= path + "MMGP/" + mmgp_c_oname;
 const string mmgp_spu_h_iname		= path + "MMGP/MMGP_spu.h";
 
-const string timing_h			= path + "timing.h";
+const string spe_profiler		= path + "cellgen_timer.h " + path + "cellgen_timer.c " + path + "spu_flih.S";
 const string loop_hook			= "LOOP_ID";
 const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
 const string program_name_hook		= "PROGRAM_NAME";
+const string num_kernels_hook		= "NUM_KERNELS";
 const string case_hook			= "CASES";
 const string var_hook			= "VAR";
 const string op_hook			= "OP";
 const string num_threads_hook		= "NUM_THREADS_HOOK";
 
 const string struct_pass_var		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
-const string mmgp_spe_stop		= "MMGP_SPE_stop();";
+const string mmgp_spe_stop		= "MMGP_SPE_stop(";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
 
@@ -117,9 +119,8 @@ public:
 	{
 		stringstream* casest = new stringstream;
 		*casest << "\t\t\tcase " << loop_num << ": " 
-			<< "loop" << loop_num << "(" ; 
-		file	<< "void loop" << loop_num << "(";
-		++loop_num;
+			<< "loop" << loop_num << "(" << loop_num <<", "; 
+		file	<< "void loop" << loop_num << "(int fn_id, ";
 
 		stringstream f;
 		stringstream c;
@@ -131,13 +132,15 @@ public:
 
 		*casest	<< c.str().replace(c.str().find_last_of(","), strlen(","), "") << "); " << endl
 			<< writebacks << endl
-			<< mmgp_spe_stop << "break;" << endl;
+			<< mmgp_spe_stop << loop_num << "); " << "break;" << endl;
 		cases.push_back(casest);
 
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
 		file << ") " << endl;
 
 		for_all(region->ast_root()->children, codeout(file));
+
+		++loop_num;
 	}
 };
 
@@ -148,7 +151,7 @@ void parse_generic(stringstream& stream, const string& str)
 	file_to_stream(stream, ifile);
 }
 
-void print_file(const string& ifile_name, const string& ofile_name, const string& program_name)
+void replace_n_print_file(const string& ifile_name, const string& ofile_name, const string& hook, const string& replace)
 {
 	ifstream ifile(ifile_name.c_str());
 	open_check(ifile, ifile_name);
@@ -158,7 +161,7 @@ void print_file(const string& ifile_name, const string& ofile_name, const string
 
 	ofstream ofile(ofile_name.c_str());
 	open_check(ofile, ofile_name);
-	ofile << regex_replace(regex_replace(ss.str(), regex(program_name_hook), program_name),
+	ofile << regex_replace(regex_replace(ss.str(), regex(hook), replace),
 			regex(num_threads_hook), to_string(num_threads));
 }
 
@@ -436,15 +439,19 @@ int main(int argc, char* argv[])
 	const string ppe_oname = no_dot + ".c";
 	const string spe_oname = "spu/" + no_dot + "_spe.c";
 
-	print_file(mmgp_h_iname, mmgp_h_oname, no_dot);
-	print_file(mmgp_c_iname, mmgp_c_oname, no_dot);
+        char num_kernels[100];
+        sprintf(num_kernels, "%d", spe_regions.size());
+	replace_n_print_file(mmgp_h_iname, mmgp_h_oname, num_kernels_hook, num_kernels);
+	replace_n_print_file(mmgp_c_iname, mmgp_c_oname, program_name_hook, no_dot);
+	replace_n_print_file(mmgp_spu_h_iname, mmgp_spu_h_oname, num_kernels_hook, num_kernels);
 
 	print_pass_struct(spe_regions);
 	print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions);
+
 	print_spe(spe_oname, spe_declarations, spe_main, spe_regions);
 	
-	system(string("cp " + mmgp_spu_h_iname + " spu/").c_str());
-	system(string("cp " + timing_h + " spu/").c_str());
+	//system(string("cp " + mmgp_spu_h_iname + " spu/").c_str());
+	system(string("cp " + spe_profiler + " spu/").c_str());
 
 	system(string("indent " + ppe_oname + " " + spe_oname).c_str());
 

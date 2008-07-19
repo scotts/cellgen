@@ -377,7 +377,7 @@ struct gen_in: public unrollable_xformer {
 		}
 
 		if (v->depth() == 3) {
-			wait = "MMGP_SPE_dma_wait(" + next.name() + ");";
+			wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 
 		return old + if_statement + "{\n" +
@@ -390,7 +390,7 @@ struct gen_in: public unrollable_xformer {
 					"sizeof(" + buff.type() + ") *" + buff.size() + "," +
 					next.name() + ", 0, 0);\n" +
 				orig.name() + "=" + buff.name() + "[" + prev.name() + "];\n"
-				"MMGP_SPE_dma_wait(" + prev.name() + ");\n"
+				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id);\n"
 			"}\n";
 	}
 
@@ -564,7 +564,7 @@ struct gen_out: public unrollable_xformer {
 		if (v->depth() < 3) {
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
 					orig.name() + "=" + buff.name() + "[" + next.name() + "]; \n" +
-					"MMGP_SPE_dma_wait(" + next.name() + ");";
+					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 
 		if (!unroll) {
@@ -609,8 +609,8 @@ struct gen_final_out: public unrollable_xformer {
 						")%" + buff.size() + ")," +
 						next.name() + ", 0, 0"
 					"); \n" +
-					"MMGP_SPE_dma_wait(" + prev.name() + "); \n" +
-					"MMGP_SPE_dma_wait(" + next.name() + "); \n }";
+					"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n" +
+					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n }";
 		}
 
 		return old + ret;
@@ -1177,7 +1177,7 @@ public:
 					"sizeof(" + buff.type() + ")*" + buff.size() + ","
 					"3, 0, 0); \n" + 
 				orig.name() + "=" + buff.name() + ";"
-				"MMGP_SPE_dma_wait(3); \n";
+				"MMGP_SPE_dma_wait(3, fn_id); \n";
 		}
 
 		return old + ret;

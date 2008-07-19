@@ -20,14 +20,21 @@ int main()
 
 	MMGP_exchange();
 
+        cellgen_timer_begin();
+
 	while (1) {
 
         	/* MMGP call used for receiving the PPE starting signal */
         	received = MMGP_SPE_wait();
+                cellgen_timer_reset();
 
 		switch (received) {
 			CASES
-			case TERMINATE: goto done;
+                        case GET_TIMES:
+                            cellgen_report();
+                            break;
+			case TERMINATE:
+                            goto done;
 		}
 	}
 
