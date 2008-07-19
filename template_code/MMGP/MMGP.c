@@ -199,7 +199,7 @@ inline void cellgen_finish(void)
     #ifdef PROFILING
     unsigned long long time_cellgen_end = get_tb();
     unsigned int loop;
-    unsigned long long loop_cnt_all = 0UL;
+    unsigned int loop_cnt_all = 0;
     unsigned long long loop_time_all = 0UL;
 
     unsigned long long T_L[MAX_NUM_SPEs][NUM_FNs];
@@ -215,11 +215,11 @@ inline void cellgen_finish(void)
     printf("\n========== PPE stats ==========\n\n");
 
     for (i=0; i<NUM_FNs; i++) {
-        printf("fn%u call count: %lu\n", i+1, cnt_loop[i]);
+        printf("fn%u call count: %u\n", i+1, cnt_loop[i]);
         loop_cnt_all += cnt_loop[i];
     }
 
-    printf("fn count total = %lu\n\n", loop_cnt_all);
+    printf("fn count total = %u\n\n", loop_cnt_all);
 
     for (i=0; i<NUM_FNs; i++) {
         printf("L%u: %.2f (sec)\n", i, ((double)time_loop[i])/TB);
