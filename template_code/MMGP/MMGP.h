@@ -16,7 +16,8 @@
 #define TB      	79800000UL
 
 void MMGP_init(unsigned int num_threads);
-void MMGP_finish(double total_time);
+void cellgen_start(void);
+void cellgen_finish(void);
 
 void (*MMGP_offload)(void);
 void (*MMGP_start_SPE)(unsigned int i, int value);
@@ -105,6 +106,7 @@ unsigned int cnt_loop[NUM_FNs];
 unsigned int loop_started;
 unsigned long long time_ppu_start;
 unsigned long long time_ppu_between_loops;
+unsigned long long time_cellgen_start;
 
 #define profile_start_fn(fn_id) {                             \
       cnt_loop[fn_id-1]++;                                      \

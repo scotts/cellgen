@@ -185,11 +185,19 @@ inline void _wait_SPE(unsigned int num){
 
 inline void _empty() {}
 
-void MMGP_finish(double total_time)
+inline void cellgen_start(void)
+{
+    #ifdef PROFILING
+    time_cellgen_start = get_tb();
+    #endif
+}
+
+inline void cellgen_finish(void)
 {
     unsigned int i;
 
     #ifdef PROFILING
+    unsigned long long time_cellgen_end = get_tb();
     unsigned int loop;
     unsigned long long loop_cnt_all = 0;
     unsigned long long loop_time_all = 0;
@@ -219,7 +227,7 @@ void MMGP_finish(double total_time)
     }
 
     printf("time spent on PPU workload between offloaded loops: %.2f (sec)\n",((double)time_ppu_between_loops)/TB);
-    printf("time spend on prolog and epilog: %.2f (sec)\n", total_time -((double)(loop_time_all+time_ppu_between_loops))/TB );
+    printf("time spend on prolog and epilog: %.2f (sec)\n", ((double)(time_cellgen_end-time_cellgen_start)-(loop_time_all+time_ppu_between_loops))/TB );
 
 
     printf("\n========== SPE stats ==========\n");
