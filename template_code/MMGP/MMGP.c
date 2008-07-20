@@ -70,7 +70,7 @@ void _create_threads(void)
                 exit (1);
             }
 
-            if ((rc = spe_program_load (ptdata[i].speid, &likelihood_spe)) != 0) {
+            if ((rc = spe_program_load (ptdata[i].speid, &PROGRAM_NAME_spe)) != 0) {
                 fprintf (stderr, "Error: spe_program_load() (errno=%d strerror=%s)\n", errno, strerror(errno));
                 exit (1);
             }
