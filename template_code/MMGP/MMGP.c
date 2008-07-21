@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <sched.h>
 #include <sys/sysinfo.h>
+#include <string.h>
 
 /* Sending mail to an SPE. Parameters:
  * id - id of the targeting SPE,
