@@ -18,7 +18,7 @@
  * data - 32 bit data that is sent. */
 #define send_mail(speid, data)                                        \
 {                                                                     \
-    unsigned int data_addr = (unsigned int) & data;                   \
+    void *data_addr = (void*) &data;                                  \
     spe_in_mbox_write(speid, data_addr, 1, SPE_MBOX_ANY_NONBLOCKING); \
 }
 
