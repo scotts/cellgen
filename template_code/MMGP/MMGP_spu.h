@@ -46,7 +46,7 @@ volatile struct pass_t pass __attribute__((aligned(128))); // User defined struc
 
 
 /* Function used for waiting for the PPE signal */
-inline int MMGP_SPE_wait(){
+inline int MMGP_SPE_wait(void){
 
         while (signal.start==0);
 
