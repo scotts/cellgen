@@ -1153,7 +1153,8 @@ public:
 class in_init_buffers_wait: public xformer {
 	string operator()(const string& old)
 	{
-		return old + "MMGP_SPE_wait(0);";
+		//return old + "MMGP_SPE_wait(0);";
+		return old;
 	}
 	xformer* clone() const { return new in_init_buffers_wait(*this); }
 	string class_name() const { return "in_init_buffers_wait"; }
