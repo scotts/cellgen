@@ -52,7 +52,7 @@ const string num_threads_hook		= "NUM_THREADS_HOOK";
 const string struct_pass_var		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
 const string mmgp_spe_stop		= "MMGP_SPE_stop(";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
-const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ");\n";
+const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ","; // + loop_hook + ");\n";
 
 bool print_ast = false;
 int num_threads = 6;
@@ -327,6 +327,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 						mmgp_reduction, 
 						regex(var_hook), 
 						"&" + (*((*r)->reductions().begin()))->definition());
+                                str = str + string(id) + ");\n";
 				file << regex_replace(str, regex(op_hook), (*r)->reduction_op());
 			}
 			else {
