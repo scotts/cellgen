@@ -19,15 +19,13 @@ void MMGP_init(unsigned int num_threads);
 void cellgen_start(void);
 void cellgen_finish(void);
 
-void (*MMGP_offload)(void);
-void (*MMGP_start_SPE)(unsigned int i, int value);
-void (*MMGP_wait_SPE)(unsigned int num);
+void MMGP_offload(void);
+void MMGP_start_SPE(unsigned int i, int value);
+void MMGP_wait_SPE(int fn_id);
+void MMGP_create_threads(void);
 //void (*MMGP_reduction)(double *cont, int num);
-void (*MMGP_prediction)(void);
-void (*MMGP_create_threads)(void);
-void (*MMGP_prediction)(void);
-
-#define MMGP_reduction(c, op) \
+//
+#define MMGP_reduction(c, op, fn_id) \
 ({ \
 	int i; \
 	sched_yield(); \
@@ -35,12 +33,14 @@ void (*MMGP_prediction)(void);
 		while (((struct signal *)signal[i])->stop==0) { \
 			sched_yield(); \
 		} \
-		*c op##= ((struct signal *)signal[i])->result; \
+		*c op##= ((struct signal *)signal[i])->result;  \
 	} \
+        cnt_loop[fn_id-1]++;                                    \
+        time_loop[fn_id-1] += get_tb () - loop_time;            \
+        time_ppu_start = get_tb ();                             \
 })
 
 
-//extern spe_program_handle_t PROGRAM_NAME_spe;
 
 #define mftb()  ({unsigned long rval;   \
                     asm volatile("mftb %0" : "=r" (rval)); rval;})
@@ -109,7 +109,6 @@ unsigned long long time_ppu_between_loops;
 unsigned long long time_cellgen_start;
 
 #define profile_start_fn(fn_id) {                             \
-      cnt_loop[fn_id-1]++;                                      \
       loop_time = get_tb ();                                  \
       if (loop_started)                                       \
         time_ppu_between_loops += loop_time - time_ppu_start; \
@@ -118,7 +117,8 @@ unsigned long long time_cellgen_start;
 }
 
 #define profile_end_fn(fn_id) {                               \
-      time_loop[fn_id-1] += get_tb () - loop_time;              \
+      cnt_loop[fn_id-1]++;                                    \
+      time_loop[fn_id-1] += get_tb () - loop_time;            \
       time_ppu_start = get_tb ();                             \
 }
 

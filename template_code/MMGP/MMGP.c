@@ -52,7 +52,7 @@ void *pthread_function(void *arg) {
 
 /* Creates SPE trheads, parameters:
  * 1. SPE_trheads, number of SPE threads to be created */
-void _create_threads(void)
+void MMGP_create_threads(void)
 {
         unsigned int i, rval;
         int rc;
@@ -136,7 +136,7 @@ void _create_threads(void)
  *            which function should be executed (multiple
  *            SPE functions can reside in the same SPE
  *            module) */
-inline void _start_SPE(unsigned int num, int value){
+inline void MMGP_start_SPE(unsigned int num, int value){
 
     /* Send starting signal to an SPE,
      * before that set signal.stop to 0 */
@@ -146,32 +146,16 @@ inline void _start_SPE(unsigned int num, int value){
                
 }
 
-inline void _offload(){ }
-
-/* The function called at the end of the off-loaded region.
- * Parameters:
- * 1. num - the SPE number (the work can be distributed 
- *          among multiple SPEs) */
-inline void _wait_SPET(unsigned int num){
-
-    unsigned int i=0;
-    
-    sched_yield();
-
-    /* Wait for all SPE trheads to return */
-    for(i=0; i<__SPE_threads; i++){
-       
-        /* If an SPE thread is not done, release the PPE */
-        while (((struct signal *)signal[i])->stop==0){
-            sched_yield();
-        }
-    }
+inline void MMGP_offload(void)
+{
+    profile_start_fn();
 }
+
 
 /* The same as _wait_SPET(), just without the 
  * timing instructions */
-inline void _wait_SPE(unsigned int num){
-
+inline void MMGP_wait_SPE(int fn_id)
+{
     unsigned int i=0;
     
     sched_yield();
@@ -181,10 +165,9 @@ inline void _wait_SPE(unsigned int num){
             sched_yield();
         }
     }
-
+    profile_end_fn(fn_id);
 }
 
-inline void _empty() {}
 
 inline void cellgen_start(void)
 {
@@ -285,11 +268,6 @@ void MMGP_init(unsigned int num_threads)
     NUM_SPE = spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
     __SPE_threads = num_threads;
 
-    MMGP_offload = &_empty;
-    MMGP_create_threads = &_create_threads;
-    MMGP_wait_SPE = &_wait_SPE;
-    MMGP_start_SPE = &_start_SPE;
-    MMGP_create_threads = &_create_threads;
 
     #ifdef PROFILING
     unsigned int i;
