@@ -56,6 +56,7 @@ const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ")
 
 bool print_ast = false;
 int num_threads = 6;
+string inc_name = "";
 
 void file_to_stream(stringstream& in, istream& file) 
 {
@@ -384,6 +385,7 @@ string parse_command_line(int argc, char* argv[])
 		("help,h", "print usage message")
 		("infile,i", value<string>(&src_name), "input filename")
 		("astout,a", value<bool>(&print_ast)->zero_tokens()->default_value(false), "print the ast")
+		("speinclude,s", value<string>(&inc_name), "filename to include in spe source")
 		("num_threads,n", value<int>(&num_threads)->default_value(6), "set number of SPE threads");
 
 		positional_options_description p;
@@ -425,6 +427,7 @@ int main(int argc, char* argv[])
 	parse_generic(ppe_fork, ppe_fork_iname);
 	parse_generic(ppe_prolouge, ppe_prolouge_iname);
 	parse_generic(spe_declarations, spe_declarations_iname);
+        if (inc_name != "") parse_generic(spe_declarations, inc_name);
 	parse_generic(spe_main, spe_main_iname);
 	parse_generic(mmgp_c, mmgp_c_iname);
 
