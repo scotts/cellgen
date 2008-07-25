@@ -231,7 +231,7 @@ inline void cellgen_finish(void)
     for (loop = 0; loop < NUM_FNs; loop++) {
         T_L_all = T_DMA_all = T_comp_all = 0;
 
-        printf("\nL%d :            Loop        DMA         Comp\n", loop+1);
+        printf("\nL%d :          Loop      DMA     Comp\n", loop+1);
         for (i = 0; i < __SPE_threads; i++) {
             T_L_all += (T_L[i][loop] = ((struct signal *)signal[i])->T_fn[loop]);
             T_DMA_all += (T_DMA[i][loop] = ((struct signal *)signal[i])->T_DMA[loop]);
@@ -244,7 +244,7 @@ inline void cellgen_finish(void)
         printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_comp_all)/ TB / __SPE_threads);
     }
     printf("\n\n           --- Summary ---            \n");
-    printf("SPE          fn        fn_kernel       DMA_all      idle\n");
+    printf("SPE         fn fn_kernel   DMA_all      idle\n");
     for (i = 0; i < __SPE_threads; i++) {
         printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_comp_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_idle_spe[i] / TB);
     }
