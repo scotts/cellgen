@@ -206,7 +206,7 @@ inline void cellgen_finish(void)
     printf("fn count total = %u\n\n", loop_cnt_all);
 
     for (i=0; i<NUM_FNs; i++) {
-        printf("L%u: %.6f (sec)\n", i, ((double)time_loop[i])/TB);
+        printf("L%u: %.6f (sec)\n", i+1, ((double)time_loop[i])/TB);
         loop_time_all += time_loop[i];
     }
 
