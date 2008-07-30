@@ -34,6 +34,7 @@ struct signal {
     unsigned long long idle_time;
     unsigned long long all_fn;
     unsigned long long all_dma;
+    unsigned long long all_dma_prep;
     unsigned long long all_comp;
     #endif
 };
@@ -91,6 +92,14 @@ inline void cellgen_DMA_stop(int loop)
     signal.T_comp[loop-1] += GET_TIME() - comp_time_start;  \
 }
 
+#define cellgen_dma_prep_start() { \
+    dma_time_start = GET_TIME();   \
+}
+
+#define cellgen_dma_prep_stop() {                        \
+    signal.all_dma_prep += GET_TIME() - dma_time_start;  \
+}
+
 inline void cellgen_idle_start(void)
 {
     idle_time_start = (unsigned long long) GET_TIME();
@@ -123,6 +132,7 @@ inline void cellgen_idle_stop(void)
     signal.idle_time = (unsigned long long) 0;     \
     signal.all_fn = (unsigned long long) 0;        \
     signal.all_dma = (unsigned long long) 0;       \
+    signal.all_dma_prep = (unsigned long long) 0;  \
     signal.all_comp = (unsigned long long) 0;      \
     idle_has_begun = 0;                            \
 }
@@ -177,6 +187,10 @@ inline void cellgen_timer_begin(void)
 #define cellgen_comp_start()
 
 #define cellgen_comp_stop(fn_id)
+
+#define cellgen_dma_prep_start() 
+
+#define cellgen_dma_prep_stop() 
 
 #define cellgen_timer_reset()
 

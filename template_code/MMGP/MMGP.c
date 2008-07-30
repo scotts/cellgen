@@ -191,6 +191,7 @@ inline void cellgen_finish(void)
     unsigned long long T_comp[MAX_NUM_SPEs][NUM_FNs];
     unsigned long long T_L_spe[__SPE_threads];
     unsigned long long T_DMA_spe[__SPE_threads];
+    unsigned long long T_DMA_prep_spe[__SPE_threads];
     unsigned long long T_comp_spe[__SPE_threads];
     unsigned long long T_idle_spe[__SPE_threads];
     unsigned long long T_L_all, T_DMA_all, T_comp_all;
@@ -225,6 +226,7 @@ inline void cellgen_finish(void)
         T_L_spe[i] =  ((struct signal *)signal[i])->all_fn;
         T_comp_spe[i] =  ((struct signal *)signal[i])->all_comp;
         T_DMA_spe[i] =  ((struct signal *)signal[i])->all_dma;
+        T_DMA_prep_spe[i] =  ((struct signal *)signal[i])->all_dma_prep;
         T_idle_spe[i] =  ((struct signal *)signal[i])->idle_time;
     }
 
@@ -244,10 +246,17 @@ inline void cellgen_finish(void)
         printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_comp_all)/ TB / __SPE_threads);
     }
     printf("\n\n           --- Summary ---            \n");
+    #ifndef DMA_PREP_REPORT
     printf("SPE         fn fn_kernel   DMA_all      idle\n");
     for (i = 0; i < __SPE_threads; i++) {
         printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_comp_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_idle_spe[i] / TB);
     }
+    #else
+    printf("SPE         fn fn_kernel   DMA_all      DMA_prep  idle\n");
+    for (i = 0; i < __SPE_threads; i++) {
+        printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_comp_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_DMA_prep_spe[i] /TB, (double)T_idle_spe[i] / TB);
+    }
+    #endif
     printf("\n\n");
     printf("========== Time legend ==========\n");
     printf("Loop: total time spent on loops\n");

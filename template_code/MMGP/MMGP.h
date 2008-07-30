@@ -84,6 +84,7 @@ volatile struct signal{
     unsigned long long idle_time;
     unsigned long long all_fn;
     unsigned long long all_dma;
+    unsigned long long all_dma_prep;
     unsigned long long all_comp;
     #endif
 };
