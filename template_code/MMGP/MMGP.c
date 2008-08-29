@@ -196,7 +196,7 @@ inline void cellgen_finish(void)
     unsigned long long T_idle_spe[__SPE_threads];
     unsigned long long T_L_all, T_DMA_all, T_comp_all;
 
-
+    printf("\n\nTotal Time: %f (sec)\n\n", (double)(time_cellgen_end-time_cellgen_start) / TB);
     printf("\n========== PPE stats ==========\n\n");
 
     for (i=0; i<NUM_FNs; i++) {
