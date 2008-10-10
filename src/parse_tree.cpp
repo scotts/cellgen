@@ -388,7 +388,7 @@ struct gen_in: public unrollable_xformer {
 		string wait;
 
 		if (!unroll) {
-			if_statement = "if (!((" + v->math().lhs().str() + ")%" + buff.size() + "))"; 
+			if_statement = "if (!((" + v->math().lhs().str() + ")%" + buff.size() + ") &&" + induction + "+1 < SPE_stop)"; 
 		}
 
 		if (v->depth() == 3) {
@@ -502,6 +502,29 @@ struct declaration_op {
 	}
 };
 
+struct extract_gen_ins {
+	xformerlist& lifted;
+	extract_gen_ins(xformerlist& l): lifted(l) {}
+
+	void operator()(xformer* x)
+	{
+		if (is_type<gen_in>(x)) {
+			lifted.push_back(x);
+		}
+	}
+};
+
+struct lift_out_gen_ins {
+	xformerlist& lifted;
+	lift_out_gen_ins(xformerlist& l): lifted(l) {}
+
+	void operator()(ast_node& node)
+	{
+		for_all(node.value.xformations, extract_gen_ins(lifted));
+		node.value.xformations.remove_if(is_type<gen_in, xformer>);
+	}
+};
+
 struct for_compound_op {
 	const symtbl& shared; 
 	const string& par_induction;
@@ -553,10 +576,17 @@ struct for_compound_op {
 				}
 			}
 		}
+
+		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
+		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
 			serial_for_op o(shared, par_induction, ser_inductions);
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
+
+			xformerlist lifted;
+			for_all(node.children, make_descend(lift_out_gen_ins(lifted)))(node);
+			node.value.xformations.splice(node.value.xformations.begin(), lifted);
 		}
 		else {
 			for_all(node.children, this);
@@ -820,6 +850,7 @@ struct parallel_for_op {
 			serial_for_op o(shared, par_induction);
 			o(node);
 			o.merge_inout(in, out, inout);
+
 
 			// Right now, we only apply out xformations at the end of a parallel for loop. This is 
 			// not entirely correct. Serial for loops should have them if the stopping condition 

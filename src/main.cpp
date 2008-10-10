@@ -398,12 +398,12 @@ string parse_command_line(int argc, char* argv[])
 	
 		if (vm.count("help")) {  
 			cout << desc << "\n";
-			return 0;
+			exit(0);
 		}
 	} 
 
 	catch (exception& e) {
-		cerr << "error: exception " << e.what() << endl;
+		cerr << "options related exception: " << e.what() << endl;
 		exit(1);
 	}
 
