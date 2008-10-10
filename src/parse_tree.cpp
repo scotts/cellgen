@@ -243,7 +243,11 @@ struct array_op {
 	{
 		string val(node.value.begin(), node.value.end());
 
-		if (node.value.id() == ids::identifier) {
+		if (node.value.id() == ids::int_constant_dec) {
+			lmult.lhs(val);
+			add.lhs(lmult);
+		}
+		else if (node.value.id() == ids::identifier) {
 			// FIXME: do we need this or not?
 			if (inductions.find(val) != inductions.end()) {
 				lmult.lhs(val);
@@ -307,6 +311,16 @@ struct postfix_op {
 	}
 };
 
+void printstr(const string& s)
+{
+	cout << s << " ";
+}
+
+void printadd(const add_expr& a)
+{
+	cout << "(" << a.str() << ") ";
+}
+
 struct handness {
 	const symtbl& shared;
 	const symset& inductions;
@@ -322,6 +336,7 @@ struct handness {
 
 			if (o.found_shared && o.found_induction) {
 				add_expr add = make_add_expr(o.var->dimensions(), o.accesses);
+
 				o.var->math(add);
 				node.value.xformations.push_back(new to_buffer_space(o.var, add)); 
 				
@@ -749,6 +764,28 @@ struct multiple_parallel_induction_variables {
 	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
 };
 
+class comp_timer_start: public xformer {
+public:
+	string operator()(const string& old)
+	{
+		return "cellgen_comp_start(); \n" + old;
+	}
+
+	xformer* clone() const { return new comp_timer_start(*this); }
+	string class_name() const { return "comp_timer_start"; }
+};
+
+class comp_timer_stop: public xformer {
+public:
+	string operator()(const string& old)
+	{
+		return "cellgen_comp_stop(); \n" + old;
+	}
+
+	xformer* clone() const { return new comp_timer_stop(*this); }
+	string class_name() const { return "comp_timer_stop"; }
+};
+
 struct parallel_for_op {
 	const symtbl& shared;
 	string& par_induction;
@@ -792,6 +829,7 @@ struct parallel_for_op {
 			append(xformations, fmap(make_induction<gen_out, shared_variable>(par_induction), inout));
 			append(xformations, fmap(make_induction<gen_final_out, shared_variable>(par_induction), out));
 			append(xformations, fmap(make_induction<gen_final_out, shared_variable>(par_induction), inout));
+			xformations.push_back(new comp_timer_stop());
 		}
 		else {
 			for_all(node.children, this);

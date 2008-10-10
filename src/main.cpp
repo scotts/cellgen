@@ -428,7 +428,9 @@ int main(int argc, char* argv[])
 	parse_generic(ppe_fork, ppe_fork_iname);
 	parse_generic(ppe_prolouge, ppe_prolouge_iname);
 	parse_generic(spe_declarations, spe_declarations_iname);
-        if (inc_name != "") parse_generic(spe_declarations, inc_name);
+        if (inc_name != "") {
+		parse_generic(spe_declarations, inc_name);
+	}
 	parse_generic(spe_main, spe_main_iname);
 	parse_generic(mmgp_c, mmgp_c_iname);
 
@@ -443,8 +445,7 @@ int main(int argc, char* argv[])
 	const string ppe_oname = no_dot + ".c";
 	const string spe_oname = "spu/" + no_dot + "_spe.c";
 
-        char num_kernels[100];
-        sprintf(num_kernels, "%d", spe_regions.size());
+	string num_kernels = to_string<size_t>(spe_regions.size());
 	replace_n_print_file(mmgp_h_iname, mmgp_h_oname, num_kernels_hook, num_kernels);
 	replace_n_print_file(mmgp_c_iname, mmgp_c_oname, program_name_hook, no_dot);
 	replace_n_print_file(mmgp_spu_h_iname, mmgp_spu_h_oname, num_kernels_hook, num_kernels);
@@ -454,7 +455,6 @@ int main(int argc, char* argv[])
 
 	print_spe(spe_oname, spe_declarations, spe_main, spe_regions);
 	
-	//system(string("cp " + mmgp_spu_h_iname + " spu/").c_str());
 	system(string("cp " + spe_profiler + " spu/").c_str());
 
 	system(string("indent " + ppe_oname + " " + spe_oname).c_str());

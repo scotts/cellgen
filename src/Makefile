@@ -3,7 +3,7 @@
 # difference in executable size. Likely caused by debug information for 
 # the nested templates used by Spirit.
 DEBUG = #-ggdb
-OPT = -O3
+OPT = #-O3
 CXXFLAGS = -Wall $(DEBUG) $(OPT) 
 
 BOOST_LIBS = -lboost_program_options -lboost_regex
