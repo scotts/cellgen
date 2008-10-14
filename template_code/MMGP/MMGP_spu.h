@@ -15,7 +15,7 @@
 #include "cellgen_timer.h"
 #define TB      79800000UL
 unsigned long long total_time_start, loop_time_start;
-unsigned long long dma_time_start, comp_time_start, idle_time_start;
+unsigned long long dma_time_start, total_time_start, idle_time_start;
 int idle_has_begun;
 #endif
 
@@ -30,12 +30,12 @@ struct signal {
     #ifdef PROFILING
     unsigned long long T_fn[NUM_FNs];
     unsigned long long T_DMA[NUM_FNs];
-    unsigned long long T_comp[NUM_FNs];
+    unsigned long long T_total[NUM_FNs];
     unsigned long long idle_time;
     unsigned long long all_fn;
     unsigned long long all_dma;
     unsigned long long all_dma_prep;
-    unsigned long long all_comp;
+    unsigned long long all_total;
     #endif
 };
 
@@ -64,7 +64,7 @@ inline void cellgen_report(void)
    for(i=0; i<NUM_FNs; i++) {
       signal.all_fn += signal.T_fn[i];
       signal.all_dma += signal.T_DMA[i];
-      signal.all_comp += signal.T_comp[i];
+      signal.all_total += signal.T_total[i];
    }
 
    signal.start=0;
@@ -84,12 +84,12 @@ inline void cellgen_DMA_stop(int loop)
     signal.T_DMA[loop-1] += GET_TIME() - dma_time_start;
 }
 
-#define cellgen_comp_start() {    \
-    comp_time_start = GET_TIME(); \
+#define cellgen_total_start() {    \
+    total_time_start = GET_TIME(); \
 }
 
-#define cellgen_comp_stop(loop) {                           \
-    signal.T_comp[loop-1] += GET_TIME() - comp_time_start;  \
+#define cellgen_total_stop(loop) {                           \
+    signal.T_total[loop-1] += GET_TIME() - total_time_start;  \
 }
 
 #define cellgen_dma_prep_start() { \
@@ -127,13 +127,13 @@ inline void cellgen_idle_stop(void)
     for(i=0; i<NUM_FNs; i++) {                     \
        signal.T_fn[i] = 0;                         \
        signal.T_DMA[i] = 0;                        \
-       signal.T_comp[i] = 0;                       \
+       signal.T_total[i] = 0;                      \
     }                                              \
     signal.idle_time = (unsigned long long) 0;     \
     signal.all_fn = (unsigned long long) 0;        \
     signal.all_dma = (unsigned long long) 0;       \
     signal.all_dma_prep = (unsigned long long) 0;  \
-    signal.all_comp = (unsigned long long) 0;      \
+    signal.all_total = (unsigned long long) 0;      \
     idle_has_begun = 0;                            \
 }
 
@@ -146,14 +146,14 @@ inline void cellgen_idle_stop(void)
 }
 
 /*
-inline void cellgen_comp_start(void)
+inline void cellgen_total_start(void)
 {
-    comp_time_start = GET_TIME();
+    total_time_start = GET_TIME();
 }
 
-inline void cellgen_comp_stop(int loop)
+inline void cellgen_total_stop(int loop)
 {
-    signal.T_comp[loop-1] += GET_TIME() - comp_time_start;
+    signal.T_total[loop-1] += GET_TIME() - total_time_start;
 }
 
 inline void cellgen_timer_reset(void)
@@ -169,12 +169,12 @@ inline void cellgen_timer_begin(void)
     for(i=0; i<NUM_FNs; i++) {
        signal.T_fn[i] = 0;
        signal.T_DMA[i] = 0;
-       signal.T_comp[i] = 0;
+       signal.T_total[i] = 0;
     }
     signal.idle_time = (unsigned long long) 0;
     signal.all_fn = (unsigned long long) 0;
     signal.all_dma = (unsigned long long) 0;
-    signal.all_comp = (unsigned long long) 0;
+    signal.all_total = (unsigned long long) 0;
     idle_has_begun = 0;
     //cellgen_timer_init();
 }
@@ -184,9 +184,9 @@ inline void cellgen_timer_begin(void)
 #else   // no profiling
 
 
-#define cellgen_comp_start()
+#define cellgen_total_start()
 
-#define cellgen_comp_stop(fn_id)
+#define cellgen_total_stop(fn_id)
 
 #define cellgen_dma_prep_start() 
 

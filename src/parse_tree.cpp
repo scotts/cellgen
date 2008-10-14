@@ -395,7 +395,9 @@ struct gen_in: public unrollable_xformer {
 			wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 
-		return old + if_statement + "{\n" +
+		return old +
+			"cellgen_dma_prep_start(); \n" + 
+			if_statement + "{\n" +
 				prev.name() + "=" + next.name() + ";\n" +
 				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";\n" + 
 				wait +
@@ -406,7 +408,8 @@ struct gen_in: public unrollable_xformer {
 					next.name() + ", 0, 0);\n" +
 				orig.name() + "=" + buff.name() + "[" + prev.name() + "];\n"
 				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id);\n"
-			"}\n";
+			"} \n"
+			"cellgen_dma_prep_stop(); \n";
 	}
 
 	xformer* clone() const { return new gen_in(*this); }
@@ -616,13 +619,16 @@ struct gen_out: public unrollable_xformer {
 			if_statement = "if (!(" + v->math().next_iteration(induction) + "%" + buff.size() + "))";
 		}
 
-		return if_statement + "{\n" +
+		return "cellgen_dma_prep_start(); \n" +
+			if_statement + "{\n" +
 					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
 							"+" + v->math().next_iteration(induction) + "-" + buff.size() + "),"
 						"sizeof(" + buff.type() + ")*" + buff.size() + "," +
 						next.name() + ", 0, 0); \n" +
 					var_switch +
-			"} \n" + old;
+			"} \n" 
+			"cellgen_dma_prep_stop(); \n" +
+			old;
 	}
 
 	xformer* clone() const { return new gen_out(*this); }
@@ -642,7 +648,8 @@ struct gen_final_out: public unrollable_xformer {
 			orig_adaptor orig(v);
 			next_adaptor next(v);
 
-			ret = "if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")) {" +
+			ret =	"cellgen_dma_prep_start(); \n" 
+				"if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")) {" +
 					prev.name() + "=" + next.name() + ";" +
 					next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
 					"mfc_put(" + orig.name() + "," 
@@ -655,7 +662,9 @@ struct gen_final_out: public unrollable_xformer {
 						next.name() + ", 0, 0"
 					"); \n" +
 					"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n" +
-					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n }";
+					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n" 
+				"} \n"
+				"cellgen_dma_prep_stop(); \n";
 		}
 
 		return old + ret;
@@ -794,26 +803,26 @@ struct multiple_parallel_induction_variables {
 	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
 };
 
-class comp_timer_start: public xformer {
+class total_timer_start: public xformer {
 public:
 	string operator()(const string& old)
 	{
-		return "cellgen_comp_start(); \n" + old;
+		return old + "cellgen_total_start(); \n";
 	}
 
-	xformer* clone() const { return new comp_timer_start(*this); }
-	string class_name() const { return "comp_timer_start"; }
+	xformer* clone() const { return new total_timer_start(*this); }
+	string class_name() const { return "total_timer_start"; }
 };
 
-class comp_timer_stop: public xformer {
+class total_timer_stop: public xformer {
 public:
 	string operator()(const string& old)
 	{
-		return "cellgen_comp_stop(); \n" + old;
+		return old + "\n cellgen_total_stop(); \n";
 	}
 
-	xformer* clone() const { return new comp_timer_stop(*this); }
-	string class_name() const { return "comp_timer_stop"; }
+	xformer* clone() const { return new total_timer_stop(*this); }
+	string class_name() const { return "total_timer_stop"; }
 };
 
 struct parallel_for_op {
@@ -860,7 +869,7 @@ struct parallel_for_op {
 			append(xformations, fmap(make_induction<gen_out, shared_variable>(par_induction), inout));
 			append(xformations, fmap(make_induction<gen_final_out, shared_variable>(par_induction), out));
 			append(xformations, fmap(make_induction<gen_final_out, shared_variable>(par_induction), inout));
-			xformations.push_back(new comp_timer_stop());
+			xformations.push_back(new total_timer_stop());
 		}
 		else {
 			for_all(node.children, this);
@@ -1377,6 +1386,7 @@ struct cell_region {
 			if ((*region)->unroll()) {
 				front_xforms.push_back(new unroll_boundaries((*region)->unroll()));
 			}
+			front_xforms.push_back(new total_timer_start());
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
 			append(back_xforms, fmap(make_xformer<reduction_assign, reduction_variable>(), (*region)->reductions()));

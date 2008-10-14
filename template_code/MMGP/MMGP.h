@@ -70,7 +70,7 @@ static inline unsigned long long get_tb(){
 
 
 /* Structure used for PPE<->SPE signaling */
-volatile struct signal{
+struct signal{
 
     int start, stop;
     unsigned long long total_time, loop_time;
@@ -125,7 +125,7 @@ unsigned long long time_cellgen_start;
 
 #else
 
-#define profile_start_fn(fn_id) 
+#define profile_start_fn(fn_id)
 #define profile_end_fn(fn_id) 
 
 #endif

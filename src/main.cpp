@@ -291,8 +291,7 @@ public:
 	}
 };
 
-void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstream& ppe_fork,
-		spelist& regions)
+void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstream& ppe_fork, spelist& regions)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);

@@ -12,6 +12,7 @@
 #include <sched.h>
 #include <sys/sysinfo.h>
 #include <string.h>
+#include <pthread.h>
 
 /* Sending mail to an SPE. Parameters:
  * id - id of the targeting SPE,
@@ -291,9 +292,14 @@ void MMGP_init(unsigned int num_threads)
     #endif
 }
 
-__attribute__((constructor)) void initialize_MMGP()
+__attribute__((constructor)) void __initialize()
 {
 	MMGP_init(NUM_THREADS_HOOK);
 	MMGP_create_threads();
+}
+
+__attribute__((destructor)) void __finalize()
+{
+	cellgen_finish();	
 }
 
