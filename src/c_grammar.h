@@ -87,12 +87,13 @@ struct c_grammar: public grammar<c_grammar> {
             XOR_ASSIGN("^="), OR_ASSIGN("|="), RIGHT_OP(">>"), LEFT_OP("<<"),
             INC_OP("++"), DEC_OP("--"), PTR_OP("->"), AND_OP("&&"),
             OR_OP("||"), LE_OP("<="), GE_OP(">="), EQ_OP("=="), NE_OP("!="),
-            SEMICOLON(';'),
+            /*SEMICOLON(';'),*/
             COMMA(','), COLON(':'), ASSIGN('='), LEFT_PAREN('('),
             RIGHT_PAREN(')'), DOT('.'), ADDROF('&'), BANG('!'), TILDE('~'),
             MINUS('-'), PLUS('+'), STAR('*'), SLASH('/'), PERCENT('%'),
             LT_OP('<'), GT_OP('>'), XOR('^'), OR('|'), QUEST('?')
         {
+	    SEMICOLON = chlit<>(';');
         // C keywords
             keywords =
                 "auto", "break", "case", "char", "const", "continue", "default",
@@ -1014,7 +1015,7 @@ struct c_grammar: public grammar<c_grammar> {
                 OR_ASSIGN, RIGHT_OP, LEFT_OP, INC_OP, DEC_OP, PTR_OP, AND_OP,
                 OR_OP, LE_OP, GE_OP, EQ_OP, NE_OP;
         chlit<>
-                SEMICOLON, COMMA, COLON, ASSIGN, LEFT_PAREN, RIGHT_PAREN,
+                /*SEMICOLON,*/ COMMA, COLON, ASSIGN, LEFT_PAREN, RIGHT_PAREN,
                 DOT, ADDROF, BANG, TILDE, MINUS, PLUS, STAR, SLASH, PERCENT,
                 LT_OP, GT_OP, XOR, OR, QUEST;
 
@@ -1090,6 +1091,7 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::pointer> > pointer;
 	rule<ScannerT, parser_tag<ids::declaration_specifiers> > declaration_specifiers;
 	rule<ScannerT, parser_tag<ids::unary_expression> > unary_expression;
+	rule<ScannerT, parser_tag<ids::semicolon> > SEMICOLON;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

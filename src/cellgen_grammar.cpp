@@ -386,16 +386,14 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 					[self.start_op]
 				];
 
-			stop_code =
-				no_node_d[strlit<>("SPE_stop(")] >> stop_priv >> no_node_d[chlit<>(')')];
+			stop_code = no_node_d[strlit<>("SPE_stop(")] >> stop_priv >> no_node_d[chlit<>(')')];
 
 			stop_priv = no_node_d[
 					lexeme_d[ (*(anychar_p - ')')) ]
 					[self.stop_op]
 				];
 
-			priv_code =
-				no_node_d[strlit<>("private(")] >> priv_list >> no_node_d[chlit<>(')')];
+			priv_code = no_node_d[strlit<>("private(")] >> priv_list >> no_node_d[chlit<>(')')];
 
 			priv_list =
 				priv_dec >> no_node_d[chlit<>(',')] >> priv_list 
@@ -410,8 +408,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 					lexeme_d[ *(anychar_p - ',' - ')') ] 
 				];
 
-			reduction = 
-				no_node_d[strlit<>("reduction(")] 
+			reduction = no_node_d[strlit<>("reduction(")] 
 					>> operation[self.reduce_op_op] 
 					>> no_node_d[strlit<>(":")] 
 					>> reduce_list 
@@ -440,8 +437,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 					lexeme_d[ *(anychar_p - ',' - ')')]
 				];
 
-			shared_code =
-				no_node_d[strlit<>("shared(")] >> shared_list >> no_node_d[chlit<>(')')];
+			shared_code = no_node_d[strlit<>("shared(")] >> shared_list >> no_node_d[chlit<>(')')];
 
 			shared_list =
 				shared_dec >> no_node_d[chlit<>(',')] >> shared_list 
@@ -456,13 +452,11 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 					lexeme_d[ *(anychar_p - ',' - ')') ]
 				];
 
-			unrolled_code = 
-				no_node_d[strlit<>("unroll(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
+			unrolled_code = no_node_d[strlit<>("unroll(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
 
 			unroll_num = no_node_d[int_p];
 
-			buffer_code =
-				no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
+			buffer_code = no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
 
 			buffer_num = no_node_d[int_p];
 

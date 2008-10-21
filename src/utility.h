@@ -6,6 +6,7 @@
 #include <list>
 #include <string>
 #include <sstream>
+#include <boost/bind.hpp>
 using namespace std;
 
 template <class I, class F>
@@ -185,6 +186,12 @@ Out set_union_all(const Container1& c1, const Container2& c2, const Container3& 
 	typename Out::container_type temp1;
 	set_union_all(c1, c2, inserter(temp1, temp1.begin()));
 	return set_union_all(temp1, c3, o);
+}
+
+template <class T, class Container>
+bool exists_in(const Container& c, const T& val)
+{
+	return find_if(c.begin(), c.end(), boost::bind(equal_to<T>(), val, _1)) != c.end();
 }
 
 template <class T>

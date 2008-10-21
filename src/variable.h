@@ -102,20 +102,31 @@ public:
 	virtual string formal() const { return type() + " " + variable::name(); }
 };
 
+enum orientation_t { UNITIALIZED, ROW, COLUMN };
+
+class unitialized_access_orientation {};
+
 class shared_variable: public region_variable {
 	add_expr _math;
-	list<string> _dimensions;	// Dimensions for multidimensional array
+	list<string> _dimensions; // Dimensions for multidimensional array
+	orientation_t _orientation;
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r)
+		region_variable(t, l, a, r), _orientation(UNITIALIZED)
 		{}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d)
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNITIALIZED)
 		{}
 
 	add_expr math() const { return _math; }
 	void math(add_expr m) { _math = m; }
+
+	bool is_row() const { return _orientation == ROW; }
+	void row() { _orientation = ROW; }
+
+	bool is_column() const { return _orientation == COLUMN; }
+	void column() { _orientation = COLUMN; }
 
 	virtual string name() const
 	{
@@ -211,6 +222,7 @@ typedef set<shared_variable*>		sharedset;
 typedef set<reduction_variable*>	reduceset;
 typedef map<string, shared_variable*>	symtbl;
 typedef set<string>			symset;
+typedef list<string>			symlist;
 
 #endif // VARIABLE_H
 

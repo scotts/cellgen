@@ -457,6 +457,7 @@ int main(int argc, char* argv[])
 	system(string("cp " + spe_profiler + " spu/").c_str());
 
 	system(string("indent " + ppe_oname + " " + spe_oname).c_str());
+	system("rm *~ spu/*~");
 
 	return 0;
 }
