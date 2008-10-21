@@ -12,10 +12,10 @@ using namespace boost;
 using namespace boost::spirit;
 
 #include "utility.h"
+#include "xformers.h"
 
 typedef node_val_data<const char*> char_data;
 
-struct xformer;
 typedef list<xformer*> xformerlist;
 
 struct xformerlist_data: public char_data {
@@ -63,8 +63,7 @@ struct xformer_factory {
 		static node_t group_nodes(Container const& nodes)
 		{
 			typename node_t::container_t c;
-			for (typename Container::const_iterator i = nodes.begin();
-				i != nodes.end(); ++i) {
+			for (typename Container::const_iterator i = nodes.begin(); i != nodes.end(); ++i) {
 				c.insert(c.end(), i->value.begin(), i->value.end());
 			}
 			return node_t(c.begin(), c.end());
@@ -80,36 +79,6 @@ typedef ast_match::container_t				ast;
 typedef ast_match::node_t				ast_node;
 
 #include "spe_region.h"
-
-struct xformer: public unary_function<const string&, string> {
-	virtual ~xformer() {}
-	virtual void unroll_me(int u) {}
-	virtual string operator()(const string& old) = 0;
-	virtual xformer* clone() const = 0;
-	virtual string class_name() const = 0; // For debugging purposes only.
-};
-
-const int NO_UNROLL = 0;
-
-class induction_xformer: public xformer {
-protected:
-	string induction;
-public:
-	induction_xformer(const string& i): induction(i) {}
-};
-
-class unrollable_xformer: public induction_xformer {
-protected:
-	int unroll;
-public:
-	unrollable_xformer(const string& i): induction_xformer(i), unroll(NO_UNROLL) {}
-	virtual void unroll_me(int u)
-	{
-		// TODO: Do I need to know induction information to determine if 
-		// unrolling needs to happen? I used to think so. Now I'm not sure.
-		unroll = u;
-	}
-};
 
 inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
 {

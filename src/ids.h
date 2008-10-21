@@ -71,7 +71,6 @@ namespace ids {
 		"declaration_specifiers",
 		"unary_expression",
 		"semicolon"
-		
 	};
 	static const vector<string> mappings(__mappings, __mappings + last + 1);
 
