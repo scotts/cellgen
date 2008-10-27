@@ -29,6 +29,16 @@ public:
 	induction_xformer(const string& i): induction(i) {}
 };
 
+template <class X>
+struct make_induction: public unary_function<const shared_variable*, xformer*> {
+	const string& inductions;
+	make_induction(const string& i): inductions(i) {}
+	xformer* operator()(const shared_variable* v)
+	{
+		return new X(v, inductions);
+	}
+};
+
 const int NO_UNROLL = 0;
 
 class unrollable_xformer: public induction_xformer {
@@ -163,6 +173,96 @@ struct reduction_assign: public xformer {
 	string class_name() const { return "reduction_assign"; }
 };
 
+class shared_buffer_size: public unrollable_xformer {
+	const shared_variable* v;
+	const int buffer;
+
+public:
+	shared_buffer_size(const shared_variable* v, const int b): unrollable_xformer(""), v(v), buffer(b) {}
+	string operator()(const string& old)
+	{
+		string declaration;
+		if (v->depth() > 0 ) {
+			string def;
+
+			// User specified buffer overrides fitting buffer to unrolling
+			if (buffer) {
+				def = "(" + to_string(buffer) + ")";
+			}
+			else if (unroll) {
+				def = "(" + to_string(unroll) + v->math().factor(induction) + ")";
+			}
+			else {
+				def = default_buff_size;
+			}
+			declaration = "const int " + buffer_adaptor(v).size() + "=" + def + "; \n";
+		}
+
+		return old + declaration;
+	}
+
+	xformer* clone() const { return new shared_buffer_size(*this); }
+	string class_name() const { return "shared_buffer_size"; }
+};
+
+struct make_shared_buffer_size: public unary_function<const shared_variable*, xformer*> {
+	const int buffer;
+	make_shared_buffer_size(const int b): buffer(b) {}
+
+	xformer* operator()(const shared_variable* v)
+	{
+		return new shared_buffer_size(v, buffer);
+	}
+};
+
+class private_buffer_size: public xformer {
+	const private_variable* v;
+
+public:
+	private_buffer_size(const private_variable* v): v(v) {}
+	string operator()(const string& old)
+	{
+		string declaration;
+		if (v->depth() > 0 ) {
+			declaration = "const int " + buffer_adaptor(v).size() + "=" + default_buff_size + "; \n";
+		}
+
+		return old + declaration;
+	}
+
+	xformer* clone() const { return new private_buffer_size(*this); }
+	string class_name() const { return "private_buffer_size"; }
+};
+
+class buffer_malloc: public xformer {
+	const shared_variable* v;
+
+public:
+	buffer_malloc(const shared_variable* v): v(v) {}
+	string operator()(const string& old)
+	{
+		buffer_adaptor buff(v);
+		return old + buff.declare() + "= _malloc_align(sizeof(" + buff.type() + ")*" + buff.depth() + "*" + buff.size() + ",7);";
+	}
+
+	xformer* clone() const { return new buffer_malloc(*this); }
+	string class_name() const { return "buffer_malloc"; }
+};
+
+class buffer_free: public xformer {
+	const shared_variable* v;
+
+public:
+	buffer_free(const shared_variable* v): v(v) {}
+	string operator()(const string& old)
+	{
+		return "_free_align(" + buffer_adaptor(v).name() + ");" + old;
+	}
+
+	xformer* clone() const { return new buffer_free(*this); }
+	string class_name() const { return "buffer_free"; }
+};
+
 class init_buffers: public xformer {
 	const shared_variable* v;
 
@@ -177,7 +277,7 @@ public:
 		return	old + 
 			orig.declare() + "; \n" +
 			next.declare() + " = 0; \n" +
-			orig.name() + " = " + buff.name() + "[" + next.name() + "]; \n";
+			orig.name() + " = " + buff.name() + "; \n";
 	}
 
 	xformer* clone() const { return new init_buffers(*this); }
@@ -196,7 +296,7 @@ public:
 
 		return	init_buffers(v)(old) +
 			"mfc_get(" +
-				buff.name() + "[" + next.name() + "], " 
+				buff.name() + "+" + buff.size() + "*" + next.name() + ", " 
 				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + ")),"
 				"sizeof(" + buff.type() + ")*" + buff.size() + ", " +
 				next.name() + ", 0, 0); \n";
@@ -312,7 +412,7 @@ struct gen_in_row: public gen_in {
 			wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 
-		return old +
+		return old + 
 			"cellgen_dma_prep_start(); \n" + 
 			outer_if + "{ \n" +
 				prev.name() + "=" + next.name() + "; \n" +
@@ -320,12 +420,12 @@ struct gen_in_row: public gen_in {
 				wait +
 				inner_if + "{ \n"
 					"mfc_get(" + 
-						buff.name() + "[" + next.name() + "]," 
+						buff.name() + "+" + buff.size() + "*" + next.name() + "," 
 						"(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff.size() + "))," 
 						"sizeof(" + buff.type() + ") *" + buff.size() + "," +
 						next.name() + ", 0, 0);\n"
 				"} \n" +
-				orig.name() + "=" + buff.name() + "[" + prev.name() + "]; \n"
+				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + "; \n"
 				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n"
 			"} \n"
 			"cellgen_dma_prep_stop(); \n";
@@ -365,7 +465,7 @@ struct gen_out_row: public gen_out {
 
 		if (v->depth() < 3) {
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
-					orig.name() + "=" + buff.name() + "[" + next.name() + "]; \n" +
+					orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + "; \n" +
 					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 

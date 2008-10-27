@@ -25,6 +25,6 @@ main.o:			main.cpp cellgen_grammar.h streamops.h $(COMMON_INCLUDES)
 			$(CXX) $(CXXFLAGS) -DTEMPLATE_DIR=\"$(PWD)/../template_code/\" -c main.cpp 
 
 cellgen_grammar.o:	cellgen_grammar.cpp cellgen_grammar.h parse_tree.h c_grammar.h skip.h $(COMMON_INCLUDES)
-parse_tree.o:		parse_tree.cpp parse_tree.h ids.h $(COMMON_INCLUDES)
+parse_tree.o:		parse_tree.cpp parse_tree.h ids.h xformers.h $(COMMON_INCLUDES)
 math_exprs.o:		math_exprs.cpp math_exprs.h 
 

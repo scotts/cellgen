@@ -360,10 +360,12 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 	stringstream ss;
 	ss << spe_dec.str() << endl;
 
+	/*
 	for_all(regions, define_region_buff_sizes(ss));
 	for_all(regions, define_in_and_out_buffers(ss));
 	for_all(regions, define_inout_buffers(ss));
 	for_all(regions, define_private_buffers(ss));
+	*/
 
 	sslist cases;
 	for_all(regions, print_region(ss, cases));

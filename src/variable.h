@@ -79,6 +79,7 @@ public:
 	region_variable(const string& t, const string& l, const string& a, int r):
 		variable(t, l, a), region_num(r), _depth(0) {}
 
+	/*
 	virtual string name() const
 	{
 		string region;
@@ -87,6 +88,7 @@ public:
 		}
 		return variable::name() + region;
 	}
+	*/
 
 	int depth() const { return _depth; }
 	void depth(int d) { _depth = d; }
@@ -163,28 +165,23 @@ public:
 
 	string type() const
 	{
-		string noptr = v->type();
 		size_t star = v->type().find('*');
 		size_t bracket = v->type().find('['); 
-		size_t pos = (star == string::npos) ? bracket : star;
-		if (pos == string::npos) {
+
+		if (bracket == string::npos && star == string::npos) {
 			cerr	<< "error: variable " << v->name() 
 				<< " can't be made into a buffer because it is a scalar." 
 				<< endl;
 			exit(1);
 		}
+
+		size_t pos = (star == string::npos) ? bracket : star;
 		return v->type().substr(0, pos);
 	}
 
 	string declare() const
 	{
-		stringstream ss;
-		ss << type() << " " << name();
-		if (v->depth() > 1) {
-			ss << "[" << v->depth() << "]";
-		}
-		ss << "[" << size() << "] __attribute__((aligned(128)))"; 
-		return ss.str();
+		return type() + "* " + name();
 	}
 
 	string depth() const

@@ -1,3 +1,7 @@
+
+/*
+ * Scott's original version.
+ */
 /*
 void compute_bounds(int *start, int *stop, int buff_sz)
 {
@@ -16,6 +20,10 @@ void compute_bounds(int *start, int *stop, int buff_sz)
 }
 */
 
+/*
+ * Jae-seung's revision.
+ */
+/*
 void compute_bounds (int *start, int *stop, int buff_sz)
 {
   int total_chunks = (*stop - *start) / buff_sz;
@@ -49,6 +57,27 @@ void compute_bounds (int *start, int *stop, int buff_sz)
       else
           *stop = *start + (thread_chunks * buff_sz);
     }
+}
+*/
+
+/*
+ * Scott's new version. It distributes the remaineder iterations as close to evenly 
+ * as possible.
+ */
+void compute_bounds(int* start, int *stop, int buff_size)
+{
+	int base = (*stop - *start) / SPE_threads;
+	int rem = (*stop - *start) % SPE_threads;
+
+	*start = *start + (SPE_id * base);
+	*stop = *start + base;
+
+	if (rem > 0) {
+		if (SPE_threads - SPE_id <= rem) {
+			*start += rem - (SPE_threads - SPE_id);
+			*stop += rem - (SPE_threads - SPE_id - 1);
+		}
+	}
 }
 
 int main()

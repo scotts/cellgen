@@ -712,17 +712,6 @@ struct multiple_parallel_induction_variables {
 	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
 };
 
-
-template <class X>
-struct make_induction: public unary_function<const shared_variable*, xformer*> {
-	const string& inductions;
-	make_induction(const string& i): inductions(i) {}
-	xformer* operator()(const shared_variable* v)
-	{
-		return new X(v, inductions);
-	}
-};
-
 template <class Row, class Column>
 struct make_row_or_column: public unary_function<const shared_variable*, xformer*> {
 	const string& inductions;
@@ -1141,10 +1130,18 @@ struct cell_region {
 
 			xformerlist& front_xforms = node.children.front().value.xformations;
 			front_xforms.push_back(new declare_prev());
+
+			append(front_xforms, fmap(make_xformer<private_buffer_size, private_variable>(), (*region)->priv()));
+			append(front_xforms, fmap(make_shared_buffer_size((*region)->buffer()), (*region)->shared()));
+
+			append(front_xforms, fmap(make_xformer<buffer_malloc, shared_variable>(), (*region)->shared()));
+
 			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(o.par_induction)).max)));
+
 			append(front_xforms, fmap(make_xformer<init_buffers, shared_variable>(), (*region)->out()));
 			append(front_xforms, fmap(make_induction<in_init_buffers>(par_induction), (*region)->in()));
 			append(front_xforms, fmap(make_induction<in_init_buffers>(par_induction), (*region)->inout()));
+
 			front_xforms.push_back(new in_init_buffers_wait());
 			append(front_xforms, fmap(make_xformer<init_private_buffers, private_variable>(), (*region)->priv()));
 			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
@@ -1158,6 +1155,7 @@ struct cell_region {
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
 			append(back_xforms, fmap(make_xformer<reduction_assign, reduction_variable>(), (*region)->reductions()));
+			append(back_xforms, fmap(make_xformer<buffer_free, shared_variable>(), (*region)->shared()));
 
 			++region;
 		}
