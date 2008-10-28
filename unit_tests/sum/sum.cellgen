@@ -1,0 +1,46 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+
+#define N 1024
+
+int a[N] __attribute__((aligned(128)));
+int b[N] __attribute__((aligned(128)));
+int c[N] __attribute__((aligned(128)));
+int scalar[2] __attribute__((aligned(128)));
+
+int main()
+{
+	int j;
+	int sum = 0;
+	int local_sum = 0;
+
+	for (j = 0; j < N; ++j) {
+		a[j] = 0;
+		b[j] = j;
+		c[j] = j;
+	}
+	scalar[0] = 3;
+	scalar[1] = 6;
+
+	#pragma cell SPE_start(0) SPE_stop(N) reduction(+: int s = sum) private(int* sc = scalar) shared(int* x = a, int* y = b, int* z = c)
+	{
+		int i;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			x[i] = y[i] * z[i] + sc[0];
+			s += y[i] + z[i] + sc[1];
+		}
+	}
+
+	for (j = 0; j < N; ++j) {
+		assert(a[j] == j * j + scalar[0]);
+	}
+
+	for (j = 0; j < N; ++j) {
+		local_sum += b[j] + c[j] + scalar[1];
+	}
+	assert(sum == local_sum);
+
+	return 0;
+}
+

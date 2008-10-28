@@ -72,11 +72,9 @@ void compute_bounds(int* start, int *stop, int buff_size)
 	*start = *start + (SPE_id * base);
 	*stop = *start + base;
 
-	if (rem > 0) {
-		if (SPE_threads - SPE_id <= rem) {
-			*start += rem - (SPE_threads - SPE_id);
-			*stop += rem - (SPE_threads - SPE_id - 1);
-		}
+	if (SPE_threads - SPE_id <= rem) {
+		*start += rem - (SPE_threads - SPE_id);
+		*stop += rem - (SPE_threads - SPE_id - 1);
 	}
 }
 

@@ -1,0 +1,53 @@
+#include <stdio.h>
+#include <assert.h>
+
+#define __ROW 4096
+#define __COL 256
+int test[__ROW][__COL] __attribute((aligned(128)));
+int ref[__ROW][__COL] __attribute((aligned(128)));
+
+int main()
+{
+	const int ROW = __ROW;
+	const int COL = __COL;
+
+	int i, j;
+	int count = 0;	
+	for (i = 0; i < ROW; ++i) {
+		for (j = 0; j < COL; ++j) {
+			test[i][j] = count;
+			ref[i][j] = count;
+			++count;
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(COL) buffer(256) private(int ROW = ROW, int COL = COL) shared(int* test = test[ROW][COL])
+	{
+		int i, j;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < ROW; ++j) {
+				int f = test[j][i];
+				test[j][i] = f*2;
+			}
+		}
+	}
+
+	for (i = 0; i < ROW; ++i) {
+		for (j = 0; j < COL; ++j) {
+			ref[i][j] = 2 * ref[i][j];
+		}
+	}
+
+	for (i = 0; i < ROW; ++i) {
+		for (j = 0; j < COL; ++j) {
+			if (test[i][j] != ref[i][j]) {
+				printf("failure at (%d,%d), test %d, ref %d\n", i, j, test[i][j], ref[i][j]);
+				return 1;
+			}
+			//printf("%d ", test[i][j]);
+		}
+		//printf("\n");
+	}
+	
+	return 0;
+}
