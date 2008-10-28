@@ -22,14 +22,16 @@ using namespace boost::program_options;
 #include "streamops.h"
 #include "utility.h"
 
+const string pass_struct_oname		= "pass_struct.h";
+
 // TEMPLATE_DIR is fed from the makefile
 const string path			= TEMPLATE_DIR;
 const string ppe_fork_iname		= path + "ppe_fork.c";
 const string ppe_prolouge_iname		= path + "ppe_prolouge.c";
 const string spe_declarations_iname	= path + "spe_prolouge.c";
 const string spe_main_iname		= path + "spe_epilouge.c";
-const string pass_struct_oname		= "pass_struct.h";
 const string pass_struct_iname		= path + pass_struct_oname;
+const string cellstrider_dma_iname	= path + "cellstrider_dma.h";
 
 const string mmgp_h_oname		= "MMGP.h";
 const string mmgp_c_oname		= "MMGP.c";
@@ -39,6 +41,7 @@ const string mmgp_c_iname		= path + "MMGP/" + mmgp_c_oname;
 const string mmgp_spu_h_iname		= path + "MMGP/MMGP_spu.h";
 
 const string spe_profiler		= path + "cellgen_timer.h " + path + "cellgen_timer.c " + path + "spu_flih.S";
+
 const string loop_hook			= "LOOP_ID";
 const string pass_struct_hook		= "STRUCT_PASS_VARIABLE";
 const string pass_assign_hook		= "PASS_ASSIGNMENT";
@@ -457,6 +460,7 @@ int main(int argc, char* argv[])
 	print_spe(spe_oname, spe_declarations, spe_main, spe_regions);
 	
 	system(string("cp " + spe_profiler + " spu/").c_str());
+	system(string("cp " + cellstrider_dma_iname + " spu/").c_str());
 
 	system(string("indent " + ppe_oname + " " + spe_oname).c_str());
 	system("rm *~ spu/*~");

@@ -6,6 +6,7 @@
 #include "MMGP_spu.h"
 #include "../pass_struct.h"
 #include "cellgen_timer.h"
+#include "cellstrider_dma.h"
 
 const int out_tag = 2;
 

@@ -67,7 +67,7 @@ public:
 		{}
 	virtual string define() const { return "#define " + name() + " " + definition() + "\n"; }
 };
-const string default_buff_size("80");
+const string default_buff_size("64");
 
 class region_variable: public variable {
 	int region_num;

@@ -8,6 +8,9 @@
 #include <asm/unistd.h>
 #include <unistd.h>
 #include <malloc_align.h>
+#include <sched.h>
+
+int sched_yield(void);
 
 #define MAX_NUM_SPEs    20
 #define TERMINATE	0
@@ -35,12 +38,7 @@ void MMGP_create_threads(void);
 		} \
 		*c op##= ((struct signal *)signal[i])->result;  \
 	} \
-        cnt_loop[fn_id-1]++;                                    \
-        time_loop[fn_id-1] += get_tb () - loop_time;            \
-        time_ppu_start = get_tb ();                             \
 })
-
-
 
 #define mftb()  ({unsigned long rval;   \
                     asm volatile("mftb %0" : "=r" (rval)); rval;})
@@ -54,7 +52,7 @@ void MMGP_create_threads(void);
 #define _sync    __asm__ __volatile("sync")
 
 /* Timing instruction for Power arch. */
-static inline unsigned long long get_tb(){
+static inline unsigned long long get_tb() {
 
      unsigned int tbhi, tblo, tbhi2;
      
@@ -70,7 +68,7 @@ static inline unsigned long long get_tb(){
 
 
 /* Structure used for PPE<->SPE signaling */
-struct signal{
+struct signal {
 
     int start, stop;
     unsigned long long total_time, loop_time;

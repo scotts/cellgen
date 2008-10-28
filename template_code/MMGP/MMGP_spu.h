@@ -6,6 +6,9 @@
  *	Email: filip@cs.vt.edu
 */
 
+#ifndef MMGP_SPU_H
+#define MMGP_SPU_H
+
 #define TERMINATE	0
 #define GET_TIMES	(NUM_KERNELS+1)
 #define NUM_FNs		NUM_KERNELS
@@ -235,3 +238,6 @@ inline void MMGP_SPE_stop(int fn_id){
     #endif
 	
 }
+
+#endif
+

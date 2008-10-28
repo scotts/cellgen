@@ -1146,6 +1146,7 @@ struct cell_region {
 			append(front_xforms, fmap(make_shared_buffer_size((*region)->buffer()), (*region)->shared()));
 
 			append(front_xforms, fmap(make_xformer<buffer_malloc, shared_variable>(), (*region)->shared()));
+			append(front_xforms, fmap(make_xformer<buffer_malloc, private_variable>(), (*region)->priv()));
 
 			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(o.par_induction)).max)));
 

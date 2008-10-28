@@ -19,9 +19,24 @@
 #include <free_align.h>
 #include <spu_mfcio.h>
 #include <stdint.h>
-#include "../cellstrider_type.h"
+//#include "../cellstrider_type.h"
 #include "MMGP_spu.h"
 #include <stdio.h>
+
+// pulled directly in from cellstrider_type.h
+#define DMA_QUANTUM_SZ		16
+
+#define DMA_QUANTUM_MASK	0x0000000F
+#define DMA_SZ_LIMIT		16384 // it is multiple of 16(DMA_QUANTUM_SZ)
+#define DMA_LIST_LIMIT		2048
+#define ALIGN_BY		7  // 2^(ALIGN_BY)/8 bytes
+#define DMA_ALIGN		((ALIGN_BY==7) ? 128 : ((ALIGN_BY==6)? 64: ((ALIGN_BY==5)? 32: 8)))
+#define ATTR_ALIGN		__attribute__ ((aligned (DMA_ALIGN)))
+#define DMA_ALIGN_MASK		0x0000007F
+
+#define IS_ALIGN_OK(_P_)	!(((uintptr_t)(_P_)) & DMA_ALIGN_MASK) 
+#define IS_SIZE_OK(_S_)		!((_S_) & DMA_QUANTUM_MASK)
+#define EPADDING(_S_)		((DMA_QUANTUM_SZ - ((_S_) % DMA_QUANTUM_SZ)) % DMA_QUANTUM_SZ)
 
 typedef struct spe_dma_list
 {
@@ -29,7 +44,6 @@ typedef struct spe_dma_list
     uint32_t length;
     uint32_t alloclength;
 } spe_dma_list_t;
-
 
 static inline void allocate_dma_list(spe_dma_list_t* list, uint32_t len, uint32_t num_dma_cmds_per_element)
 {

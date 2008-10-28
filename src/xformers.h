@@ -235,14 +235,20 @@ public:
 };
 
 class buffer_malloc: public xformer {
-	const shared_variable* v;
+	const region_variable* v;
 
 public:
-	buffer_malloc(const shared_variable* v): v(v) {}
+	buffer_malloc(const region_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
-		buffer_adaptor buff(v);
-		return old + buff.declare() + "= _malloc_align(sizeof(" + buff.type() + ")*" + buff.depth() + "*" + buff.size() + ",7);";
+		string allocation;
+
+		if (v->depth() > 0) {
+			buffer_adaptor buff(v);
+			allocation = buff.declare() + "= _malloc_align(sizeof(" + buff.type() + ")*" + buff.depth() + "*" + buff.size() + ",7);";
+		}
+
+		return old + allocation;
 	}
 
 	xformer* clone() const { return new buffer_malloc(*this); }
@@ -250,10 +256,10 @@ public:
 };
 
 class buffer_free: public xformer {
-	const shared_variable* v;
+	const region_variable* v;
 
 public:
-	buffer_free(const shared_variable* v): v(v) {}
+	buffer_free(const region_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
 		return "_free_align(" + buffer_adaptor(v).name() + ");" + old;
@@ -295,11 +301,11 @@ public:
 		next_adaptor next(v);
 
 		return	init_buffers(v)(old) +
-			"mfc_get(" +
+			"DMA_get(" +
 				buff.name() + "+" + buff.size() + "*" + next.name() + ", " 
 				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + ")),"
 				"sizeof(" + buff.type() + ")*" + buff.size() + ", " +
-				next.name() + ", 0, 0); \n";
+				next.name() + "); \n";
 	}
 
 	xformer* clone() const { return new in_init_buffers(*this); }
@@ -318,11 +324,11 @@ public:
 			buffer_adaptor buff(v);
 			orig_adaptor orig(v);
 
-			ret =	"mfc_get(" +
+			ret =	"DMA_get(" +
 					buff.name() + "," +
 					"(unsigned long)" + orig.name() + "," +
 					"sizeof(" + buff.type() + ")*" + buff.size() + ","
-					"3, 0, 0); \n" + 
+					"3); \n" + 
 				orig.name() + "=" + buff.name() + ";"
 				"MMGP_SPE_dma_wait(3, fn_id); \n";
 		}
@@ -409,11 +415,11 @@ struct gen_in_row: public gen_in {
 				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + "; \n" + 
 				wait +
 				inner_if + "{ \n"
-					"mfc_get(" + 
+					"DMA_get(" + 
 						buff.name() + "+" + buff.size() + "*" + next.name() + "," 
 						"(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff.size() + "))," 
 						"sizeof(" + buff.type() + ") *" + buff.size() + "," +
-						next.name() + ", 0, 0);\n"
+						next.name() + ");\n"
 				"} \n" +
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + "; \n"
 				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n"
@@ -465,10 +471,10 @@ struct gen_out_row: public gen_out {
 
 		return "cellgen_dma_prep_start(); \n" +
 			if_statement + "{\n" +
-					"mfc_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
+					"DMA_put(" + orig.name() + "," + "(unsigned long)(" + v->name() + 
 							"+" + v->math().next_iteration(induction) + "-" + buff.size() + "),"
 						"sizeof(" + buff.type() + ")*" + buff.size() + "," +
-						next.name() + ", 0, 0); \n" +
+						next.name() + "); \n" +
 					var_switch +
 			"} \n" 
 			"cellgen_dma_prep_stop(); \n" +
@@ -511,15 +517,14 @@ struct gen_final_out_row: public gen_final_out {
 				"if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")) {" +
 					prev.name() + "=" + next.name() + ";" +
 					next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
-					"mfc_put(" + orig.name() + "," 
+					"DMA_put(" + orig.name() + "," 
 						"(unsigned long)(" + v->name() +
 							"+(SPE_stop" + v->math().factor(induction) + ")-(((SPE_stop-SPE_start)" + 
 							v->math().factor(induction) + ")%" + 
 							buff.size() + ")),"
 						"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) +
 						")%" + buff.size() + ")," +
-						next.name() + ", 0, 0"
-					"); \n" +
+						next.name() + "); \n" +
 					"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n" +
 					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n" 
 				"} \n"
