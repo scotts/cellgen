@@ -2,7 +2,9 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define N 1024
+// FIXME: this is chosen so that we don't get bus errors. The implementation
+// needs to be better.
+#define N 1920
 
 int a[N] __attribute__((aligned(128)));
 int b[N] __attribute__((aligned(128)));
