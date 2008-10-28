@@ -311,6 +311,8 @@ void printadd(const add_expr& a)
 	cout << "(" << a.str() << ") ";
 }
 
+class shared_variable_double_orientation {};
+
 struct assignment_split {
 	const symtbl& shared;
 	const symlist& inductions;
@@ -328,24 +330,22 @@ struct assignment_split {
 			if (o.found_shared && o.found_induction) {
 				add_expr add = make_add_expr(o.var->dimensions(), o.accesses);
 
-				cout << "inductions: ";
-				for_all(inductions, printstr);
-				cout << endl;
-
-				cout << "accesses: ";
-				for_all(o.accesses, printadd);
-				cout << endl;
-
 				// Column or row access?
 				if (o.accesses.back().str() == inductions.back()) {
+					if (o.var->is_column()) {
+						throw shared_variable_double_orientation();
+					}
+
 					o.var->row();
 					node.value.xformations.push_back(new to_row_space(o.var, add)); 
-					cout << "row access" << endl;
 				}
 				else {
+					if (o.var->is_row()) {
+						throw shared_variable_double_orientation();
+					}
+
 					o.var->column();
 					node.value.xformations.push_back(new to_column_space(o.var, add)); 
-					cout << "column access" << endl;
 				}
 
 				o.var->math(add);
@@ -376,8 +376,19 @@ struct assignment_search {
 		if (node.value.id() == ids::assignment_expression) {
 			ast_iterator eqs = find_if_all(node.children, is_equals);
 
-			for_each(node.children.begin(), eqs, assignment_split(shared, inductions, condition, out));
-			for_each(eqs, node.children.end(), assignment_split(shared, inductions, condition, in));
+			try {
+				for_each(node.children.begin(), eqs, assignment_split(shared, inductions, condition, out));
+				for_each(eqs, node.children.end(), assignment_split(shared, inductions, condition, in));
+			}
+			catch (shared_variable_double_orientation e) {
+				cerr 	<< "error: Shared variables can only be accessed in row major or column "
+					<< "major format, not both. Make your own alias to get around this "
+					<< "limitation."
+					<< endl;
+				exit(1);
+			}
+
+
 		}
 		else {
 			for_all(node.children, this);
@@ -540,7 +551,7 @@ struct for_compound_op {
 						node.value.xformations.push_back(new gen_in_column(*i, par_induction));
 					}
 					else {
-						throw new unitialized_access_orientation();
+						throw unitialized_access_orientation();
 					}
 
 					in.insert(*i);
@@ -563,7 +574,7 @@ struct for_compound_op {
 						lazy_in.insert(bind_gen_in::value_type(new gen_in_column(*i, par_induction), &node));
 					}
 					else {
-						throw new unitialized_access_orientation();
+						throw unitialized_access_orientation();
 					}
 
 					seen.insert(*i);
@@ -662,7 +673,7 @@ void serial_for_op::operator()(ast_node& node)
 			for_all(node.children, relational_search(condition, ser_inductions));
 
 			if (condition == string()) {
-				cerr << "error: no relational expression in nested for loop." << endl;
+				cerr << "error: No relational expression in nested for loop." << endl;
 				exit(1);
 			}
 		}
@@ -725,7 +736,7 @@ struct make_row_or_column: public unary_function<const shared_variable*, xformer
 			return new Column(v, inductions);
 		}
 		else {
-			throw new unitialized_access_orientation();
+			throw unitialized_access_orientation();
 		}
 
 		// Should never get here.
@@ -1024,7 +1035,7 @@ struct compound {
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
-				cerr	<< "error: attempt to define multiple parallel induction variables" << endl 
+				cerr	<< "error: Attempt to define multiple parallel induction variables" << endl 
 					<< "\told: " << e.old << " new: " << e.attempt << endl;
 				exit(1);
 			}
@@ -1142,7 +1153,6 @@ struct cell_region {
 			append(front_xforms, fmap(make_induction<in_init_buffers>(par_induction), (*region)->in()));
 			append(front_xforms, fmap(make_induction<in_init_buffers>(par_induction), (*region)->inout()));
 
-			front_xforms.push_back(new in_init_buffers_wait());
 			append(front_xforms, fmap(make_xformer<init_private_buffers, private_variable>(), (*region)->priv()));
 			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
 

@@ -104,7 +104,7 @@ public:
 	virtual string formal() const { return type() + " " + variable::name(); }
 };
 
-enum orientation_t { UNITIALIZED, ROW, COLUMN };
+enum orientation_t { UNINITIALIZED, ROW, COLUMN };
 
 class unitialized_access_orientation {};
 
@@ -115,10 +115,10 @@ class shared_variable: public region_variable {
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNITIALIZED)
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED)
 		{}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNITIALIZED)
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED)
 		{}
 
 	add_expr math() const { return _math; }
@@ -130,6 +130,7 @@ public:
 	bool is_column() const { return _orientation == COLUMN; }
 	void column() { _orientation = COLUMN; }
 
+	bool has_orientation() const { return _orientation != UNINITIALIZED; }
 	virtual string name() const
 	{
 		return region_variable::name() + "_adr"; 

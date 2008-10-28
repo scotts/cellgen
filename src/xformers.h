@@ -306,16 +306,6 @@ public:
 	string class_name() const { return "in_init_buffers"; }
 };
 
-class in_init_buffers_wait: public xformer {
-	string operator()(const string& old)
-	{
-		//return old + "MMGP_SPE_wait();";
-		return old;
-	}
-	xformer* clone() const { return new in_init_buffers_wait(*this); }
-	string class_name() const { return "in_init_buffers_wait"; }
-};
-
 class init_private_buffers: public xformer {
 	const private_variable* v;
 
