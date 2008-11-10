@@ -1,9 +1,8 @@
 #ifndef PARSE_TREE_H
 #define PARSE_TREE_H
 
-#include <list>
-#include <string>
-using namespace std;
+#include "utility.h"
+#include "xformers.h"
 
 #include <boost/shared_ptr.hpp>
 #include <boost/spirit/iterator/file_iterator.hpp>
@@ -11,12 +10,7 @@ using namespace std;
 using namespace boost;
 using namespace boost::spirit;
 
-#include "utility.h"
-#include "xformers.h"
-
 typedef node_val_data<const char*> char_data;
-
-typedef list<xformer*> xformerlist;
 
 struct xformerlist_data: public char_data {
 	xformerlist xformations;

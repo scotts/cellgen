@@ -1,10 +1,11 @@
 #include <stdio.h>
 #include <assert.h>
+#include "int16b_t.h"
 
 #define __ROW 4096
 #define __COL 256
-int test[__ROW][__COL] __attribute((aligned(128)));
-int ref[__ROW][__COL] __attribute((aligned(128)));
+int16b_t test[__ROW][__COL] __attribute((aligned(128)));
+int16b_t ref[__ROW][__COL] __attribute((aligned(128)));
 
 int main()
 {
@@ -21,27 +22,27 @@ int main()
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(COL) buffer(256) private(int ROW = ROW, int COL = COL) shared(int* test = test[ROW][COL])
+	#pragma cell SPE_start(0) SPE_stop(COL) buffer(256) private(int ROW = ROW, int COL = COL) shared(int16b_t* test = test[ROW][COL])
 	{
 		int i, j;
 		for (i = SPE_start; i < SPE_stop; ++i) {
 			for (j = 0; j < ROW; ++j) {
-				int f = test[j][i];
-				test[j][i] = f*2;
+				int f = test[j][i].num;
+				test[j][i].num = f*2;
 			}
 		}
 	}
 
-	for (i = 0; i < ROW; ++i) {
-		for (j = 0; j < COL; ++j) {
-			ref[i][j] = 2 * ref[i][j];
+	for (i = 0; i < COL; ++i) {
+		for (j = 0; j < ROW; ++j) {
+			ref[j][i].num = 2 * ref[j][i].num;
 		}
 	}
 
 	for (i = 0; i < ROW; ++i) {
 		for (j = 0; j < COL; ++j) {
-			if (test[i][j] != ref[i][j]) {
-				printf("failure at (%d,%d), test %d, ref %d\n", i, j, test[i][j], ref[i][j]);
+			if (test[i][j].num != ref[i][j].num) {
+				printf("failure at (%d,%d), test %d, ref %d\n", i, j, test[i][j].num, ref[i][j].num);
 				return 1;
 			}
 			//printf("%d ", test[i][j]);

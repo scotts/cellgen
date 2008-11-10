@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 #include <boost/bind.hpp>
+#include <boost/mem_fn.hpp>
 using namespace std;
 
 template <class I, class F>

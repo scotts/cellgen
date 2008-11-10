@@ -30,7 +30,7 @@ all of the offloaded SPE code.
 Currently, only for loops are supported. In order to offload a for loop,
 use the following pragma:
 
-	#pragma cell SPE_start(<start>) SPE_stop(<stop)
+	#pragma cell SPE_start(<start>) SPE_stop(<stop>)
 	{
 		int i;
 		for (i = SPE_start; i < SPE_stop; i++) {

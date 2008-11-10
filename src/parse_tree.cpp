@@ -337,7 +337,7 @@ struct assignment_split {
 					}
 
 					o.var->row();
-					node.value.xformations.push_back(new to_row_space(o.var, add)); 
+					node.value.xformations.push_back(new row_buffer_space(o.var, add)); 
 				}
 				else {
 					if (o.var->is_row()) {
@@ -345,12 +345,12 @@ struct assignment_split {
 					}
 
 					o.var->column();
-					node.value.xformations.push_back(new to_column_space(o.var, add)); 
+					node.value.xformations.push_back(new column_buffer_space(o.var, add)); 
 				}
 
 				o.var->math(add);
 				
-				// If we don't do this, redundant printing. The to_*_space xformer
+				// If we don't do this, redundant printing. The to_buffer_space xformer
 				// is a reduction of all the children.
 				node.children.clear(); 
 			}
@@ -387,8 +387,6 @@ struct assignment_search {
 					<< endl;
 				exit(1);
 			}
-
-
 		}
 		else {
 			for_all(node.children, this);
@@ -589,9 +587,16 @@ struct for_compound_op {
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
+			
+			xformerlist& xforms = node.value.xformations;
 			xformerlist lifted;
 			for_all(node.children, make_descend(lift_out_gen_in_rows(lifted)))(node);
-			node.value.xformations.splice(node.value.xformations.begin(), lifted);
+			xforms.splice(xforms.begin(), lifted);
+
+			xformerlist cols;
+			for_all(in, make_append_induction_if<init_column_buffer>(cols, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<init_column_buffer>(cols, boost::mem_fn(&shared_variable::is_column), par_induction));
+			append(xforms, cols);
 		}
 		else {
 			for_all(node.children, this);
@@ -1067,9 +1072,9 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	void operator()(shared_variable* v)
 	{
 		if (max) {
-			if (	from_string<int>(remove_multop(max->math().factor(induction))) < 
-				from_string<int>(remove_multop(v->math().factor(induction)))
-			) {
+			int max_int = from_string<int>(remove_multop(max->math().factor(induction))); 
+			int prov = from_string<int>(remove_multop(v->math().factor(induction)));
+			if (max_int < prov) {
 				max = v;
 			}
 		}
@@ -1145,16 +1150,20 @@ struct cell_region {
 			append(front_xforms, fmap(make_xformer<private_buffer_size, private_variable>(), (*region)->priv()));
 			append(front_xforms, fmap(make_shared_buffer_size((*region)->buffer()), (*region)->shared()));
 
-			append(front_xforms, fmap(make_xformer<buffer_malloc, shared_variable>(), (*region)->shared()));
-			append(front_xforms, fmap(make_xformer<buffer_malloc, private_variable>(), (*region)->priv()));
+			append(front_xforms, fmap(make_xformer<buffer_allocation, shared_variable>(), (*region)->shared()));
+			append(front_xforms, fmap(make_xformer<buffer_allocation, private_variable>(), (*region)->priv()));
+			append(front_xforms, fmap(make_xformer<dma_list_allocation, shared_variable>(), (*region)->shared()));
 
 			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(o.par_induction)).max)));
 
-			append(front_xforms, fmap(make_xformer<init_buffers, shared_variable>(), (*region)->out()));
-			append(front_xforms, fmap(make_induction<in_init_buffers>(par_induction), (*region)->in()));
-			append(front_xforms, fmap(make_induction<in_init_buffers>(par_induction), (*region)->inout()));
+			append(front_xforms, fmap(make_xformer<declare_buffer, shared_variable>(), (*region)->out()));
 
-			append(front_xforms, fmap(make_xformer<init_private_buffers, private_variable>(), (*region)->priv()));
+			xformerlist rows;
+			for_all((*region)->in(), make_append_induction_if<init_row_buffer>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			for_all((*region)->inout(), make_append_induction_if<init_row_buffer>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			append(front_xforms, rows);
+
+			append(front_xforms, fmap(make_xformer<init_private_buffer, private_variable>(), (*region)->priv()));
 			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
 
 			// Order matters; unroll_boundaries generates code that depends on 
@@ -1166,7 +1175,9 @@ struct cell_region {
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
 			append(back_xforms, fmap(make_xformer<reduction_assign, reduction_variable>(), (*region)->reductions()));
-			append(back_xforms, fmap(make_xformer<buffer_free, shared_variable>(), (*region)->shared()));
+			append(back_xforms, fmap(make_xformer<buffer_deallocation, shared_variable>(), (*region)->shared()));
+			append(back_xforms, fmap(make_xformer<buffer_deallocation, private_variable>(), (*region)->priv()));
+			append(back_xforms, fmap(make_xformer<dma_list_deallocation, shared_variable>(), (*region)->shared()));
 
 			++region;
 		}

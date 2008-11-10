@@ -79,17 +79,6 @@ public:
 	region_variable(const string& t, const string& l, const string& a, int r):
 		variable(t, l, a), region_num(r), _depth(0) {}
 
-	/*
-	virtual string name() const
-	{
-		string region;
-		if (region_num > 0) {
-			region = to_string(region_num);
-		}
-		return variable::name() + region;
-	}
-	*/
-
 	int depth() const { return _depth; }
 	void depth(int d) { _depth = d; }
 };
@@ -145,7 +134,7 @@ public:
 		region_variable(t, l, a, r)
 		{}
 
-	virtual string name() const { return region_variable::name() + "_reduc"; }
+	virtual string name() const { return region_variable::name() + "_red"; }
 	virtual string actual() const { return "&" + pass_var + "." + name(); }
 
 	virtual string formal() const {  return type() + "* " + name(); }
@@ -162,7 +151,10 @@ public:
 		assert(v->depth() > 0);	
 	}
 
-	string name() const { return v->region_variable::name() + "_buff"; }
+	string name() const { return v->region_variable::name() + "_buf"; }
+	string declare() const { return type() + "* " + name(); }
+	string depth() const { return to_string(v->depth()); }
+	string size() const { return name() + "_sz"; }
 
 	string type() const
 	{
@@ -179,21 +171,25 @@ public:
 		size_t pos = (star == string::npos) ? bracket : star;
 		return v->type().substr(0, pos);
 	}
+};
 
-	string declare() const
+class dma_list_adaptor {
+private:
+	const shared_variable* v;
+
+public:
+	dma_list_adaptor(const shared_variable* _v): v(_v)
 	{
-		return type() + "* " + name();
+		assert(v);
+		assert(v->depth() > 0);
 	}
 
-	string depth() const
-	{
-		return to_string(v->depth());
-	}
-
-	string size() const
-	{
-		return name() + "_sz";
-	}
+	string name() const { return v->region_variable::name() + "_lst"; }
+	string name(const int i) const { return v->region_variable::name() + "_lst[" + to_string(i) + "]"; }
+	string name(const string s) const { return v->region_variable::name() + "_lst[" + s + "]"; }
+	string type() const { return "spe_dma_list_t"; }
+	string declare() const { return type() +  " " + name() + "[" + depth() + "]"; }
+	string depth() const { return to_string(v->depth()); }
 };
 
 class next_adaptor {

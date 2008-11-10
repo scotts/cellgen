@@ -45,21 +45,6 @@ public:
 	}
 };
 
-/*
- * This is hackish, but I don't want to embed the entire grammar for 
- * declarations here.
- */
-bool is_type_word(const string& w)
-{
-	return	w == "unsigned" || w == "signed" || 
-		w == "char" || w == "char*" ||
-		w == "short" || w == "short*" ||
-		w == "int" || w == "int*" ||
-		w == "long" || w == "long*" ||
-		w == "float" || w == "float*" ||
-		w == "double" || w == "double*";
-}
-
 template <class T>
 class vars_op_base {
 protected:
@@ -73,22 +58,8 @@ protected:
 			ss << *first++;
 		}
 
-		string temp;
-		string agg;
-		while (true) {
-			ss >> temp;
-			if (is_type_word(temp)) {
-				agg += temp + " ";
-			}
-			else {
-				break;
-			}
-		}
-		t = agg;
-		l = temp;
-
 		string equals;
-		ss >> equals >> d;
+		ss >> t >> l >> equals >> d;
 	}
 
 public:
