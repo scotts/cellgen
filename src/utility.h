@@ -9,6 +9,7 @@
 #include <boost/bind.hpp>
 #include <boost/mem_fn.hpp>
 using namespace std;
+using namespace boost;
 
 template <class I, class F>
 F* for_each(I first, I last, F* f)
@@ -95,16 +96,10 @@ list<typename F::result_type> fmap(F f, S* seq)
 	return fmap(f, *seq);
 }
 
-template <class L>
-void append(L& l1, const L& l2)
+template <class L1, class L2>
+void append(L1& l1, const L2& l2)
 {
 	l1.insert(l1.end(), l2.begin(), l2.end());
-}
-
-template <class T>
-list<T> cons(T t, const list<T>& l)
-{
-	return list<T>(l).push_back(t);
 }
 
 template <class T>

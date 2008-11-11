@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <assert.h>
-#include "int16b_t.h"
 
 #define __ROW 4096
 #define __COL 256

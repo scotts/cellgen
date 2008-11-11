@@ -81,6 +81,11 @@ bool is_type_specifier(const ast_node& node)
 		s == "float" || s == "double" || s == "signed" || s == "unsigned";
 }
 
+bool is_struct_access(const ast_node& node)
+{
+	return node.value.id() == ids::dot || node.value.id() == ids::ptr_op;
+}
+
 add_expr make_add_expr(const list<string>& dimensions, const list<add_expr>& indices)
 {
 	if (indices.size() > 1) {
@@ -311,6 +316,23 @@ void printadd(const add_expr& a)
 	cout << "(" << a.str() << ") ";
 }
 
+struct struct_access_search {
+	ast_node* parent;
+	struct_access_search(): parent(NULL) {}
+
+	void operator()(ast_node& node)
+	{
+		ast_iterator access = find_if_all(node.children, is_struct_access);
+
+		if (access != node.children.end()) {
+			parent = &node;
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
 class shared_variable_double_orientation {};
 
 struct assignment_split {
@@ -350,9 +372,18 @@ struct assignment_split {
 
 				o.var->math(add);
 				
-				// If we don't do this, redundant printing. The to_buffer_space xformer
-				// is a reduction of all the children.
-				node.children.clear(); 
+				// The *_buffer_space xformer subsumes the code inside the original array access. But, 
+				// if it accesses a field in a struct, then we want to preserve that.
+				struct_access_search search;
+				for_all(node.children, &search);
+
+				ast_node copy;
+				if (search.parent) {
+					copy = *search.parent;
+				}
+
+				node.children.clear();
+				node.children.push_back(copy);
 			}
 		}
 		else {
@@ -593,18 +624,18 @@ struct for_compound_op {
 			nested.splice(nested.begin(), lifted);
 
 			xformerlist colinits;
-			for_all(in, make_append_induction_if<init_column_buffer>(colinits, boost::mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<init_column_buffer>(colinits, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(in, make_append_induction_if<init_column_buffer>(colinits, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<init_column_buffer>(colinits, mem_fn(&shared_variable::is_column), par_induction));
 			append(nested, colinits);
 
 			// It's more natural to do this in serial_for_op, at the node for a compound expression. But,
 			// that means this would get called once for each for loop encountered, which generates extra 
 			// xformers.
 			xformerlist colout;
-			for_all(out, make_append_induction_if<gen_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<gen_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
-			for_all(out, make_append_induction_if<gen_final_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<gen_final_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(out, make_append_induction_if<gen_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<gen_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(out, make_append_induction_if<gen_final_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<gen_final_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
 
 			xformerlist& lbrace = node.children.back().children.back().value.xformations;
 			append(lbrace, colout);
@@ -798,10 +829,10 @@ struct parallel_for_op {
 			xformerlist& xformations = node.children.back().value.xformations;
 			xformerlist rows;
 
-			for_all(out, make_append_induction_if<gen_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
-			for_all(inout, make_append_induction_if<gen_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
-			for_all(out, make_append_induction_if<gen_final_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
-			for_all(inout, make_append_induction_if<gen_final_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			for_all(out, make_append_induction_if<gen_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all(inout, make_append_induction_if<gen_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all(out, make_append_induction_if<gen_final_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all(inout, make_append_induction_if<gen_final_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			append(xformations, rows);
 
 			xformations.push_back(new total_timer_stop());
@@ -1171,8 +1202,8 @@ struct cell_region {
 			append(front_xforms, fmap(make_xformer<declare_next, shared_variable>(), (*region)->shared()));
 
 			xformerlist rows;
-			for_all((*region)->in(), make_append_induction_if<init_row_buffer>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
-			for_all((*region)->inout(), make_append_induction_if<init_row_buffer>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			for_all((*region)->in(), make_append_induction_if<init_row_buffer>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all((*region)->inout(), make_append_induction_if<init_row_buffer>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			append(front_xforms, rows);
 
 			append(front_xforms, fmap(make_xformer<init_private_buffer, private_variable>(), (*region)->priv()));

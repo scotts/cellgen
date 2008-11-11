@@ -39,7 +39,9 @@ namespace ids {
 	static const int declaration_specifiers = 27;
 	static const int unary_expression = 28;
 	static const int semicolon = 29;
-	static const int last = 29;
+	static const int dot = 30;
+	static const int ptr_op = 31;
+	static const int last = 31;
 
 	static const string __mappings[] = { "",
 		"identifier",
@@ -70,7 +72,9 @@ namespace ids {
 		"pointer",
 		"declaration_specifiers",
 		"unary_expression",
-		"semicolon"
+		"semicolon",
+		"dot",
+		"ptr_op"
 	};
 	static const vector<string> mappings(__mappings, __mappings + last + 1);
 

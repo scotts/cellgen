@@ -13,7 +13,6 @@ using namespace std;
 
 #include <boost/program_options.hpp>
 #include <boost/regex.hpp>
-using namespace boost;
 using namespace boost::program_options;
 
 #include "cellgen_grammar.h"
@@ -57,9 +56,14 @@ const string mmgp_spe_stop		= "MMGP_SPE_stop(";
 const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
 const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ","; // + loop_hook + ");\n";
 
-bool print_ast = false;
-int num_threads = 6;
-string inc_name = "";
+struct cmdline_options {
+	string src_name;
+	bool print_ast;
+	int num_threads;
+	string inc_name;
+
+	cmdline_options(): print_ast(false), num_threads(6) {}
+};
 
 void file_to_stream(stringstream& in, istream& file) 
 {
@@ -155,7 +159,7 @@ void parse_generic(stringstream& stream, const string& str)
 	file_to_stream(stream, ifile);
 }
 
-void replace_n_print_file(const string& ifile_name, const string& ofile_name, const string& hook, const string& replace)
+void replace_print_file(const string& ifile_name, const string& ofile_name, const string& hook, const string& replace, const int num_threads)
 {
 	ifstream ifile(ifile_name.c_str());
 	open_check(ifile, ifile_name);
@@ -165,8 +169,7 @@ void replace_n_print_file(const string& ifile_name, const string& ofile_name, co
 
 	ofstream ofile(ofile_name.c_str());
 	open_check(ofile, ofile_name);
-	ofile << regex_replace(regex_replace(ss.str(), regex(hook), replace),
-			regex(num_threads_hook), to_string(num_threads));
+	ofile << regex_replace(regex_replace(ss.str(), regex(hook), replace), regex(num_threads_hook), to_string(num_threads));
 }
 
 class define_pass_struct {
@@ -188,100 +191,6 @@ public:
 	}
 };
 
-class define_buffers {
-	ostream& out;
-public:
-	define_buffers(ostream& o): out(o) {}
-	void operator()(const shared_variable* v)
-	{
-		out << buffer_adaptor(v).declare() << ";" << endl;
-	}
-};
-
-class define_in_and_out_buffers {
-	stringstream& out;
-public:
-	define_in_and_out_buffers(stringstream& o): out(o) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->in(), define_buffers(out));
-		for_all(region->out(), define_buffers(out));
-	}
-};
-
-class define_inout_buffers {
-	stringstream& out;
-public:
-	define_inout_buffers(stringstream& o): out(o) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->inout(), define_buffers(out));
-	}
-
-};
-
-class define_private_buffers {
-	ostream& out;
-public:
-	define_private_buffers(ostream& o): out(o) {}
-	void operator()(const private_variable* v)
-	{
-		if (v->depth() > 0) {
-			out << buffer_adaptor(v).declare() << ";" << endl;
-		}
-	}
-	void operator()(spe_region* region)
-	{
-		for_all(region->priv(), this);
-	}
-};
-
-class define_buff_size {
-	ostream& out;
-	const string& induction;
-	const int unroll;
-	const int buffer;
-public:
-	define_buff_size(ostream& o, const string& i, const int u, const int b):
-		out(o), induction(i), unroll(u), buffer(b) {}
-	void operator()(const shared_variable* v)
-	{
-		if (v->depth() > 0 ) {
-			string def;
-
-			// User specified buffer overrides fitting buffer to unrolling
-			if (buffer) {
-				def = "(" + to_string(buffer) + ")";
-			}
-			else if (unroll) {
-				def = "(" + to_string(unroll) + v->math().factor(induction) + ")";
-			}
-			else {
-				def = default_buff_size;
-			}
-			out << pound_define(buffer_adaptor(v).size(), def).define();
-		}
-	}
-	void operator()(const private_variable* v)
-	{
-		if (v->depth() > 0 ) {
-			out << pound_define(buffer_adaptor(v).size(), default_buff_size).define();
-		}
-	}
-
-};
-
-class define_region_buff_sizes {
-	ostream& out;
-public:
-	define_region_buff_sizes(ostream& o): out(o) {}
-	void operator()(spe_region* region)
-	{
-		for_all(region->priv(), define_buff_size(out, region->induction(), region->unroll(), region->buffer()));
-		for_all(region->shared(), define_buff_size(out, region->induction(), region->unroll(), region->buffer()));
-	}
-};
-
 class pass_assign {
 	stringstream& out;
 public:
@@ -294,11 +203,14 @@ public:
 	}
 };
 
-void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstream& ppe_fork, spelist& regions)
+void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstream& ppe_fork, spelist& regions, const string& inc_name)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
 	
+	if (inc_name != "") {
+		file << "#include \"" << inc_name << "\" \n" << endl;
+	}
 	file << pro.str();
 
 	// After every block of ppe code, we print a fork of spe code, except 
@@ -355,20 +267,16 @@ void print_pass_struct(spelist& regions)
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
 
-void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions)
+void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions, const string& inc_name)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
 
 	stringstream ss;
+	if (inc_name != "") {
+		ss << "#include \"../" << inc_name << "\"" << endl;
+	}
 	ss << spe_dec.str() << endl;
-
-	/*
-	for_all(regions, define_region_buff_sizes(ss));
-	for_all(regions, define_in_and_out_buffers(ss));
-	for_all(regions, define_inout_buffers(ss));
-	for_all(regions, define_private_buffers(ss));
-	*/
 
 	sslist cases;
 	for_all(regions, print_region(ss, cases));
@@ -380,18 +288,18 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 	file << ss.str();
 }
 
-string parse_command_line(int argc, char* argv[])
+cmdline_options parse_command_line(int argc, char* argv[])
 {
-	string src_name;
+	cmdline_options options;
 
 	try {
 		options_description desc("Allowed options");
 		desc.add_options()
 		("help,h", "print usage message")
-		("infile,i", value<string>(&src_name), "input filename")
-		("astout,a", value<bool>(&print_ast)->zero_tokens()->default_value(false), "print the ast")
-		("speinclude,s", value<string>(&inc_name), "filename to include in spe source")
-		("num_threads,n", value<int>(&num_threads)->default_value(6), "set number of SPE threads");
+		("infile,i", value<string>(&options.src_name), "input filename")
+		("astout,a", value<bool>(&options.print_ast)->zero_tokens()->default_value(false), "print the ast")
+		("speinclude,s", value<string>(&options.inc_name), "filename to include in spe source")
+		("num_threads,n", value<int>(&options.num_threads)->default_value(6), "set number of SPE threads");
 
 		positional_options_description p;
 		p.add("infile", -1);
@@ -407,21 +315,21 @@ string parse_command_line(int argc, char* argv[])
 	} 
 
 	catch (exception& e) {
-		cerr << "options related exception: " << e.what() << endl;
+		cerr << "bad options: " << e.what() << endl;
 		exit(1);
 	}
 
-	return src_name;
+	return options;
 }
 
 int main(int argc, char* argv[])
 {
-	const string src_name = parse_command_line(argc, argv);
+	const cmdline_options opts = parse_command_line(argc, argv);
 
 	// Do all of the input and parsing.
 	sslist ppe_src_blocks;
 	spelist spe_regions;
-	parse_src(src_name, ppe_src_blocks, spe_regions);
+	parse_src(opts.src_name, ppe_src_blocks, spe_regions, opts.print_ast);
 
 	stringstream ppe_fork;
 	stringstream ppe_prolouge;
@@ -432,17 +340,14 @@ int main(int argc, char* argv[])
 	parse_generic(ppe_fork, ppe_fork_iname);
 	parse_generic(ppe_prolouge, ppe_prolouge_iname);
 	parse_generic(spe_declarations, spe_declarations_iname);
-        if (inc_name != "") {
-		parse_generic(spe_declarations, inc_name);
-	}
 	parse_generic(spe_main, spe_main_iname);
 	parse_generic(mmgp_c, mmgp_c_iname);
 
 	// Do all of the output and code generation.
-	string no_dot = src_name;
+	string no_dot = opts.src_name;
 	size_t pos;
 	if ((pos = no_dot.find(".cellgen")) == string::npos) {
-		cerr << "error: file " << src_name << " is not a cellgen source." << endl;
+		cerr << "error: file " << opts.src_name << " is not a cellgen source." << endl;
 		exit(1);
 	}
 	no_dot.replace(pos, strlen(".cellgen"), "");
@@ -450,14 +355,14 @@ int main(int argc, char* argv[])
 	const string spe_oname = "spu/" + no_dot + "_spe.c";
 
 	string num_kernels = to_string<size_t>(spe_regions.size());
-	replace_n_print_file(mmgp_h_iname, mmgp_h_oname, num_kernels_hook, num_kernels);
-	replace_n_print_file(mmgp_c_iname, mmgp_c_oname, program_name_hook, no_dot);
-	replace_n_print_file(mmgp_spu_h_iname, mmgp_spu_h_oname, num_kernels_hook, num_kernels);
+	replace_print_file(mmgp_h_iname, mmgp_h_oname, num_kernels_hook, num_kernels, opts.num_threads);
+	replace_print_file(mmgp_c_iname, mmgp_c_oname, program_name_hook, no_dot, opts.num_threads);
+	replace_print_file(mmgp_spu_h_iname, mmgp_spu_h_oname, num_kernels_hook, num_kernels, opts.num_threads);
 
 	print_pass_struct(spe_regions);
-	print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions);
+	print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions, opts.inc_name);
 
-	print_spe(spe_oname, spe_declarations, spe_main, spe_regions);
+	print_spe(spe_oname, spe_declarations, spe_main, spe_regions, opts.inc_name);
 	
 	system(string("cp " + spe_profiler + " spu/").c_str());
 	system(string("cp " + cellstrider_dma_iname + " spu/").c_str());

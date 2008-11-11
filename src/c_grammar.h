@@ -85,15 +85,18 @@ struct c_grammar: public grammar<c_grammar> {
             ADD_ASSIGN("+="), SUB_ASSIGN("-="), MUL_ASSIGN("*="),
             DIV_ASSIGN("/="), MOD_ASSIGN("%="), AND_ASSIGN("&="),
             XOR_ASSIGN("^="), OR_ASSIGN("|="), RIGHT_OP(">>"), LEFT_OP("<<"),
-            INC_OP("++"), DEC_OP("--"), PTR_OP("->"), AND_OP("&&"),
+            INC_OP("++"), DEC_OP("--"), /*PTR_OP("->"),*/ AND_OP("&&"),
             OR_OP("||"), LE_OP("<="), GE_OP(">="), EQ_OP("=="), NE_OP("!="),
             /*SEMICOLON(';'),*/
             COMMA(','), COLON(':'), ASSIGN('='), LEFT_PAREN('('),
-            RIGHT_PAREN(')'), DOT('.'), ADDROF('&'), BANG('!'), TILDE('~'),
+            RIGHT_PAREN(')'), /*DOT('.'),*/ ADDROF('&'), BANG('!'), TILDE('~'),
             MINUS('-'), PLUS('+'), STAR('*'), SLASH('/'), PERCENT('%'),
             LT_OP('<'), GT_OP('>'), XOR('^'), OR('|'), QUEST('?')
         {
 	    SEMICOLON = chlit<>(';');
+	    DOT = chlit<>('.');
+	    PTR_OP = strlit<>("->");
+
         // C keywords
             keywords =
                 "auto", "break", "case", "char", "const", "continue", "default",
@@ -1012,11 +1015,11 @@ struct c_grammar: public grammar<c_grammar> {
         strlit<>
                 ELLIPSIS, RIGHT_ASSIGN, LEFT_ASSIGN, ADD_ASSIGN, SUB_ASSIGN,
                 MUL_ASSIGN, DIV_ASSIGN, MOD_ASSIGN, AND_ASSIGN, XOR_ASSIGN,
-                OR_ASSIGN, RIGHT_OP, LEFT_OP, INC_OP, DEC_OP, PTR_OP, AND_OP,
+                OR_ASSIGN, RIGHT_OP, LEFT_OP, INC_OP, DEC_OP, /*PTR_OP,*/ AND_OP,
                 OR_OP, LE_OP, GE_OP, EQ_OP, NE_OP;
         chlit<>
                 /*SEMICOLON,*/ COMMA, COLON, ASSIGN, LEFT_PAREN, RIGHT_PAREN,
-                DOT, ADDROF, BANG, TILDE, MINUS, PLUS, STAR, SLASH, PERCENT,
+                /*DOT,*/ ADDROF, BANG, TILDE, MINUS, PLUS, STAR, SLASH, PERCENT,
                 LT_OP, GT_OP, XOR, OR, QUEST;
 
         rule<ScannerT>
@@ -1092,6 +1095,8 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::declaration_specifiers> > declaration_specifiers;
 	rule<ScannerT, parser_tag<ids::unary_expression> > unary_expression;
 	rule<ScannerT, parser_tag<ids::semicolon> > SEMICOLON;
+	rule<ScannerT, parser_tag<ids::dot> > DOT;
+	rule<ScannerT, parser_tag<ids::ptr_op> > PTR_OP;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

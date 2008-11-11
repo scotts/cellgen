@@ -438,7 +438,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	};
 };
 
-void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions)
+void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions, bool print_ast)
 {
 	fileiter first(src_name);
 	if (!first) {
