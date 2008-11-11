@@ -42,7 +42,6 @@ struct make_induction: public unary_function<const shared_variable*, xformer*> {
 	}
 };
 
-// FIXME: Can't infer the predicate type.
 template <class X, class P>
 struct append_induction_if: public unary_function<const shared_variable*, void> {
 	xformerlist& lst;
@@ -354,6 +353,20 @@ public:
 	string class_name() const { return "dma_list_deallocation"; }
 };
 
+class declare_next: public xformer {
+	const shared_variable* v;
+
+public:
+	declare_next(const shared_variable* _v): v(_v) {}
+	string operator()(const string& old)
+	{
+		return old + next_adaptor(v).declare() + " = 0; \n";
+	}
+
+	xformer* clone() const { return new declare_next(*this); }
+	string class_name() const { return "declare_next"; }
+};
+
 class declare_buffer: public xformer {
 	const shared_variable* v;
 
@@ -362,12 +375,10 @@ public:
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
-		next_adaptor next(v);
 		orig_adaptor orig(v);
 
 		return	old + 
 			orig.declare() + "; \n" +
-			next.declare() + " = 0; \n" +
 			orig.name() + " = " + buff.name() + "; \n";
 	}
 
@@ -384,7 +395,6 @@ public:
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
-		next_adaptor next(v);
 
 		return	declare_buffer(v)(old) + dma_in();
 	}
@@ -422,12 +432,12 @@ public:
 
 		return	"add_to_dma_list(&" + list.name(next.name()) + "," + 
 				buff.size() + ","
-				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + ")),"
+				"(unsigned long)(" + v->name() + "+" + induction + "),"
 				"sizeof(" + buff.type() + "), " + 
-				v->dimensions().front() + "* sizeof(" + buff.type() + "),"
+				v->dimensions().back() + "* sizeof(" + buff.type() + "),"
 				"1); \n" +
 			"DMA_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + ","
-				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + ")),"
+				"(unsigned long)(" + v->name() + "+" + induction + "),"
 				"&" + list.name(next.name()) + "," + 
 				next.name() + ","
 				"1," +
@@ -767,7 +777,7 @@ struct gen_out_column: public gen_out {
 		string make_list;
 
 		if (v->depth() < 3) {
-			make_list = "add_to_dma_list(&" + list.name(next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth())) + "," + 
+			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth())) + "," + 
 					buff.size() + "," +
 					address() + ","
 					"sizeof(" + buff.type() + "), " + 
@@ -778,8 +788,8 @@ struct gen_out_column: public gen_out {
 		return 	make_list + 
 			"DMA_putl(" + orig.name() + "," +
 				address() + "," +
-				"&" + list.name(next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth())) + "," + 
-				next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth()) + ","
+				"&" + list.name("(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth())) + "," + 
+				"(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth()) + ","
 				"1," +
 				"sizeof(" + buff.type() + ")); \n";
 	}

@@ -587,16 +587,27 @@ struct for_compound_op {
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
-			
-			xformerlist& xforms = node.value.xformations;
+			xformerlist& nested = node.value.xformations;
 			xformerlist lifted;
 			for_all(node.children, make_descend(lift_out_gen_in_rows(lifted)))(node);
-			xforms.splice(xforms.begin(), lifted);
+			nested.splice(nested.begin(), lifted);
 
-			xformerlist cols;
-			for_all(in, make_append_induction_if<init_column_buffer>(cols, boost::mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<init_column_buffer>(cols, boost::mem_fn(&shared_variable::is_column), par_induction));
-			append(xforms, cols);
+			xformerlist colinits;
+			for_all(in, make_append_induction_if<init_column_buffer>(colinits, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<init_column_buffer>(colinits, boost::mem_fn(&shared_variable::is_column), par_induction));
+			append(nested, colinits);
+
+			// It's more natural to do this in serial_for_op, at the node for a compound expression. But,
+			// that means this would get called once for each for loop encountered, which generates extra 
+			// xformers.
+			xformerlist colout;
+			for_all(out, make_append_induction_if<gen_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<gen_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(out, make_append_induction_if<gen_final_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<gen_final_out_column>(colout, boost::mem_fn(&shared_variable::is_column), par_induction));
+
+			xformerlist& lbrace = node.children.back().children.back().value.xformations;
+			append(lbrace, colout);
 		}
 		else {
 			for_all(node.children, this);
@@ -784,15 +795,15 @@ struct parallel_for_op {
 			o(node);
 			o.merge_inout(in, out, inout);
 
-
-			// Right now, we only apply out xformations at the end of a parallel for loop. This is 
-			// not entirely correct. Serial for loops should have them if the stopping condition 
-			// matches the size of the dimension it is iterating over. (?)
 			xformerlist& xformations = node.children.back().value.xformations;
-			append(xformations, fmap(make_row_or_column<gen_out_row, gen_out_column>(par_induction), out));
-			append(xformations, fmap(make_row_or_column<gen_out_row, gen_out_column>(par_induction), inout));
-			append(xformations, fmap(make_row_or_column<gen_final_out_row, gen_final_out_column>(par_induction), out));
-			append(xformations, fmap(make_row_or_column<gen_final_out_row, gen_final_out_column>(par_induction), inout));
+			xformerlist rows;
+
+			for_all(out, make_append_induction_if<gen_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			for_all(inout, make_append_induction_if<gen_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			for_all(out, make_append_induction_if<gen_final_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			for_all(inout, make_append_induction_if<gen_final_out_row>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));
+			append(xformations, rows);
+
 			xformations.push_back(new total_timer_stop());
 		}
 		else {
@@ -1157,6 +1168,7 @@ struct cell_region {
 			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(o.par_induction)).max)));
 
 			append(front_xforms, fmap(make_xformer<declare_buffer, shared_variable>(), (*region)->out()));
+			append(front_xforms, fmap(make_xformer<declare_next, shared_variable>(), (*region)->shared()));
 
 			xformerlist rows;
 			for_all((*region)->in(), make_append_induction_if<init_row_buffer>(rows, boost::mem_fn(&shared_variable::is_row), par_induction));

@@ -16,8 +16,8 @@ int main()
 	int count = 0;	
 	for (i = 0; i < ROW; ++i) {
 		for (j = 0; j < COL; ++j) {
-			test[i][j] = count;
-			ref[i][j] = count;
+			test[i][j].num = count;
+			ref[i][j].num = count;
 			++count;
 		}
 	}
