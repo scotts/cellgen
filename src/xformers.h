@@ -810,8 +810,8 @@ struct gen_final_out: public unrollable_xformer {
 			orig_adaptor orig(v);
 			next_adaptor next(v);
 
-			ret =	"cellgen_dma_prep_start(); \n" 
-				"if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")) {" +
+			ret =	"cellgen_dma_prep_start(); \n" +
+				if_statement() + "{ \n" +
 					prev.name() + "=" + next.name() + ";" +
 					next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
 					dma_final_out() +
@@ -824,11 +824,24 @@ struct gen_final_out: public unrollable_xformer {
 		return old + ret;
 	}
 
+	virtual string if_statement() = 0;
+	virtual string address() = 0;
 	virtual string dma_final_out() = 0;
 };
 
 struct gen_final_out_row: public gen_final_out {
 	gen_final_out_row(const shared_variable* v, const string& i): gen_final_out(v, i) {}
+
+	string if_statement()
+	{
+		buffer_adaptor buff(v);
+		return "if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + "))";
+	}
+
+	string address()
+	{
+		return "(unsigned long)(" + v->name() + "+(SPE_stop" + v->math().factor(induction) + ")-(((SPE_stop-SPE_start)";
+	}
 
 	string dma_final_out()
 	{
@@ -836,8 +849,8 @@ struct gen_final_out_row: public gen_final_out {
 		orig_adaptor orig(v);
 		next_adaptor next(v);
 
-		return "DMA_put(" + orig.name() + "," 
-				"(unsigned long)(" + v->name() + "+(SPE_stop" + v->math().factor(induction) + ")-(((SPE_stop-SPE_start)" + 
+		return "DMA_put(" + orig.name() + "," +
+				address() + "," +
 				v->math().factor(induction) + ")%" + buff.size() + ")),"
 				"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")," +
 				next.name() + "); \n";
@@ -850,6 +863,21 @@ struct gen_final_out_row: public gen_final_out {
 struct gen_final_out_column: public gen_final_out {
 	gen_final_out_column(const shared_variable* v, const string& i): gen_final_out(v, i) {}
 
+	string if_statement()
+	{
+		buffer_adaptor buff(v);
+		return "if (" + v->dimensions().front() + "%" + buff.size() + ")";
+	}
+
+	string address()
+	{
+		buffer_adaptor buff(v);
+		const string dim1 = v->dimensions().front();
+		const string dim2 = v->dimensions().back();
+
+		return "(unsigned long)(" + v->name() + "+((" + dim1 + "-(" + dim1 + "%" + buff.size() + "))*" + dim2 + ")+" + induction + ")";
+	}
+
 	string dma_final_out()
 	{
 		dma_list_adaptor list(v);
@@ -858,19 +886,14 @@ struct gen_final_out_column: public gen_final_out {
 		orig_adaptor orig(v);
 		string make_list;
 
-		if (v->depth() < 3) {
-			make_list = "add_to_dma_list(&" + list.name(next.name()) + ", " + 
-					buff.size() + ","
-					"(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff.size() + "))," 
-					"sizeof(" + buff.type() + "), " + 
-					v->dimensions().front() + "* sizeof(" + buff.type() + "),"
-					"1); \n";
-		}
-
-		// FIXME
-		return	"/* No way this works. */ \n" + make_list +
-			"DMA_putl(" + orig.name() + ","
-				"(unsigned long)(" + v->name() + "+(SPE_stop" + v->math().factor(induction) + ")-(((SPE_stop-SPE_start))))," 
+		return "add_to_dma_list(&" + list.name(next.name()) + ", " + 
+				buff.size() + "," + 
+				address() + ","
+				"sizeof(" + buff.type() + "), " + 
+				v->dimensions().front() + "* sizeof(" + buff.type() + "),"
+				"1); \n" +
+			"DMA_putl(" + orig.name() + "," +
+				address() + ","
 				"&" + list.name(next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth())) + "," + 
 				next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth()) + ","
 				"1," +

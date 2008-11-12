@@ -476,11 +476,6 @@ struct serial_for_op {
 	void operator()(ast_node& node);
 };
 
-void print_variable(const variable* v)
-{
-	cout << v->name() << "(" << v << ") ";
-}
-
 pair<ast_iterator, ast_node*> find_equals(ast_node& node)
 {
 	for (ast_iterator i = node.children.begin(); i != node.children.end(); ++i) {
