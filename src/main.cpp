@@ -178,9 +178,9 @@ public:
 	define_pass_struct(stringstream& s): ss(s) {}
 	void operator()(const region_variable* v)
 	{
-		if (v->name() != "SPE_start" && v->name() != "SPE_stop") {
-			ss << "\t" << v->declare() << ";" << endl;
-		}
+		//if (v->name() != "SPE_start" && v->name() != "SPE_stop") {
+			ss << "\t" << v->unique_declare() << ";" << endl;
+		//}
 	}
 
 	void operator()(spe_region* region)
@@ -197,7 +197,7 @@ public:
 	pass_assign(stringstream& o): out(o) {}
 	void operator()(const region_variable* v)
 	{
-		out	<< struct_pass_var << v->name() 
+		out	<< struct_pass_var << v->unique_name() 
 			<< " = " << v->definition() << ";" 
 			<< endl;
 	}

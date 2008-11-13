@@ -775,9 +775,10 @@ struct gen_out_column: public gen_out {
 		next_adaptor next(v);
 		orig_adaptor orig(v);
 		string make_list;
+		const string depth = to_string(v->depth());
 
 		if (v->depth() < 3) {
-			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth())) + "," + 
+			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + depth + "-1))%" + depth) + "," + 
 					buff.size() + "," +
 					address() + ","
 					"sizeof(" + buff.type() + "), " + 
@@ -788,8 +789,8 @@ struct gen_out_column: public gen_out {
 		return 	make_list + 
 			"DMA_putl(" + orig.name() + "," +
 				address() + "," +
-				"&" + list.name("(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth())) + "," + 
-				"(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth()) + ","
+				"&" + list.name("(" + next.name() + "+(" + depth + "-1))%" + depth) + "," + 
+				"(" + next.name() + "+(" + depth + "-1))%" + depth + ","
 				"1," +
 				"sizeof(" + buff.type() + ")); \n";
 	}
@@ -840,7 +841,9 @@ struct gen_final_out_row: public gen_final_out {
 
 	string address()
 	{
-		return "(unsigned long)(" + v->name() + "+(SPE_stop" + v->math().factor(induction) + ")-(((SPE_stop-SPE_start)";
+		buffer_adaptor buff(v);
+		const string factor = v->math().factor(induction);
+		return "(unsigned long)(" + v->name() + "+(SPE_stop" + factor + ")-(((SPE_stop-SPE_start)" + factor + ")%" + buff.size() + "))";
 	}
 
 	string dma_final_out()
@@ -850,8 +853,7 @@ struct gen_final_out_row: public gen_final_out {
 		next_adaptor next(v);
 
 		return "DMA_put(" + orig.name() + "," +
-				address() + "," +
-				v->math().factor(induction) + ")%" + buff.size() + ")),"
+				address() + ","
 				"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")," +
 				next.name() + "); \n";
 	}
@@ -894,8 +896,8 @@ struct gen_final_out_column: public gen_final_out {
 				"1); \n" +
 			"DMA_putl(" + orig.name() + "," +
 				address() + ","
-				"&" + list.name(next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth())) + "," + 
-				next.name() + "+(" + to_string(v->depth()) + "-1)%" + to_string(v->depth()) + ","
+				"&" + list.name("(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth())) + "," + 
+				"(" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth()) + ","
 				"1," +
 				"sizeof(" + buff.type() + ")); \n";
 	}

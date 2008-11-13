@@ -208,12 +208,13 @@ public:
 };
 
 template <class T>
-class assign_var {
+class special_assign {
 	vars_op<T>& op;
 	string local;
+	spelist& regions;
 
 public:
-	assign_var(vars_op<T>& o, string l): op(o), local(l) {}
+	special_assign(vars_op<T>& o, string l, spelist& r): op(o), local(l), regions(r) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
@@ -221,7 +222,7 @@ public:
 			ss << *first++;
 		}
 
-		op.current_set().insert(new T("int", local, ss.str()));
+		op.current_set().insert(new T("int", local, ss.str(), regions.size() + 1));
 	}
 };
 
@@ -260,33 +261,32 @@ struct create_spe_region {
  * 3: Allow program to start with cell region.
  */
 struct cellgen_grammar: public grammar<cellgen_grammar> {
-	privset		privs;
-	sharedset	shared;
-	reduceset	reduces;
-	symtbl		symbols;
-	string		op;
-	int		unroll;
-	int		buffer;
-	bool		dma_unroll;
-
-	push_back_op<sslist>		ppe_op;
-	vars_op<private_variable>	priv_op;
-	assign_var<private_variable>	start_op;
-	assign_var<private_variable>	stop_op;
-	vars_op<shared_variable>	shared_op;
-	vars_op<reduction_variable>	reduce_def_op;
-	scalar_op<string>		reduce_op_op;
-	scalar_op<int>			unroll_op;
-	scalar_op<int>			buffer_op;
-	scalar_op<bool>			dma_unroll_op;
-	create_spe_region		region_op;
+	privset privs;
+	sharedset shared;
+	reduceset reduces;
+	symtbl symbols;
+	string op;
+	int unroll;
+	int buffer;
+	bool dma_unroll;
+	push_back_op<sslist> ppe_op;
+	vars_op<private_variable> priv_op;
+	special_assign<private_variable> start_op;
+	special_assign<private_variable> stop_op;
+	vars_op<shared_variable> shared_op;
+	vars_op<reduction_variable> reduce_def_op;
+	scalar_op<string> reduce_op_op;
+	scalar_op<int> unroll_op;
+	scalar_op<int> buffer_op;
+	scalar_op<bool> dma_unroll_op;
+	create_spe_region region_op;
 
 	cellgen_grammar(sslist& ppe, spelist& regions):
 		unroll(0), buffer(0), dma_unroll(false),
 		ppe_op(ppe),
 		priv_op(privs, regions),
-		start_op(priv_op, "SPE_start"),
-		stop_op(priv_op, "SPE_stop"),
+		start_op(priv_op, "SPE_start", regions),
+		stop_op(priv_op, "SPE_stop", regions),
 		shared_op(shared, symbols, regions),
 		reduce_def_op(reduces, regions),
 		reduce_op_op(op),

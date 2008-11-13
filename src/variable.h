@@ -79,6 +79,11 @@ public:
 	region_variable(const string& t, const string& l, const string& a, int r):
 		variable(t, l, a), region_num(r), _depth(0) {}
 
+	string unique_name() const { return name() + to_string<int>(region_num); }
+	string unique_declare() const { return type() + " " + unique_name(); }
+
+	virtual string actual() const { return pass_var + "." + unique_name(); }
+
 	int depth() const { return _depth; }
 	void depth(int d) { _depth = d; }
 };
