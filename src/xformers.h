@@ -10,6 +10,7 @@ using namespace std;
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
 	virtual void unroll_me(int u) {}
+	virtual void epilogue_me() {}
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 	virtual string class_name() const = 0; // For debugging purposes only.
@@ -25,7 +26,7 @@ struct make_xformer: public unary_function<const V*, xformer*> {
 	}
 };
 
-class induction_xformer: public xformer {
+class induction_xformer: virtual public xformer {
 protected:
 	string induction;
 public:
@@ -70,11 +71,23 @@ protected:
 	int unroll;
 public:
 	unrollable_xformer(const string& i): induction_xformer(i), unroll(NO_UNROLL) {}
+	unrollable_xformer(const string& i, const int u): induction_xformer(i), unroll(u) {}
 	virtual void unroll_me(int u)
 	{
 		// TODO: Do I need to know induction information to determine if 
 		// unrolling needs to happen? I used to think so. Now I'm not sure.
 		unroll = u;
+	}
+};
+
+class epilogue_xformer: virtual public xformer {
+protected:
+	bool epilogue;
+public:
+	epilogue_xformer(): epilogue(false) {}
+	void epilogue_me()
+	{
+		epilogue = true;
 	}
 };
 
@@ -87,7 +100,7 @@ struct nop: public xformer {
 	string class_name() const { return "nop"; }
 };
 
-class row_buffer_space: public xformer {
+class row_buffer_space: virtual public xformer, public epilogue_xformer {
 	const shared_variable* v;
 	add_expr add;
 public:
@@ -96,8 +109,16 @@ public:
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
+		string buff_size;
 
-		return old + orig.name() + "[(" + add.str() + ")%" + buff.size() + "]";
+		if (epilogue) {
+			buff_size = "(" + buff.size() + "/" + "unroll_factor)";
+		}
+		else {
+			buff_size = buff.size();
+		}
+
+		return old + orig.name() + "[(" + add.str() + ")%" + buff_size + "]";
 	}
 
 	xformer* clone() const { return new row_buffer_space(*this); }
@@ -205,7 +226,7 @@ class shared_buffer_size: public unrollable_xformer {
 	const int buffer;
 
 public:
-	shared_buffer_size(const shared_variable* v, const int b): unrollable_xformer(""), v(v), buffer(b) {}
+	shared_buffer_size(const shared_variable* v, const int b, const int u): unrollable_xformer("", u), v(v), buffer(b) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -217,12 +238,23 @@ public:
 				def = "(" + to_string(buffer) + ")";
 			}
 			else if (unroll) {
-				def = "(" + to_string(unroll) + v->math().factor(induction) + ")";
+				if (v->is_row()) {
+					def = "(" + to_string(v->dimensions().back()) + "*" + to_string(unroll) + ")";
+				}
+				else if (v->is_column()) {
+					def = "(" + to_string(unroll) + ")";
+				}
+				else {
+					throw unitialized_access_orientation();
+				}
+
+				// What's the right thing to do with the factors?
+				//def = "(" + to_string(unroll) + v->math().factor(induction) + ")";
 			}
 			else {
 				def = default_buff_size;
 			}
-			declaration = "const int " + buffer_adaptor(v).size() + "=" + def + "; \n";
+			declaration = const_variable("int", buffer_adaptor(v).size(), def).define() + ";";
 		}
 
 		return old + declaration;
@@ -234,11 +266,12 @@ public:
 
 struct make_shared_buffer_size: public unary_function<const shared_variable*, xformer*> {
 	const int buffer;
-	make_shared_buffer_size(const int b): buffer(b) {}
+	const int unroll;
+	make_shared_buffer_size(const int b, const int u): buffer(b), unroll(u) {}
 
 	xformer* operator()(const shared_variable* v)
 	{
-		return new shared_buffer_size(v, buffer);
+		return new shared_buffer_size(v, buffer, unroll);
 	}
 };
 
@@ -353,25 +386,25 @@ public:
 	string class_name() const { return "dma_list_deallocation"; }
 };
 
-class declare_next: public xformer {
+class define_next: public xformer {
 	const shared_variable* v;
 
 public:
-	declare_next(const shared_variable* _v): v(_v) {}
+	define_next(const shared_variable* _v): v(_v) {}
 	string operator()(const string& old)
 	{
 		return old + next_adaptor(v).declare() + " = 0; \n";
 	}
 
-	xformer* clone() const { return new declare_next(*this); }
-	string class_name() const { return "declare_next"; }
+	xformer* clone() const { return new define_next(*this); }
+	string class_name() const { return "define_next"; }
 };
 
-class declare_buffer: public xformer {
+class define_buffer: public xformer {
 	const shared_variable* v;
 
 public:
-	declare_buffer(const shared_variable* _v): v(_v) {}
+	define_buffer(const shared_variable* _v): v(_v) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -382,48 +415,90 @@ public:
 			orig.name() + " = " + buff.name() + "; \n";
 	}
 
-	xformer* clone() const { return new declare_buffer(*this); }
-	string class_name() const { return "declare_buffer"; }
+	xformer* clone() const { return new define_buffer(*this); }
+	string class_name() const { return "define_buffer"; }
 };
-	
-class init_buffer: public induction_xformer {
+
+class gen_in_first: public unrollable_xformer, public epilogue_xformer {
 protected:
 	const shared_variable* v;
+	string buff_size;
 
 public:
-	init_buffer(const shared_variable* _v, const string& i): induction_xformer(i), v(_v) {}
+	gen_in_first(const shared_variable* _v, const string& i): unrollable_xformer(i), v(_v) {}
 	string operator()(const string& old)
 	{
+		next_adaptor next(v);
 		buffer_adaptor buff(v);
+		orig_adaptor orig(v);
 
-		return	declare_buffer(v)(old) + dma_in();
+		return old + 
+			"cellgen_dma_prep_start(); \n" + 
+			prev.name() + "=" + next.name() + "; \n" +
+			dma_in() + 
+			orig.name() + "=" + buff.name() + "+" + buff_size + "*" + prev.name() + "; \n" +
+			"cellgen_dma_prep_stop(); \n";
+	}
+
+	virtual void set_buff_size()
+	{
+		buff_size = buffer_adaptor(v).size();
 	}
 
 	virtual string dma_in() = 0;
 };
 
-class init_row_buffer: public init_buffer {
+class gen_in_first_row: public gen_in_first {
 public:
-	init_row_buffer(const shared_variable* v, const string& i): init_buffer(v, i) {}
+	gen_in_first_row(const shared_variable* v, const string& i): gen_in_first(v, i) {}
+
+	void set_buff_size()
+	{
+		buffer_adaptor buff(v);
+
+		if (epilogue) {
+			buff_size = "(" + buff.size() + "/" + "unroll_factor)";
+		}
+		else {
+			buff_size = buff.size();
+		}
+	}
+
 	string dma_in()
 	{
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
+		string address;
+		string buff_size;
+
+		if (epilogue) {
+			buff_size = "(" + buff.size() + "/" + "unroll_factor)";
+		}
+		else {
+			buff_size = buff.size();
+		}
+
+		if (unroll) {
+			address = "(unsigned long)(" + v->name() + "+ (" + unrolled.name() + v->math().factor(induction) + "))";
+		}
+		else {
+			address = "(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + "))";
+		}
 
 		return "DMA_get(" +
-				buff.name() + "+" + buff.size() + "*" + next.name() + ", " 
-				"(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + ")),"
-				"sizeof(" + buff.type() + ")*" + buff.size() + ", " +
+				buff.name() + "+" + buff_size + "*" + next.name() + ", " +
+				address + "," 
+				"sizeof(" + buff.type() + ")*" + buff_size + ", " +
 				next.name() + "); \n";
 	}
 
-	xformer* clone() const { return new init_row_buffer(*this); }
-	string class_name() const { return "init_row_buffer"; }
+	xformer* clone() const { return new gen_in_first_row(*this); }
+	string class_name() const { return "gen_in_first_row"; }
 };
 
-class init_column_buffer: public init_buffer {
+class gen_in_first_column: public gen_in_first {
 public:
-	init_column_buffer(const shared_variable* v, const string& i): init_buffer(v, i) {}
+	gen_in_first_column(const shared_variable* v, const string& i): gen_in_first(v, i) {}
 	string dma_in()
 	{
 		dma_list_adaptor list(v);
@@ -444,23 +519,23 @@ public:
 				"sizeof(" + buff.type() + ")); \n";
 	}
 
-	xformer* clone() const { return new init_column_buffer(*this); }
-	string class_name() const { return "init_column_buffer"; }
+	xformer* clone() const { return new gen_in_first_column(*this); }
+	string class_name() const { return "gen_in_first_column"; }
 };
 
-struct make_init_buffer: public unary_function<const shared_variable*, xformer*> {
-	string induction;
+struct make_gen_in_first: public unary_function<shared_variable*, xformer*>  {
+	const string& induction;
+	make_gen_in_first(const string& i): induction(i) {}
 
-	make_init_buffer(const string& i): induction(i) {}
-	xformer* operator()(const shared_variable* v)
+	xformer* operator()(shared_variable* v)
 	{
 		xformer* x = NULL;
 
 		if (v->is_row()) {
-			x = new init_row_buffer(v, induction);
+			x = new gen_in_first_row(v, induction);
 		}
 		else if (v->is_column()) {
-			x = new init_column_buffer(v, induction);
+			x = new gen_in_first_column(v, induction);
 		}
 		else {
 			throw unitialized_access_orientation();
@@ -504,27 +579,36 @@ public:
 	unroll_boundaries(const int u): unroll(u) {}
 	string operator()(const string& old)
 	{
-		stringstream ss;
-		ss << unroll;
-
 		return 	old + 
-			const_variable("int", "unroll_factor", ss.str()).define() + ";" +
-			unrolled.define() + ";" + 
-			epilouge.define() + ";";
+			unrolled.define() + "; \n" + 
+			epilogue.define() + "; \n";
 	}
 
 	xformer* clone() const { return new unroll_boundaries(*this); }
 	string class_name() const { return "unroll_boundaries"; }
 };
 
-struct declare_prev: public xformer {
+struct define_prev: public xformer {
 	string operator()(const string& old)
 	{
 		return old + prev.define() + ";";
 	}
 
-	xformer* clone() const { return new declare_prev(*this); }
-	string class_name() const { return "declare_prev"; }
+	xformer* clone() const { return new define_prev(*this); }
+	string class_name() const { return "define_prev"; }
+};
+
+struct define_const: public xformer {
+	const const_variable unroll_factor;
+	define_const(const const_variable uf): unroll_factor(uf) {}
+
+	string operator()(const string& old)
+	{
+		return old + unroll_factor.define() + ";";
+	}
+
+	xformer* clone() const { return new define_const(*this); }
+	string class_name() const { return "define_const"; }
 };
 
 class reduction_declare: public xformer {
@@ -540,8 +624,9 @@ public:
 	string class_name() const { return "reduction_declare"; }
 };
 
-struct gen_in: public unrollable_xformer {
+struct gen_in: public unrollable_xformer, public epilogue_xformer {
 	shared_variable* v;
+	string buff_size;
 	gen_in(shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
@@ -549,25 +634,28 @@ struct gen_in: public unrollable_xformer {
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		string wait;
+		const string wait = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n";
+		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + buff.depth() + "; \n";
 
-		if (v->depth() == 3) {
-			wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
-		}
+		set_buff_size();
 
 		return old + 
 			"cellgen_dma_prep_start(); \n" + 
 			outer_if() + "{ \n" +
 				prev.name() + "=" + next.name() + "; \n" +
-				next.name() + "= (" + next.name() + "+1)%" + buff.depth() + "; \n" + 
-				wait +
+				rotate_next + 
 				inner_if() + "{ \n" + 
 					dma_in() + 
 				"} \n" +
-				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + "; \n"
-				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n"
+				orig.name() + "=" + buff.name() + "+" + buff_size + "*" + prev.name() + "; \n" +
+				wait +
 			"} \n"
 			"cellgen_dma_prep_stop(); \n";
+	}
+
+	virtual void set_buff_size()
+	{
+		buff_size = buffer_adaptor(v).size();	
 	}
 
 	virtual string address() = 0;
@@ -579,12 +667,24 @@ struct gen_in: public unrollable_xformer {
 struct gen_in_row: public gen_in {
 	gen_in_row(shared_variable* v, const string& i): gen_in(v, i) {}
 
+	void set_buff_size()
+	{
+		buffer_adaptor buff(v);
+
+		if (epilogue) {
+			buff_size = "(" + buff.size() + "/ unroll_factor)";
+		}
+		else {
+			buff_size = buff.size();
+		}
+	}
+
 	string outer_if()
 	{
 		if (!unroll) {
 			buffer_adaptor buff(v);
 
-			return "if (!((" + v->math().lhs().str() + ")%" + buff.size() + "))"; 
+			return "if (!((" + v->math().lhs().str() + ")%" + buff_size + "))"; 
 		}
 		else {
 			return string();
@@ -605,7 +705,7 @@ struct gen_in_row: public gen_in {
 	{
 		buffer_adaptor buff(v);
 
-		return "(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff.size() + "))";
+		return "(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff_size + "))";
 	}
 
 	string dma_in()
@@ -613,9 +713,9 @@ struct gen_in_row: public gen_in {
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		return "DMA_get(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+		return "DMA_get(" + buff.name() + "+" + buff_size + "*" + next.name() + "," +
 				address() + ","
-				"sizeof(" + buff.type() + ") *" + buff.size() + "," +
+				"sizeof(" + buff.type() + ") *" + buff_size + "," +
 				next.name() + ");\n";
 	}
 
@@ -681,8 +781,9 @@ struct gen_in_column: public gen_in {
 	string class_name() const { return "gen_in_column"; }
 };
 
-struct gen_out: public unrollable_xformer {
+struct gen_out: public unrollable_xformer, public epilogue_xformer {
 	const shared_variable* v;
+	string buff_size;
 	gen_out(const shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
@@ -690,10 +791,13 @@ struct gen_out: public unrollable_xformer {
 		orig_adaptor orig(v);
 		next_adaptor next(v);
 		string var_switch;
+		string buff_size;
+
+		set_buff_size();
 
 		if (v->depth() < 3) {
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
-					orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + "; \n" +
+					orig.name() + "=" + buff.name() + "+" + buff_size + "*" + next.name() + "; \n" +
 					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 
@@ -706,6 +810,11 @@ struct gen_out: public unrollable_xformer {
 			old;
 	}
 
+	virtual void set_buff_size()
+	{
+		buff_size = buffer_adaptor(v).size();
+	}
+
 	virtual string if_statement() = 0;
 	virtual string address() = 0;
 	virtual string dma_out() = 0;
@@ -714,11 +823,23 @@ struct gen_out: public unrollable_xformer {
 struct gen_out_row: public gen_out {
 	gen_out_row(const shared_variable* v, const string& i): gen_out(v, i) {}
 
+	void set_buff_size()
+	{
+		buffer_adaptor buff(v);
+
+		if (epilogue) {
+			buff_size = "(" + buff.size() + "/ unroll_factor)";
+		}
+		else {
+			buff_size = buff.size();
+		}
+	}
+
 	string if_statement()
 	{
 		if (!unroll) {
 			buffer_adaptor buff(v);
-			return "if (!(" + v->math().next_iteration(induction) + "%" + buff.size() + "))";
+			return "if (!(" + v->math().next_iteration(induction) + "%" + buff_size + "))";
 		}
 		else {
 			return string();
@@ -728,7 +849,7 @@ struct gen_out_row: public gen_out {
 	string address()
 	{
 		buffer_adaptor buff(v);
-		return "(unsigned long)(" + v->name() + "+" + v->math().next_iteration(induction) + "-" + buff.size() + ")";
+		return "(unsigned long)(" + v->name() + "+" + v->math().next_iteration(induction) + "-" + buff_size + ")";
 	}
 
 	string dma_out()
@@ -739,7 +860,7 @@ struct gen_out_row: public gen_out {
 
 		return "DMA_put(" + orig.name() + "," + 
 				address() + "," +
-				"sizeof(" + buff.type() + ")*" + buff.size() + "," +
+				"sizeof(" + buff.type() + ")*" + buff_size + "," +
 				next.name() + "); \n";
 	}
 
@@ -799,9 +920,10 @@ struct gen_out_column: public gen_out {
 	string class_name() const { return "gen_out_column"; }
 };
 
-struct gen_final_out: public unrollable_xformer {
+struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
 	const shared_variable* v;
-	gen_final_out(const shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
+	string buff_size;
+	gen_out_final(const shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
 	string operator()(const string& old)
 	{
 		string ret;
@@ -810,6 +932,13 @@ struct gen_final_out: public unrollable_xformer {
 			buffer_adaptor buff(v);
 			orig_adaptor orig(v);
 			next_adaptor next(v);
+
+			if (epilogue) {
+				buff_size = "(" + buff.size() + "/ unroll_factor)";
+			}
+			else {
+				buff_size = buff.size();
+			}
 
 			ret =	"cellgen_dma_prep_start(); \n" +
 				if_statement() + "{ \n" +
@@ -830,20 +959,20 @@ struct gen_final_out: public unrollable_xformer {
 	virtual string dma_final_out() = 0;
 };
 
-struct gen_final_out_row: public gen_final_out {
-	gen_final_out_row(const shared_variable* v, const string& i): gen_final_out(v, i) {}
+struct gen_out_final_row: public gen_out_final {
+	gen_out_final_row(const shared_variable* v, const string& i): gen_out_final(v, i) {}
 
 	string if_statement()
 	{
 		buffer_adaptor buff(v);
-		return "if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + "))";
+		return "if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff_size + "))";
 	}
 
 	string address()
 	{
 		buffer_adaptor buff(v);
 		const string factor = v->math().factor(induction);
-		return "(unsigned long)(" + v->name() + "+(SPE_stop" + factor + ")-(((SPE_stop-SPE_start)" + factor + ")%" + buff.size() + "))";
+		return "(unsigned long)(" + v->name() + "+(SPE_stop" + factor + ")-(((SPE_stop-SPE_start)" + factor + ")%" + buff_size + "))";
 	}
 
 	string dma_final_out()
@@ -854,19 +983,20 @@ struct gen_final_out_row: public gen_final_out {
 
 		return "DMA_put(" + orig.name() + "," +
 				address() + ","
-				"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) + ")%" + buff.size() + ")," +
+				"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) + ")%" + buff_size + ")," +
 				next.name() + "); \n";
 	}
 
-	xformer* clone() const { return new gen_final_out_row(*this); }
-	string class_name() const { return "gen_final_out_row"; }
+	xformer* clone() const { return new gen_out_final_row(*this); }
+	string class_name() const { return "gen_out_final_row"; }
 };
 
-struct gen_final_out_column: public gen_final_out {
-	gen_final_out_column(const shared_variable* v, const string& i): gen_final_out(v, i) {}
+struct gen_out_final_column: public gen_out_final {
+	gen_out_final_column(const shared_variable* v, const string& i): gen_out_final(v, i) {}
 
 	string if_statement()
 	{
+		// FIXME: is this right? 
 		buffer_adaptor buff(v);
 		return "if (" + v->dimensions().front() + "%" + buff.size() + ")";
 	}
@@ -902,8 +1032,8 @@ struct gen_final_out_column: public gen_final_out {
 				"sizeof(" + buff.type() + ")); \n";
 	}
 
-	xformer* clone() const { return new gen_final_out_column(*this); }
-	string class_name() const { return "gen_final_out_column"; }
+	xformer* clone() const { return new gen_out_final_column(*this); }
+	string class_name() const { return "gen_out_final_column"; }
 };
 
 #endif // XFORMERS_H

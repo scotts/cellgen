@@ -110,7 +110,6 @@ public:
 	}
 };
 
-
 string reduction_writeback(string val, const region_variable* v)
 {
 	return val + "signal.result = " + pass_var + "." + v->name() + ";\n";
@@ -178,9 +177,7 @@ public:
 	define_pass_struct(stringstream& s): ss(s) {}
 	void operator()(const region_variable* v)
 	{
-		//if (v->name() != "SPE_start" && v->name() != "SPE_stop") {
-			ss << "\t" << v->unique_declare() << ";" << endl;
-		//}
+		ss << "\t" << v->unique_declare() << ";" << endl;
 	}
 
 	void operator()(spe_region* region)

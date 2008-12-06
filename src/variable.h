@@ -57,8 +57,8 @@ public:
 const const_variable buff_size("int", "buff_size", "16");
 */
 
-const const_variable unrolled("int", "unrolled", "(SPE_stop / unroll_factor) * unroll_factor");
-const const_variable epilouge("int", "epilouge", "unrolled + (SPE_stop % unroll_factor)");
+const const_variable unrolled("int", "unrolled", "SPE_start + ((SPE_stop - SPE_start) / unroll_factor) * unroll_factor");
+const const_variable epilogue("int", "epilogue", "unrolled + ((SPE_stop - SPE_start) % unroll_factor)");
 
 class pound_define: public variable {
 public:

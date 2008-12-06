@@ -619,8 +619,8 @@ struct for_compound_op {
 			nested.splice(nested.begin(), lifted);
 
 			xformerlist colinits;
-			for_all(in, make_append_induction_if<init_column_buffer>(colinits, mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<init_column_buffer>(colinits, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(in, make_append_induction_if<gen_in_first_column>(colinits, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<gen_in_first_column>(colinits, mem_fn(&shared_variable::is_column), par_induction));
 			append(nested, colinits);
 
 			// It's more natural to do this in serial_for_op, at the node for a compound expression. But,
@@ -629,8 +629,8 @@ struct for_compound_op {
 			xformerlist colout;
 			for_all(out, make_append_induction_if<gen_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
 			for_all(inout, make_append_induction_if<gen_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
-			for_all(out, make_append_induction_if<gen_final_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<gen_final_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(out, make_append_induction_if<gen_out_final_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
+			for_all(inout, make_append_induction_if<gen_out_final_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
 
 			xformerlist& lbrace = node.children.back().children.back().value.xformations;
 			append(lbrace, colout);
@@ -771,20 +771,29 @@ struct make_row_or_column: public unary_function<const shared_variable*, xformer
 	make_row_or_column(const string& i): inductions(i) {}
 	xformer* operator()(const shared_variable* v)
 	{
+		xformer* x = NULL;
+
 		if (v->is_row()) {
-			return new Row(v, inductions);
+			x = new Row(v, inductions);
 		}
 		else if (v->is_column()) {
-			return new Column(v, inductions);
+			x = new Column(v, inductions);
 		}
 		else {
 			throw unitialized_access_orientation();
 		}
 
-		// Should never get here.
-		return NULL;
+		return x;
 	}
 };
+
+typedef map<xformer*, ast_node*> bind_xformer;
+
+void add_xformer_to_node(bind_xformer::value_type pair)
+{
+	assert(pair.first && pair.second);
+	pair.second->value.xformations.push_back(pair.first);
+}
 
 struct parallel_for_op {
 	const symtbl& shared;
@@ -792,9 +801,10 @@ struct parallel_for_op {
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
+	bind_xformer& lazy;
 	int unroll;
-	parallel_for_op(const symtbl& s, string& par, sharedset& i, sharedset& o, sharedset& io, int u): 
-		shared(s), par_induction(par), in(i), out(o), inout(io), unroll(u) {}
+	parallel_for_op(const symtbl& s, string& par, sharedset& i, sharedset& o, sharedset& io, bind_xformer& l, int u): 
+		shared(s), par_induction(par), in(i), out(o), inout(io), lazy(l), unroll(u) {}
 	void operator()(ast_node& node)
 	{
 		// if unroll, need to change iteration parameters
@@ -809,10 +819,12 @@ struct parallel_for_op {
 
 			if (unroll) {
 				if (ident == "SPE_start") {
-					node.value.xformations.push_back(new variable_name(unrolled));
+					lazy.insert(bind_xformer::value_type(new variable_name(unrolled), &node));
+					//node.value.xformations.push_back(new variable_name(unrolled));
 				}
 				else if (ident == "SPE_stop") {
-					node.value.xformations.push_back(new variable_name(epilouge));
+					lazy.insert(bind_xformer::value_type(new variable_name(epilogue), &node));
+					//node.value.xformations.push_back(new variable_name(epilogue));
 				}
 			}
 		}
@@ -826,8 +838,8 @@ struct parallel_for_op {
 
 			for_all(out, make_append_induction_if<gen_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			for_all(inout, make_append_induction_if<gen_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
-			for_all(out, make_append_induction_if<gen_final_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
-			for_all(inout, make_append_induction_if<gen_final_out_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all(out, make_append_induction_if<gen_out_final_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all(inout, make_append_induction_if<gen_out_final_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			append(xformations, rows);
 
 			xformations.push_back(new total_timer_stop());
@@ -841,9 +853,9 @@ struct parallel_for_op {
 struct unroll_single {
 	const int unroll;
 	unroll_single(const int u): unroll(u) {}
-	void operator()(xformer* xformer)
+	void operator()(xformer* x)
 	{
-		xformer->unroll_me(unroll);
+		x->unroll_me(unroll);
 	}
 };
 
@@ -853,6 +865,19 @@ struct unroll_all {
 	void operator()(ast_node& node)
 	{
 		for_all(node.value.xformations, unroll_single(unroll));
+		for_all(node.children, this);
+	}
+};
+
+void epilogue_single(xformer* x)
+{
+	x->epilogue_me();
+}
+
+struct epilogue_all {
+	void operator()(ast_node& node)
+	{
+		for_all(node.value.xformations, epilogue_single);
 		for_all(node.children, this);
 	}
 };
@@ -993,33 +1018,50 @@ struct wipeout_const_and_pure_declarations {
 	}
 };
 
+struct shared_or: public binary_function<bool, bool, const shared_variable*> {
+	bool (shared_variable::*func)() const;
+	shared_or(bool (shared_variable::*f)() const): func(f) {}
+
+	bool operator()(bool init, const shared_variable* v)
+	{
+		return init || (v->*func)();
+	}
+};
+
 struct unroll_for_op {
 	const symtbl& shared;
+	const sharedset& in;
+	const bool is_row;
 	const string& induction;
 	const int unroll;
 	const bool dma_unroll;
-	unroll_for_op(const symtbl& s, const string& i, const int u, const bool d): 
-		shared(s), induction(i), unroll(u), dma_unroll(d) {}
+	unroll_for_op(const symtbl& s, const sharedset& i, const bool r, const string& ind, const int u, const bool d): 
+		shared(s), in(i), is_row(r), induction(ind), unroll(u), dma_unroll(d) {}
 	void operator()(ast_node& node)
 	{
+		// Do the top conditions even get called for columns? They should...
+
 		if (node.value.id() == ids::expression_statement) {
-			// Yeah, kinda odd. We changed the original for_loop in place when we knew 
-			// we were unrolling, so we're going to remove those, then add the new ones.
 			descend< remove_xforms<variable_name> >()(node);
-			for_all(node.children, match_identifier("SPE_stop", new variable_name(unrolled)));
+			if (is_row) {
+				// Yeah, kinda odd. We changed the original for_loop in place when we knew 
+				// we were unrolling, so we're going to remove those, then add the new ones.
+				for_all(node.children, match_identifier("SPE_stop", new variable_name(unrolled)));
+			}
 		}
 		else if (node.value.id() == ids::postfix_expression || node.value.id() == ids::unary_expression) {
-			for_all(node.children, make_descend(wipeout_identifier(induction, node)));
+			if (is_row) {
+				for_all(node.children, make_descend(wipeout_identifier(induction, node)));
+			}
 		}
 		else if (node.value.id() == ids::compound) {
-			for_all(node.children, unroll_all(unroll));
 
 			list<ast_node> to_copy;
 			copy_all(node.children, back_inserter(to_copy));
 
 			// First iteration doesn't need sending out stuff.
 			for_all(node.children, remove_xforms<gen_out>());
-			for_all(node.children, remove_xforms<gen_final_out>());
+			for_all(node.children, remove_xforms<gen_out_final>());
 
 			if (!to_copy.empty()) {
 				// front or back?
@@ -1045,7 +1087,7 @@ struct unroll_for_op {
 						if (!dma_unroll) {
 							remove_xforms<gen_out>()(copy);
 						}
-						remove_xforms<gen_final_out>()(copy);
+						remove_xforms<gen_out_final>()(copy);
 					}
 					else if (next(j) == to_copy.end()) {
 						copy.value.xformations.push_front(new variable_increment(induction));
@@ -1054,6 +1096,16 @@ struct unroll_for_op {
 					node.children.insert(node.children.end() - 1, copy);
 				}
 			}
+
+			// Columns already have a gen_in_first.
+			xformerlist rows;
+			for_all(in, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
+
+			ast_node& last = node.children.back();
+			append(last.value.xformations, rows);
+			descend<epilogue_all>()(last);
+
+			make_descend(unroll_all(unroll))(node);
 		}
 		else {
 			for_all(node.children, this);
@@ -1067,13 +1119,14 @@ struct compound {
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
+	bind_xformer& lazy;
 	int unroll;
-	compound(const symtbl& s, string& par, sharedset& i, sharedset& o, sharedset& io, int u): 
-		shared(s), par_induction(par), in(i), out(o), inout(io), unroll(u) {}
+	compound(const symtbl& s, string& par, sharedset& i, sharedset& o, sharedset& io, bind_xformer& l, int u): 
+		shared(s), par_induction(par), in(i), out(o), inout(io), lazy(l), unroll(u) {}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			parallel_for_op o(shared, par_induction, in, out, inout, unroll);
+			parallel_for_op o(shared, par_induction, in, out, inout, lazy, unroll);
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
@@ -1122,22 +1175,46 @@ struct max_buffer: unary_function<const region_variable*, void> {
 };
 
 template <class Pred>
-ast_node::tree_iterator find_and_duplicate(ast_node& node, Pred p)
+pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_shallow(ast_node& node, Pred p)
 {
-	ast_node::tree_iterator i = find_if_all(node.children, p);
-	if (i != node.children.end()) {
-		return node.children.insert(i, *i);
+	ast_node::tree_iterator curr = find_if_all(node.children, p);
+
+	if (curr != node.children.end()) {
+		return make_pair(&node, curr);
 	}
 	else {
-		for (i = node.children.begin(); i != node.children.end(); ++i) {
-			ast_node::tree_iterator j = find_and_duplicate(*i, p);
-			if (j != i->children.end()) {
-				return j;
+		for (ast_node::tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
+			pair<ast_node*, ast_node::tree_iterator> nested = find_and_duplicate_shallow(*i, p);
+			if (nested.second != i->children.end()) {
+				return nested;
 			}
 		}
 	}
 
-	return node.children.end();
+	return make_pair(&node, node.children.end());
+}
+
+template <class Pred>
+pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_deep(ast_node& node, Pred p)
+{
+	ast_node::tree_iterator curr = find_if_all(node.children, p);
+	pair<ast_node*, ast_node::tree_iterator> ret;
+
+	if (curr != node.children.end()) {
+		ret = make_pair(&node, curr);
+	}
+	else {
+		ret = make_pair(&node, node.children.end());
+	}
+
+	for (ast_node::tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
+		pair<ast_node*, ast_node::tree_iterator> nested = find_and_duplicate_deep(*i, p);
+		if (nested.second != i->children.end()) {
+			ret = nested;
+		}
+	}
+
+	return ret;
 }
 
 class assign_depth {
@@ -1162,8 +1239,9 @@ struct cell_region {
 
 			// Assumption: one parallel induction variable.
 			string par_induction;
+			bind_xformer lazy;
 			compound o((*region)->symbols(), par_induction,
-					(*region)->in(), (*region)->out(), (*region)->inout(), 
+					(*region)->in(), (*region)->out(), (*region)->inout(), lazy,
 					(*region)->unroll());
 
 			for_all(node.children, &o);
@@ -1176,16 +1254,43 @@ struct cell_region {
 			(*region)->induction(par_induction);
 
 			if ((*region)->unroll()) {
-				ast_node::tree_iterator unroll_pos = find_and_duplicate(node, is_for_loop);
-				assert(unroll_pos != node.children.end());
-				unroll_for_op((*region)->symbols(), par_induction, (*region)->unroll(), (*region)->dma_unroll())(*unroll_pos);
+				bool column = accumulate_all((*region)->shared(), false, shared_or(&shared_variable::is_column));
+				bool row = accumulate_all((*region)->shared(), false, shared_or(&shared_variable::is_row));
+
+				pair<ast_node*, ast_node::tree_iterator> pos;
+				if (column && row) {
+					cerr << "error: unroll requested when shared variables have both row and column access." << endl;
+					exit(1);
+				}
+				else if (row) {
+					pos = find_and_duplicate_shallow(node, is_for_loop);
+					for_all(lazy, add_xformer_to_node);
+				}
+				else if (column) {
+					pos = find_and_duplicate_deep(node, is_for_loop);
+				}
+				else {
+					cerr << "error: no row or column access found for shared variables during loop unrolling." << endl;
+					exit(1);
+				}
+
+				assert(pos.second != node.children.end());
+
+				ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
+				unroll_for_op((*region)->symbols(), (*region)->in(), row, par_induction, (*region)->unroll(), (*region)->dma_unroll())(*dup);
+				descend<epilogue_all>()(*(next(dup)));
 			}
 
 			xformerlist& front_xforms = node.children.front().value.xformations;
-			front_xforms.push_back(new declare_prev());
+			front_xforms.push_back(new define_prev());
+
+			if ((*region)->unroll()) {
+				const const_variable unroll_factor("int", "unroll_factor", to_string((*region)->unroll()));
+				front_xforms.push_back(new define_const(unroll_factor));
+			}
 
 			append(front_xforms, fmap(make_xformer<private_buffer_size, private_variable>(), (*region)->priv()));
-			append(front_xforms, fmap(make_shared_buffer_size((*region)->buffer()), (*region)->shared()));
+			append(front_xforms, fmap(make_shared_buffer_size((*region)->buffer(), (*region)->unroll()), (*region)->shared()));
 
 			append(front_xforms, fmap(make_xformer<buffer_allocation, shared_variable>(), (*region)->shared()));
 			append(front_xforms, fmap(make_xformer<buffer_allocation, private_variable>(), (*region)->priv()));
@@ -1193,22 +1298,21 @@ struct cell_region {
 
 			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(o.par_induction)).max)));
 
-			append(front_xforms, fmap(make_xformer<declare_buffer, shared_variable>(), (*region)->out()));
-			append(front_xforms, fmap(make_xformer<declare_next, shared_variable>(), (*region)->shared()));
+			if ((*region)->unroll()) {
+				front_xforms.push_back(new unroll_boundaries((*region)->unroll()));
+			}
+
+			append(front_xforms, fmap(make_xformer<define_buffer, shared_variable>(), (*region)->shared()));
+			append(front_xforms, fmap(make_xformer<define_next, shared_variable>(), (*region)->shared()));
 
 			xformerlist rows;
-			for_all((*region)->in(), make_append_induction_if<init_row_buffer>(rows, mem_fn(&shared_variable::is_row), par_induction));
-			for_all((*region)->inout(), make_append_induction_if<init_row_buffer>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all((*region)->in(), make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all((*region)->inout(), make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			append(front_xforms, rows);
 
 			append(front_xforms, fmap(make_xformer<init_private_buffer, private_variable>(), (*region)->priv()));
 			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
 
-			// Order matters; unroll_boundaries generates code that depends on 
-			// code generated from compute_bounds.
-			if ((*region)->unroll()) {
-				front_xforms.push_back(new unroll_boundaries((*region)->unroll()));
-			}
 			front_xforms.push_back(new total_timer_start());
 
 			xformerlist& back_xforms = node.children.back().value.xformations;
