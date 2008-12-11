@@ -6,6 +6,7 @@
 #include <set>
 #include <string>
 #include <sstream>
+#include <algorithm>
 using namespace std;
 
 #include "utility.h"
@@ -47,18 +48,26 @@ const variable prev("int", "prev", "0");
 
 class const_variable: public variable {
 public:
+	const_variable(const string& t, const string&l):
+		variable("const " + t, l)
+		{}
 	const_variable(const string& t, const string& l, const string& a):
 		variable("const " + t, l, a)
 		{}
 
+	// FIXME: I had a reason for wanting constant variables to define when asked to declare.
+	// I can not remember what it was. It's inconvenient now, so I'm commenting it out and 
+	// will delete it if all is okay.
+	/*
 	virtual string declare() const { return type() + " " + name() + "=" + definition() + ";"; }
+	*/
 };
 /* The Cell SPU C compiler doesn't allow const variables in static expressions. Oh well.
 const const_variable buff_size("int", "buff_size", "16");
 */
 
-const const_variable unrolled("int", "unrolled", "SPE_start + ((SPE_stop - SPE_start) / unroll_factor) * unroll_factor");
-const const_variable epilogue("int", "epilogue", "unrolled + ((SPE_stop - SPE_start) % unroll_factor)");
+const const_variable unrolled("int", "unrolled");
+const const_variable epilogue("int", "epilogue"); 
 
 class pound_define: public variable {
 public:
@@ -133,6 +142,17 @@ public:
 	list<string> dimensions() const { return _dimensions; }
 };
 
+struct shared_or: public binary_function<bool, bool, const shared_variable*> {
+	bool (shared_variable::*func)() const;
+	shared_or(bool (shared_variable::*f)() const): func(f) {}
+
+	bool operator()(bool init, const shared_variable* v)
+	{
+		return init || (v->*func)();
+	}
+};
+
+
 class reduction_variable: public region_variable {
 public:
 	reduction_variable(const string& t, const string& l, const string& a, int r):
@@ -167,10 +187,8 @@ public:
 		size_t bracket = v->type().find('['); 
 
 		if (bracket == string::npos && star == string::npos) {
-			cerr	<< "error: variable " << v->name() 
-				<< " can't be made into a buffer because it is a scalar." 
-				<< endl;
-			exit(1);
+			throw user_error(string("variable ") + v->name() + 
+					" can't be made into a buffer because it is a scalar." );
 		}
 
 		size_t pos = (star == string::npos) ? bracket : star;

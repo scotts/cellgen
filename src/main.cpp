@@ -79,8 +79,7 @@ template <class T>
 void open_check(const T& s, const string& name)
 {
 	if (!s) {
-		cerr << "error: cannot open " << name << endl;
-		exit(1);
+		throw user_error("cannot open " + name);
 	}
 }
 
@@ -312,8 +311,7 @@ cmdline_options parse_command_line(int argc, char* argv[])
 	} 
 
 	catch (exception& e) {
-		cerr << "bad options: " << e.what() << endl;
-		exit(1);
+		throw user_error(string("bad options, ") + e.what());
 	}
 
 	return options;
@@ -321,51 +319,58 @@ cmdline_options parse_command_line(int argc, char* argv[])
 
 int main(int argc, char* argv[])
 {
-	const cmdline_options opts = parse_command_line(argc, argv);
+	try {
+		const cmdline_options opts = parse_command_line(argc, argv);
 
-	// Do all of the input and parsing.
-	sslist ppe_src_blocks;
-	spelist spe_regions;
-	parse_src(opts.src_name, ppe_src_blocks, spe_regions, opts.print_ast);
+		// Do all of the input and parsing.
+		sslist ppe_src_blocks;
+		spelist spe_regions;
 
-	stringstream ppe_fork;
-	stringstream ppe_prolouge;
-	stringstream spe_declarations;
-	stringstream spe_main;
-	stringstream mmgp_c;
+		parse_src(opts.src_name, ppe_src_blocks, spe_regions, opts.print_ast);
 
-	parse_generic(ppe_fork, ppe_fork_iname);
-	parse_generic(ppe_prolouge, ppe_prolouge_iname);
-	parse_generic(spe_declarations, spe_declarations_iname);
-	parse_generic(spe_main, spe_main_iname);
-	parse_generic(mmgp_c, mmgp_c_iname);
+		stringstream ppe_fork;
+		stringstream ppe_prolouge;
+		stringstream spe_declarations;
+		stringstream spe_main;
+		stringstream mmgp_c;
 
-	// Do all of the output and code generation.
-	string no_dot = opts.src_name;
-	size_t pos;
-	if ((pos = no_dot.find(".cellgen")) == string::npos) {
-		cerr << "error: file " << opts.src_name << " is not a cellgen source." << endl;
+		parse_generic(ppe_fork, ppe_fork_iname);
+		parse_generic(ppe_prolouge, ppe_prolouge_iname);
+		parse_generic(spe_declarations, spe_declarations_iname);
+		parse_generic(spe_main, spe_main_iname);
+		parse_generic(mmgp_c, mmgp_c_iname);
+
+		// Do all of the output and code generation.
+		string no_dot = opts.src_name;
+		size_t pos;
+		if ((pos = no_dot.find(".cellgen")) == string::npos) {
+			throw user_error("file " + opts.src_name + " is not a cellgen source.");
+		}
+		no_dot.replace(pos, strlen(".cellgen"), "");
+		const string ppe_oname = no_dot + ".c";
+		const string spe_oname = "spu/" + no_dot + "_spe.c";
+
+		string num_kernels = to_string<size_t>(spe_regions.size());
+		replace_print_file(mmgp_h_iname, mmgp_h_oname, num_kernels_hook, num_kernels, opts.num_threads);
+		replace_print_file(mmgp_c_iname, mmgp_c_oname, program_name_hook, no_dot, opts.num_threads);
+		replace_print_file(mmgp_spu_h_iname, mmgp_spu_h_oname, num_kernels_hook, num_kernels, opts.num_threads);
+
+		print_pass_struct(spe_regions);
+		print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions, opts.inc_name);
+
+		print_spe(spe_oname, spe_declarations, spe_main, spe_regions, opts.inc_name);
+	
+		system(string("cp " + spe_profiler + " spu/").c_str());
+		system(string("cp " + cellstrider_dma_iname + " spu/").c_str());
+
+		system(string("indent " + ppe_oname + " " + spe_oname).c_str());
+		system("rm *~ spu/*~");
+	}
+	catch (user_error e)
+	{
+		cerr << "error: " << e.err << endl;
 		exit(1);
 	}
-	no_dot.replace(pos, strlen(".cellgen"), "");
-	const string ppe_oname = no_dot + ".c";
-	const string spe_oname = "spu/" + no_dot + "_spe.c";
-
-	string num_kernels = to_string<size_t>(spe_regions.size());
-	replace_print_file(mmgp_h_iname, mmgp_h_oname, num_kernels_hook, num_kernels, opts.num_threads);
-	replace_print_file(mmgp_c_iname, mmgp_c_oname, program_name_hook, no_dot, opts.num_threads);
-	replace_print_file(mmgp_spu_h_iname, mmgp_spu_h_oname, num_kernels_hook, num_kernels, opts.num_threads);
-
-	print_pass_struct(spe_regions);
-	print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions, opts.inc_name);
-
-	print_spe(spe_oname, spe_declarations, spe_main, spe_regions, opts.inc_name);
-	
-	system(string("cp " + spe_profiler + " spu/").c_str());
-	system(string("cp " + cellstrider_dma_iname + " spu/").c_str());
-
-	system(string("indent " + ppe_oname + " " + spe_oname).c_str());
-	system("rm *~ spu/*~");
 
 	return 0;
 }

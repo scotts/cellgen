@@ -11,6 +11,11 @@
 using namespace std;
 using namespace boost;
 
+struct user_error {
+	const string err;
+	user_error(const string& e): err(e) {}
+};
+
 template <class I, class F>
 F* for_each(I first, I last, F* f)
 {
@@ -45,7 +50,7 @@ typename C::iterator find_if_all(C& c, P p)
 }
 
 template <class C, class T, class F>
-T accumulate_all(C& c, T init, F f)
+T accumulate_all(const C& c, T init, F f)
 {
 	return accumulate(c.begin(), c.end(), init, f);
 }
@@ -123,57 +128,39 @@ I next(I i)
 template <class Container1, class Container2, class Out, class Comp>
 Out set_intersection_all(const Container1& c1, const Container2& c2, Out o, Comp co)
 {
-	return set_intersection(c1.begin(), c1.end(),
-				c2.begin(), c2.end(),
-				o, co);
+	return set_intersection(c1.begin(), c1.end(), c2.begin(), c2.end(), o, co);
 }
 
 template <class Container1, class Container2, class Out>
 Out set_intersection_all(const Container1& c1, const Container2& c2, Out o)
 {
-	return set_intersection(c1.begin(), c1.end(),
-				c2.begin(), c2.end(),
-				o);
-}
-
-template <class Container1, class Container2, class Out, class Comp>
-Out set_intersection_all(Container1* c1, Container2* c2, Out o, Comp co)
-{
-	return set_intersection(c1->begin(), c1->end(),
-				c2->begin(), c2->end(),
-				o, co);
+	return set_intersection(c1.begin(), c1.end(), c2.begin(), c2.end(), o);
 }
 
 template <class Container1, class Container2, class Out>
 Out set_difference_all(const Container1& c1, const Container2& c2, Out o)
 {
-	return set_difference(c1.begin(), c1.end(),
-				c2.begin(), c2.end(),
-				o);
+	return set_difference(c1.begin(), c1.end(), c2.begin(), c2.end(), o);
 }
 
 template <class Container1, class Container2, class Out, class Comp>
 Out set_difference_all(const Container1& c1, const Container2& c2, Out o, Comp co)
 {
-	return set_difference(c1.begin(), c1.end(),
-				c2.begin(), c2.end(),
-				o, co);
-}
-
-template <class Container1, class Container2, class Out>
-Out set_difference_all(Container1* c1, Container2* c2, Out o)
-{
-	return set_difference(c1->begin(), c1->end(),
-				c2->begin(), c2->end(),
-				o);
+	return set_difference(c1.begin(), c1.end(), c2.begin(), c2.end(), o, co);
 }
 
 template <class Container1, class Container2, class Out>
 Out set_union_all(const Container1& c1, const Container2& c2, Out o)
 {
-	return set_union(c1.begin(), c1.end(),
-			c2.begin(), c2.end(),
-			o);
+	return set_union(c1.begin(), c1.end(), c2.begin(), c2.end(), o);
+}
+
+template <class Container>
+Container set_union_all(const Container& c1, const Container& c2)
+{
+	Container u;
+	set_union_all(c1, c2, inserter(u, u.begin()));
+	return u;
 }
 
 template <class Container1, class Container2, class Container3, class Out>
@@ -184,10 +171,24 @@ Out set_union_all(const Container1& c1, const Container2& c2, const Container3& 
 	return set_union_all(temp1, c3, o);
 }
 
+template <class Container>
+Container set_union_all(const Container& c1, const Container& c2, const Container& c3)
+{
+	Container u;
+	set_union_all(c1, c2, c3, inserter(u, u.begin()));
+	return u;
+}
+
 template <class T, class Container>
 bool exists_in(const Container& c, const T& val)
 {
 	return find_if(c.begin(), c.end(), boost::bind(equal_to<T>(), val, _1)) != c.end();
+}
+
+template <class T, class Container, class Pred>
+bool exists_in(const Container& c, const T& val, Pred p)
+{
+	return find_if(c.begin(), c.end(), boost::bind(p, val, _1)) != c.end();
 }
 
 template <class T>

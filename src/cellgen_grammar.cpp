@@ -442,8 +442,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions,
 {
 	fileiter first(src_name);
 	if (!first) {
-		cerr << "Unable to open " << src_name << endl;
-		exit(-1);
+		throw user_error(string("unable to open ") + src_name);
 	}
 	fileiter last = first.make_end();
 
@@ -452,8 +451,7 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions,
 	*p = ast_parse<xformer_factory>(first, last, cg, skip);
 
 	if (!p->full) {
-		cerr << "error: parse of " << src_name << " failed." << endl;
-		exit(-1);
+		throw user_error(string("parse of ") + src_name + " failed.");
 	}
 
 	traverse_ast(p->trees, spe_regions);

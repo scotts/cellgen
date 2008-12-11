@@ -432,11 +432,11 @@ public:
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
+		set_buff_size();
+
 		return old + 
 			"cellgen_dma_prep_start(); \n" + 
-			prev.name() + "=" + next.name() + "; \n" +
 			dma_in() + 
-			orig.name() + "=" + buff.name() + "+" + buff_size + "*" + prev.name() + "; \n" +
 			"cellgen_dma_prep_stop(); \n";
 	}
 
@@ -468,6 +468,7 @@ public:
 	{
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
+		orig_adaptor orig(v);
 		string address;
 		string buff_size;
 
@@ -485,11 +486,13 @@ public:
 			address = "(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + "))";
 		}
 
-		return "DMA_get(" +
+		return	prev.name() + "=" + next.name() + "; \n" +
+			"DMA_get(" +
 				buff.name() + "+" + buff_size + "*" + next.name() + ", " +
 				address + "," 
 				"sizeof(" + buff.type() + ")*" + buff_size + ", " +
-				next.name() + "); \n";
+				next.name() + "); \n" +
+			orig.name() + "=" + buff.name() + "+" + buff_size + "*" + prev.name() + "; \n";
 	}
 
 	xformer* clone() const { return new gen_in_first_row(*this); }
@@ -504,6 +507,7 @@ public:
 		dma_list_adaptor list(v);
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
+		orig_adaptor orig(v);
 
 		return	"add_to_dma_list(&" + list.name(next.name()) + "," + 
 				buff.size() + ","
@@ -516,7 +520,8 @@ public:
 				"&" + list.name(next.name()) + "," + 
 				next.name() + ","
 				"1," +
-				"sizeof(" + buff.type() + ")); \n";
+				"sizeof(" + buff.type() + ")); \n" +
+			orig.name() + "=" + buff.name() + "; \n";
 	}
 
 	xformer* clone() const { return new gen_in_first_column(*this); }
@@ -573,19 +578,21 @@ public:
 	string class_name() const { return "init_private_buffer"; }
 };
 
-class unroll_boundaries: public xformer {
+class define_unroll_boundaries: public xformer {
+	const string start;
+	const string stop;
 	const int unroll;
 public:
-	unroll_boundaries(const int u): unroll(u) {}
+	define_unroll_boundaries(const string& t, const string& p, const int u): start(t), stop(p), unroll(u) {}
 	string operator()(const string& old)
 	{
-		return 	old + 
-			unrolled.define() + "; \n" + 
-			epilogue.define() + "; \n";
+		return	old + 
+			unrolled.declare() + "=" + start + " + ((" + stop + " - " + start + ") / unroll_factor) * unroll_factor; " + 
+			epilogue.declare() + "=" + unrolled.name() + " + ((" + stop + " - " + start + ") % unroll_factor);";
 	}
 
-	xformer* clone() const { return new unroll_boundaries(*this); }
-	string class_name() const { return "unroll_boundaries"; }
+	xformer* clone() const { return new define_unroll_boundaries(*this); }
+	string class_name() const { return "define_unroll_boundaries"; }
 };
 
 struct define_prev: public xformer {
@@ -634,7 +641,8 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer {
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		const string wait = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n";
+		const string wait_next = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n";
+		const string wait_prev = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n";
 		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + buff.depth() + "; \n";
 
 		set_buff_size();
@@ -644,11 +652,12 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer {
 			outer_if() + "{ \n" +
 				prev.name() + "=" + next.name() + "; \n" +
 				rotate_next + 
+				wait_next +
 				inner_if() + "{ \n" + 
 					dma_in() + 
 				"} \n" +
 				orig.name() + "=" + buff.name() + "+" + buff_size + "*" + prev.name() + "; \n" +
-				wait +
+				wait_prev +
 			"} \n"
 			"cellgen_dma_prep_stop(); \n";
 	}
@@ -791,7 +800,6 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer {
 		orig_adaptor orig(v);
 		next_adaptor next(v);
 		string var_switch;
-		string buff_size;
 
 		set_buff_size();
 
