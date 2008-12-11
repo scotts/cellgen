@@ -1256,11 +1256,22 @@ struct cell_region {
 	{
 		if (node.value.id() == ids::compound) {
 
+			// Trust me, this enchances readability.
+			sharedset& shared = (*region)->shared();
+			sharedset& out = (*region)->out();
+			sharedset& in = (*region)->in();
+			sharedset& inout = (*region)->inout();
+			const privset& priv = (*region)->priv();
+			const reduceset& reductions = (*region)->reductions();
+			const symtbl& symbols = (*region)->symbols();
+			const int unroll = (*region)->unroll();
+			const int buffer = (*region)->buffer();
+			const bool dma_unroll = (*region)->dma_unroll();
+
 			// Assumption: one parallel induction variable.
 			forcondlist forconds;
 			bind_xformer condnodes_row;
-			compound o((*region)->symbols(), (*region)->in(), (*region)->out(), (*region)->inout(), 
-				forconds, condnodes_row, (*region)->unroll());
+			compound o(symbols, in, out, inout, forconds, condnodes_row, unroll);
 
 			for_all(node.children, &o);
 
@@ -1271,16 +1282,16 @@ struct cell_region {
 			const string& serial_start = forconds.back().start;
 			const string& serial_stop = forconds.back().stop;
 
-			for_all((*region)->priv(), assign_depth(1));
-			for_all((*region)->in(), assign_depth(2));
-			for_all((*region)->out(), assign_depth(2));
-			for_all((*region)->inout(), assign_depth(3));
+			for_all(priv, assign_depth(1));
+			for_all(in, assign_depth(2));
+			for_all(out, assign_depth(2));
+			for_all(inout, assign_depth(3));
 
 			(*region)->induction(par_induction);
 
-			const bool column = accumulate_all((*region)->shared(), false, shared_or(&shared_variable::is_column));
-			const bool row = accumulate_all((*region)->shared(), false, shared_or(&shared_variable::is_row));
-			if ((*region)->unroll()) {
+			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));
+			const bool row = accumulate_all(shared, false, shared_or(&shared_variable::is_row));
+			if (unroll) {
 				string unroll_induction;
 				pair<ast_node*, ast_node::tree_iterator> pos;
 				if (column && row) {
@@ -1293,7 +1304,7 @@ struct cell_region {
 				}
 				else if (column) {
 					pos = find_and_duplicate_deep(node, is_for_loop);
-					pos.first->children.front().value.xformations.push_back(new define_unroll_boundaries(serial_start, serial_stop, (*region)->unroll()));
+					pos.first->children.front().value.xformations.push_back(new define_unroll_boundaries(serial_start, serial_stop, unroll));
 					unroll_induction = serial_induction;
 				}
 				else {
@@ -1303,49 +1314,49 @@ struct cell_region {
 				assert(pos.second != node.children.end());
 
 				ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
-				unroll_for_op((*region)->in(), row, serial_stop, unroll_induction, (*region)->unroll(), (*region)->dma_unroll())(*dup);
+				unroll_for_op(in, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
 				descend<epilogue_all>()(*(next(dup)));
 			}
 
-			xformerlist& front_xforms = node.children.front().value.xformations;
-			front_xforms.push_back(new define_prev());
+			xformerlist& front = node.children.front().value.xformations;
+			front.push_back(new define_prev());
 
-			if ((*region)->unroll()) {
-				const const_variable unroll_factor("int", "unroll_factor", to_string((*region)->unroll()));
-				front_xforms.push_back(new define_const(unroll_factor));
+			if (unroll) {
+				const const_variable unroll_factor("int", "unroll_factor", to_string(unroll));
+				front.push_back(new define_const(unroll_factor));
 			}
 
-			append(front_xforms, fmap(make_xformer<private_buffer_size, private_variable>(), (*region)->priv()));
-			append(front_xforms, fmap(make_shared_buffer_size((*region)->buffer(), (*region)->unroll()), (*region)->shared()));
+			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
+			append(front, fmap(make_shared_buffer_size(buffer, unroll), shared));
 
-			append(front_xforms, fmap(make_xformer<buffer_allocation, shared_variable>(), (*region)->shared()));
-			append(front_xforms, fmap(make_xformer<buffer_allocation, private_variable>(), (*region)->priv()));
-			append(front_xforms, fmap(make_xformer<dma_list_allocation, shared_variable>(), (*region)->shared()));
+			append(front, fmap(make_xformer<buffer_allocation, shared_variable>(), shared));
+			append(front, fmap(make_xformer<buffer_allocation, private_variable>(), priv));
+			append(front, fmap(make_xformer<dma_list_allocation, shared_variable>(), shared));
 
-			front_xforms.push_back(new compute_bounds((for_all((*region)->shared(), max_buffer(par_induction)).max)));
+			front.push_back(new compute_bounds((for_all(shared, max_buffer(par_induction)).max)));
 
-			if ((*region)->unroll() && row) {
-				front_xforms.push_back(new define_unroll_boundaries(par_start, par_stop, (*region)->unroll()));
+			if (unroll && row) {
+				front.push_back(new define_unroll_boundaries(par_start, par_stop, unroll));
 			}
 
-			append(front_xforms, fmap(make_xformer<define_buffer, shared_variable>(), (*region)->shared()));
-			append(front_xforms, fmap(make_xformer<define_next, shared_variable>(), (*region)->shared()));
+			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
+			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
 			xformerlist rows;
-			for_all((*region)->in(), make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
-			for_all((*region)->inout(), make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
-			append(front_xforms, rows);
+			for_all(in, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			for_all(inout, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
+			append(front, rows);
 
-			append(front_xforms, fmap(make_xformer<init_private_buffer, private_variable>(), (*region)->priv()));
-			append(front_xforms, fmap(make_xformer<reduction_declare, reduction_variable>(), (*region)->reductions()));
+			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
+			append(front, fmap(make_xformer<reduction_declare, reduction_variable>(), reductions));
 
-			front_xforms.push_back(new total_timer_start());
+			front.push_back(new total_timer_start());
 
-			xformerlist& back_xforms = node.children.back().value.xformations;
-			append(back_xforms, fmap(make_xformer<reduction_assign, reduction_variable>(), (*region)->reductions()));
-			append(back_xforms, fmap(make_xformer<buffer_deallocation, shared_variable>(), (*region)->shared()));
-			append(back_xforms, fmap(make_xformer<buffer_deallocation, private_variable>(), (*region)->priv()));
-			append(back_xforms, fmap(make_xformer<dma_list_deallocation, shared_variable>(), (*region)->shared()));
+			xformerlist& back = node.children.back().value.xformations;
+			append(back, fmap(make_xformer<reduction_assign, reduction_variable>(), reductions));
+			append(back, fmap(make_xformer<buffer_deallocation, shared_variable>(), shared));
+			append(back, fmap(make_xformer<buffer_deallocation, private_variable>(), priv));
+			append(back, fmap(make_xformer<dma_list_deallocation, shared_variable>(), shared));
 
 			++region;
 		}
