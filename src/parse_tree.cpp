@@ -1055,13 +1055,14 @@ struct wipeout_const_and_pure_declarations {
 
 struct unroll_for_op {
 	const sharedset& in;
+	const sharedset& inout;
 	const bool is_row;
 	const string& stop;
 	const string& induction;
 	const int unroll;
 	const bool dma_unroll;
-	unroll_for_op(const sharedset& i, const bool r, const string& _stop, const string& ind, const int u, const bool d): 
-		in(i), is_row(r), stop(_stop), induction(ind), unroll(u), dma_unroll(d)
+	unroll_for_op(const sharedset& i, const sharedset& io, const bool r, const string& _stop, const string& ind, const int u, const bool d): 
+		in(i), inout(io), is_row(r), stop(_stop), induction(ind), unroll(u), dma_unroll(d)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -1119,6 +1120,7 @@ struct unroll_for_op {
 			// Columns already have a gen_in_first.
 			xformerlist rows;
 			for_all(in, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
+			for_all(inout, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
 
 			ast_node& last = node.children.back();
 			append(last.value.xformations, rows);
@@ -1314,7 +1316,7 @@ struct cell_region {
 				assert(pos.second != node.children.end());
 
 				ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
-				unroll_for_op(in, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
+				unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
 				descend<epilogue_all>()(*(next(dup)));
 			}
 
