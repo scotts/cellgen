@@ -879,7 +879,6 @@ struct gen_out_row: public gen_out {
 struct gen_out_column: public gen_out {
 	gen_out_column(const shared_variable* v, const string& i): gen_out(v, i) {}
 
-	// TODO: change me for column!
 	string if_statement()
 	{
 		if (!unroll) {
@@ -953,9 +952,10 @@ struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
 					prev.name() + "=" + next.name() + ";" +
 					next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
 					dma_final_out() +
-					"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n" +
-					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n" 
 				"} \n"
+				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n" +
+				"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n" 
+				"MMGP_SPE_dma_wait((" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth()) + ", fn_id); \n"
 				"cellgen_dma_prep_stop(); \n";
 		}
 
@@ -1004,7 +1004,6 @@ struct gen_out_final_column: public gen_out_final {
 
 	string if_statement()
 	{
-		// FIXME: is this right? 
 		buffer_adaptor buff(v);
 		return "if (" + v->dimensions().front() + "%" + buff.size() + ")";
 	}

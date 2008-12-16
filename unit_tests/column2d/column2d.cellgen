@@ -104,11 +104,44 @@ void inout(int16b_t ref[ROW][COL], int16b_t test[ROW][COL])
 	}
 }
 
+void inout_unroll(int16b_t ref[ROW][COL], int16b_t test[ROW][COL])
+{
+	int i, j;
+	int count = 0;	
+	for (i = 0; i < COL; ++i) {
+		for (j = 0; j < ROW; ++j) {
+			test[j][i].num = count;
+			ref[j][i].num = 2 * count;
+			++count;
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(COL) unroll(4) private(int ROW = ROW, int COL = COL) shared(int16b_t* test = test[ROW][COL])
+	{
+		int i, j;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < ROW; ++j) {
+				test[j][i].num = 2 * test[j][i].num;
+			}
+		}
+	}
+
+	for (i = 0; i < COL; ++i) {
+		for (j = 0; j < ROW; ++j) {
+			if (test[j][i].num != ref[j][i].num) {
+				printf("inout unroll failure at (%d,%d), test %d, ref %d\n", i, j, test[j][i].num, ref[j][i].num);
+				return;
+			}
+		}
+	}
+}
+
 int main()
 {
 	in_and_out(test_in, test_out);
 	in_and_out_unroll(test_in, test_out);
 	inout(ref_inout, test_inout);
+	inout_unroll(ref_inout, test_inout);
 
 	return 0;
 }
