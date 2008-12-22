@@ -94,6 +94,16 @@ paren_expr::~paren_expr()
 	delete recurse;
 }
 
+type_ops paren_expr::cost() const
+{
+	type_ops ops;
+	if (recurse) {
+		ops = recurse->cost();
+	}
+
+	return ops;
+}
+
 /* class mult_expr
  */
 string mult_expr::str() const
@@ -142,6 +152,41 @@ string mult_expr::factor(const string& ivar) const
 	}
 }
 
+type_ops mult_expr::factor_cost() const
+{
+	type_ops total;
+	if (_op == "*") {
+		++total.int_ops.mul;
+	}
+	else if (_op == "/") {
+		++total.int_ops.div;
+	}
+	else if (_op == "%") {
+		++total.int_ops.mod;
+	}
+
+	return total;
+}
+
+type_ops mult_expr::cost() const
+{
+	type_ops ops;
+	ops += _lhs.cost();
+	ops += _rhs.cost();
+
+	if (_op == "*") {
+		++ops.int_ops.mul;
+	}
+	else if (_op == "/") {
+		++ops.int_ops.div;
+	}
+	else if (_op == "%") {
+		++ops.int_ops.mod;
+	}
+
+	return ops;
+}
+
 /* class add_expr
  */
 string add_expr::str() const
@@ -182,5 +227,35 @@ string add_expr::factor(const string& ivar) const
 		// factor() on an expression without an induction variable.
 		return "";
 	}
+}
+
+type_ops add_expr::factor_cost(const string& ivar) const
+{
+	type_ops ops;
+
+	if (_lhs.str().find(ivar) != string::npos) {
+		ops = _lhs.factor_cost();
+	}
+	else if (_rhs.str().find(ivar) != string::npos) {
+		ops = _rhs.factor_cost();
+	}
+
+	return ops;
+}
+
+type_ops add_expr::cost() const
+{
+	type_ops ops;
+	ops += _lhs.cost();
+	ops += _rhs.cost();
+
+	if (_op == "+") {
+		++ops.int_ops.add;
+	}
+	else if (_op == "-") {
+		++ops.int_ops.sub;
+	}
+
+	return ops;
 }
 

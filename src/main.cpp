@@ -111,7 +111,7 @@ public:
 
 string reduction_writeback(string val, const region_variable* v)
 {
-	return val + "signal.result = " + pass_var + "." + v->name() + ";\n";
+	return val + "signal.result = " + pass_var + "." + v->unique_name() + ";\n";
 }
 
 class print_region {

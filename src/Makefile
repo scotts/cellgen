@@ -12,7 +12,7 @@ LDFLAGS = -lstdc++ $(BOOST_LIBS)
 OBJS = main.o cellgen_grammar.o parse_tree.o math_exprs.o
 
 # All implementations need access to these declarations/defintions.
-COMMON_INCLUDES = variable.h math_exprs.h spe_region.h utility.h
+COMMON_INCLUDES = variable.h math_exprs.h spe_region.h utility.h type_ops.h
 
 all: cellgen
 clean:

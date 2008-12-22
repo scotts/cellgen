@@ -6,6 +6,8 @@
 #include <iostream>
 using namespace std;
 
+#include "type_ops.h"
+
 class add_expr;
 
 class paren_expr {
@@ -28,6 +30,8 @@ public:
 	string str() const;
 	string next_iteration(const string& ivar) const;
 	add_expr eval() const;
+
+	type_ops cost() const;
 };
 
 class mult_expr {
@@ -61,6 +65,9 @@ public:
 	string str() const;
 	string next_iteration(const string& ivar) const;
 	string factor(const string& ivar) const;
+
+	type_ops factor_cost() const;
+	type_ops cost() const;
 };
 
 class add_expr {
@@ -86,6 +93,9 @@ public:
 	string str() const;
 	string next_iteration(const string& ivar) const;
 	string factor(const string& ivar) const;
+
+	type_ops factor_cost(const string& ivar) const;
+	type_ops cost() const;
 };
 
 #endif	// MULT_EXPR_H

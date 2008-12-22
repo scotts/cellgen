@@ -160,7 +160,7 @@ public:
 		{}
 
 	virtual string name() const { return region_variable::name() + "_red"; }
-	virtual string actual() const { return "&" + pass_var + "." + name(); }
+	virtual string actual() const { return "&" + pass_var + "." + unique_name(); }
 
 	virtual string formal() const {  return type() + "* " + name(); }
 };
@@ -233,7 +233,7 @@ public:
 	string declare() const { return type() + " " + name(); }
 };
 
-typedef set<region_variable*>		varset;
+typedef set<variable*>			varset;
 typedef set<private_variable*>		privset;
 typedef set<shared_variable*>		sharedset;
 typedef set<reduction_variable*>	reduceset;

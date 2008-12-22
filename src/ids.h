@@ -41,7 +41,7 @@ namespace ids {
 	static const int semicolon = 29;
 	static const int dot = 30;
 	static const int ptr_op = 31;
-	static const int last = 31;
+	static const int last = 31; // should equal one above
 
 	static const string __mappings[] = { "",
 		"identifier",

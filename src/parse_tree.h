@@ -74,7 +74,7 @@ typedef ast_match::node_t				ast_node;
 
 #include "spe_region.h"
 
-inline std::ostream& operator<<(std::ostream& out, const parser_id& rid)
+inline ostream& operator<<(ostream& out, const parser_id& rid)
 {
 	out << rid.to_long();
 	return out;

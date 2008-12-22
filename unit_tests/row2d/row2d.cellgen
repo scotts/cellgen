@@ -21,7 +21,6 @@ void in_and_out(int in[ROW][COL], int out[ROW][COL])
 
 	#pragma cell SPE_start(0) SPE_stop(ROW) buffer(256) private(int ROW = ROW, int COL = COL) shared(int* in = in[ROW][COL], int* out = out[ROW][COL])
 	{
-		int count = 0;
 		int i, j;
 		for (i = SPE_start; i < SPE_stop; ++i) {
 			for (j = 0; j < COL; ++j) {
@@ -52,7 +51,6 @@ void in_and_out_unroll(int in[ROW][COL], int out[ROW][COL])
 
 	#pragma cell SPE_start(0) SPE_stop(ROW) unroll(4) private(int ROW = ROW, int COL = COL) shared(int* in = in[ROW][COL], int* out = out[ROW][COL])
 	{
-		int count = 0;
 		int i, j;
 		for (i = SPE_start; i < SPE_stop; ++i) {
 			for (j = 0; j < COL; ++j) {
