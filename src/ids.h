@@ -41,7 +41,10 @@ namespace ids {
 	static const int semicolon = 29;
 	static const int dot = 30;
 	static const int ptr_op = 31;
-	static const int last = 31; // should equal one above
+	static const int float_constant_1 = 32;
+	static const int float_constant_2 = 33;
+	static const int float_constant_3 = 34;
+	static const int last = 34; // should equal one above
 
 	static const string __mappings[] = { "",
 		"identifier",
@@ -74,7 +77,10 @@ namespace ids {
 		"unary_expression",
 		"semicolon",
 		"dot",
-		"ptr_op"
+		"ptr_op",
+		"float_constant_1",
+		"float_constant_2",
+		"float_constant_3"
 	};
 	static const vector<string> mappings(__mappings, __mappings + last + 1);
 

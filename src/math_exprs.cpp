@@ -154,18 +154,18 @@ string mult_expr::factor(const string& ivar) const
 
 type_ops mult_expr::factor_cost() const
 {
-	type_ops total;
+	type_ops ops;
 	if (_op == "*") {
-		++total.int_ops.mul;
+		ops.inc_mul(INT);
 	}
 	else if (_op == "/") {
-		++total.int_ops.div;
+		ops.inc_div(INT);
 	}
 	else if (_op == "%") {
-		++total.int_ops.mod;
+		ops.inc_mod(INT);
 	}
 
-	return total;
+	return ops;
 }
 
 type_ops mult_expr::cost() const
@@ -175,13 +175,13 @@ type_ops mult_expr::cost() const
 	ops += _rhs.cost();
 
 	if (_op == "*") {
-		++ops.int_ops.mul;
+		ops.inc_mul(INT);
 	}
 	else if (_op == "/") {
-		++ops.int_ops.div;
+		ops.inc_div(INT);
 	}
 	else if (_op == "%") {
-		++ops.int_ops.mod;
+		ops.inc_mod(INT);
 	}
 
 	return ops;
@@ -250,10 +250,10 @@ type_ops add_expr::cost() const
 	ops += _rhs.cost();
 
 	if (_op == "+") {
-		++ops.int_ops.add;
+		ops.inc_add(INT);
 	}
 	else if (_op == "-") {
-		++ops.int_ops.sub;
+		ops.inc_sub(INT);
 	}
 
 	return ops;

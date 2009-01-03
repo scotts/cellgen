@@ -39,16 +39,16 @@ struct xformer: public unary_function<const string&, string> {
 
 	virtual type_ops cost() 
 	{
-		type_ops total;
+		type_ops ops;
 		const string code = operator()("");
 
-		total.int_ops.add += count_ocurrences(code, "\\+");
-		total.int_ops.sub += count_ocurrences(code, "\\-");
-		total.int_ops.mul += count_ocurrences(code, "\\*");
-		total.int_ops.div += count_ocurrences(code, "\\\\");
-		total.int_ops.mod += count_ocurrences(code, "\\%");
+		ops.add(INT, count_ocurrences(code, "\\+"));
+		ops.sub(INT, count_ocurrences(code, "\\-"));
+		ops.mul(INT, count_ocurrences(code, "\\*"));
+		ops.div(INT, count_ocurrences(code, "\\\\"));
+		ops.mod(INT, count_ocurrences(code, "\\%"));
 
-		return total;
+		return ops;
 	}
 };
 
@@ -157,21 +157,6 @@ public:
 		return old + orig.name() + "[(" + add.str() + ")%" + buff_size + "]";
 	}
 
-	/*
-	type_ops cost()
-	{
-		type_ops total = add.cost();
-
-		if (epilogue) {
-			++total.int_ops.div;
-		}
-
-		++total.int_ops.mod;
-
-		return total;
-	}
-	*/
-
 	xformer* clone() const { return new row_buffer_space(*this); }
 	string class_name() const { return "row_buffer_space"; }
 };
@@ -188,16 +173,6 @@ public:
 
 		return old + orig.name() + "[(" + add.lhs().lhs().str() + ")%" + buff.size() + "]";
 	}
-
-	/*
-	type_ops cost()
-	{
-		type_ops total = add.cost();
-		++total.int_ops.mod;
-
-		return total;
-	}
-	*/
 
 	xformer* clone() const { return new column_buffer_space(*this); }
 	string class_name() const { return "column_buffer_space"; }
@@ -245,15 +220,6 @@ struct variable_increment: public xformer {
 	{
 		return old + "++" + var + ";";
 	}
-
-	/*
-	type_ops cost()
-	{
-		type_ops total;
-		total.int_ops.add += 1;
-		return total;
-	}
-	*/
 
 	xformer* clone() const { return new variable_increment(*this); }
 	string class_name() const { return "variable_increment"; }
@@ -565,26 +531,6 @@ public:
 			orig.name() + "=" + buff.name() + "+" + buff_size + "*" + prev.name() + "; \n";
 	}
 
-	/*
-	type_ops cost()
-	{
-		// FIXME: need estimate of DMA_get
-		
-		type_ops total;
-
-		if (epilogue) {
-			total.int_ops.div += 1;
-		}
-
-		total += 2 * v->math().factor_cost(induction);
-
-		total.int_ops.add += 2;
-		total.int_ops.mul += 3;
-
-		return total;
-	}
-	*/
-
 	xformer* clone() const { return new gen_in_first_row(*this); }
 	string class_name() const { return "gen_in_first_row"; }
 };
@@ -613,17 +559,6 @@ public:
 				"sizeof(" + buff.type() + ")); \n" +
 			orig.name() + "=" + buff.name() + "; \n";
 	}
-
-	/*
-	type_ops cost()
-	{
-		// FIXME: need estimate of add_to_dma_list and DMA_getl
-		type_ops total;
-		total.int_ops.add += 3;
-		total.int_ops.mul += 2;
-		return total;
-	}
-	*/
 
 	xformer* clone() const { return new gen_in_first_column(*this); }
 	string class_name() const { return "gen_in_first_column"; }
@@ -763,17 +698,6 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer {
 			"cellgen_dma_prep_stop(); \n";
 	}
 
-	/*
-	type_ops cost()
-	{
-		type_ops total;
-		total.int_ops.add += 2;
-		total.int_ops.mul += 1;
-		total.int_ops.mod += 1;
-		return total;
-	}
-	*/
-
 	virtual void set_buff_size()
 	{
 		buff_size = buffer_adaptor(v).size();	
@@ -840,27 +764,6 @@ struct gen_in_row: public gen_in {
 				next.name() + ");\n";
 	}
 
-	/*
-	type_ops cost()
-	{
-		type_ops total;
-
-		if (epilogue) {
-			total.int_ops.div += 1;
-		}
-
-		if (!unroll) {
-			total.int_ops.mod += 1;
-			total.int_ops.add += 1;
-		}
-
-		total.int_ops.add += 3;
-		total.int_ops.mul += 2;
-
-		return total + gen_in::cost();
-	}
-	*/
-
 	xformer* clone() const { return new gen_in_row(*this); }
 	string class_name() const { return "gen_in_row"; }
 };
@@ -918,22 +821,6 @@ struct gen_in_column: public gen_in {
 				"1," +
 				"sizeof(" + buff.type() + ")); \n";
 	}
-
-	/*
-	type_ops cost()
-	{
-		type_ops total;
-		const string code = operator("");
-
-		if (regex_match(code, regex("+"))) {
-
-		}
-		if (!unroll) {
-			total.int_ops.mod += 1;
-			total.int_ops.add += 1;
-		}
-	}
-	*/
 
 	xformer* clone() const { return new gen_in_column(*this); }
 	string class_name() const { return "gen_in_column"; }

@@ -14,6 +14,8 @@ using namespace std;
 
 const string pass_var = "pass";
 
+//enum variable_type {INT, LONG, FLOAT, DOUBLE, CHAR, UNKNOWN};
+
 class variable {
 	string _type;
 	string _name;
@@ -42,6 +44,27 @@ public:
 	virtual string formal() const { return declare(); }
 
 	bool is_non_scalar() const { return _type.find("*") != string::npos || _type.find("[") != string::npos; }
+
+	variable_type scalar_type()
+	{
+		if (_type.find("int") != string::npos) {
+			return INT;
+		}
+		else if (_type.find("long") != string::npos) {
+			return LONG;
+		}
+		else if (_type.find("float") != string::npos) {
+			return FLOAT;
+		}
+		else if (_type.find("double") != string::npos) {
+			return DOUBLE;
+		}
+		else if (_type.find("char") != string::npos) {
+			return CHAR;
+		}
+
+		return UNKNOWN;
+	}
 };
 
 const variable prev("int", "prev", "0");
@@ -237,7 +260,9 @@ typedef set<variable*>			varset;
 typedef set<private_variable*>		privset;
 typedef set<shared_variable*>		sharedset;
 typedef set<reduction_variable*>	reduceset;
-typedef map<string, shared_variable*>	symtbl;
+typedef map<string, shared_variable*>	shared_symtbl;
+typedef map<string, private_variable*>	priv_symtbl;
+typedef map<string, reduction_variable*>	reduc_symtbl;
 typedef set<string>			symset;
 typedef list<string>			symlist;
 

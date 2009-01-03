@@ -15,7 +15,8 @@ class spe_region {
 	sharedset _inout;
 	reduceset _reductions;
 	string _reduction_op;
-	symtbl _symbols;
+	shared_symtbl _shared_symbols;
+	priv_symtbl _priv_symbols;
 	ast_node* _ast_root;
 	string _induction;
 	int _unroll;
@@ -23,8 +24,8 @@ class spe_region {
 	bool _dma_unroll;
 
 public:
-	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const symtbl& sy, int u, int b, bool d):
-		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _symbols(sy), _unroll(u), _buffer(b), _dma_unroll(d)
+	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, int u, int b, bool d):
+		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _shared_symbols(ss), _priv_symbols(ps), _unroll(u), _buffer(b), _dma_unroll(d)
 	{
 		assert(_unroll >= 0);
 		assert(_buffer >= 0);
@@ -39,7 +40,8 @@ public:
 	sharedset& out()		{ return _out; }
 	sharedset& inout()		{ return _inout; }
 	reduceset& reductions()		{ return _reductions; }
-	symtbl& symbols()		{ return _symbols; }
+	shared_symtbl& shared_symbols()	{ return _shared_symbols; }
+	priv_symtbl& priv_symbols()	{ return _priv_symbols; }
 
 	string reduction_op() const	{ return _reduction_op; }
 	int unroll() const		{ return _unroll; }

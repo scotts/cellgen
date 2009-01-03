@@ -49,6 +49,7 @@ template <class T>
 class vars_op_base {
 protected:
 	set<T*>& vars;
+	map<string, T*>& symbols;
 	spelist& regions;
 
 	void assign(fileiter first, const fileiter& last, string& t, string& l, string& d) const
@@ -63,12 +64,19 @@ protected:
 	}
 
 public:
-	vars_op_base(set<T*>& v, spelist& r): vars(v), regions(r) {}
+	vars_op_base(set<T*>& v, map<string, T*>& s, spelist& r): vars(v), symbols(s), regions(r) {}
 
 	set<T*> pickup_vars()
 	{
 		set<T*> temp = vars;
 		vars.clear();
+		return temp;
+	}
+
+	map<string, T*> pickup_symbols()
+	{
+		map<string, T*> temp = symbols;
+		symbols.clear();
 		return temp;
 	}
 
@@ -81,7 +89,7 @@ public:
 template <class T>
 class vars_op: public vars_op_base<T> {
 public:
-	vars_op(set<T*>& v, spelist& r): vars_op_base<T>(v, r) {}
+	vars_op(set<T*>& v, map<string, T*>& s, spelist& r): vars_op_base<T>(v, s, r) {}
 
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -90,21 +98,14 @@ public:
 
 		T* v = new T(type, local, definition, this->regions.size() + 1);
 		this->vars.insert(v);
+		this->symbols[local] = v;	
 	}
 };
 
 template <>
 class vars_op<shared_variable>: public vars_op_base<shared_variable> {
-	symtbl& tbl;
 public:
-	vars_op(sharedset& v, symtbl& t, spelist& r): vars_op_base<shared_variable>(v, r), tbl(t) {}
-
-	symtbl pickup_symbols()
-	{
-		symtbl temp = tbl;
-		tbl.clear();
-		return temp;
-	}
+	vars_op(sharedset& v, shared_symtbl& s, spelist& r): vars_op_base<shared_variable>(v, s, r) {}
 
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -148,7 +149,7 @@ public:
 
 		shared_variable* v = new shared_variable(type, local, definition, dimensions, this->regions.size() + 1);
 		this->vars.insert(v);
-		tbl[local] = v;
+		symbols[local] = v;
 	}
 };
 
@@ -249,6 +250,7 @@ struct create_spe_region {
 						reduce_def_op.pickup_vars(),
 						reduce_op_op.pickup(),
 						shared_op.pickup_symbols(),
+						priv_op.pickup_symbols(),
 						unroll_op.pickup(),
 						buffer_op.pickup(),
 						dma_unroll_op.pickup()
@@ -264,7 +266,9 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	privset privs;
 	sharedset shared;
 	reduceset reduces;
-	symtbl symbols;
+	shared_symtbl shared_symbols;
+	priv_symtbl private_symbols;
+	reduc_symtbl reduction_symbols;
 	string op;
 	int unroll;
 	int buffer;
@@ -284,11 +288,11 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	cellgen_grammar(sslist& ppe, spelist& regions):
 		unroll(0), buffer(0), dma_unroll(false),
 		ppe_op(ppe),
-		priv_op(privs, regions),
+		priv_op(privs, private_symbols, regions),
 		start_op(priv_op, "SPE_start", regions),
 		stop_op(priv_op, "SPE_stop", regions),
-		shared_op(shared, symbols, regions),
-		reduce_def_op(reduces, regions),
+		shared_op(shared, shared_symbols, regions),
+		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),
 		unroll_op(unroll),
 		buffer_op(buffer),

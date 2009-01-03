@@ -1033,7 +1033,7 @@ struct c_grammar: public grammar<c_grammar> {
                 UNION, UNSIGNED, VOID, VOLATILE, WHILE, /*IDENTIFIER,*/
                 STRING_LITERAL_PART, STRING_LITERAL, INT_CONSTANT_HEX, INT_CONSTANT,
                 INT_CONSTANT_OCT, /*INT_CONSTANT_DEC,*/ INT_CONSTANT_CHAR,
-                FLOAT_CONSTANT,FLOAT_CONSTANT_1, FLOAT_CONSTANT_2, FLOAT_CONSTANT_3,
+                FLOAT_CONSTANT,/*FLOAT_CONSTANT_1, FLOAT_CONSTANT_2, FLOAT_CONSTANT_3,*/
                 CONSTANT, VECTOR;
 
     // nonterminals
@@ -1097,6 +1097,9 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::semicolon> > SEMICOLON;
 	rule<ScannerT, parser_tag<ids::dot> > DOT;
 	rule<ScannerT, parser_tag<ids::ptr_op> > PTR_OP;
+	rule<ScannerT, parser_tag<ids::float_constant_1> > FLOAT_CONSTANT_1;
+	rule<ScannerT, parser_tag<ids::float_constant_2> > FLOAT_CONSTANT_2;
+	rule<ScannerT, parser_tag<ids::float_constant_3> > FLOAT_CONSTANT_3;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }

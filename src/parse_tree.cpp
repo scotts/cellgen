@@ -47,9 +47,36 @@ xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
 	return *this;
 }
 
-bool is_constant(const ast_node& node)
+bool is_int(const string& str)
+{
+	return str.find("int") != string::npos || str.find("long") != string::npos;
+}
+
+bool is_float(const string& str)
+{
+	return str.find("float") != string::npos;
+}
+
+bool is_double(const string& str)
+{
+	return str.find("double") != string::npos;
+}
+
+bool is_int_constant(const ast_node& node)
 {
 	return node.value.id() == ids::int_constant_dec;
+}
+
+bool is_float_constant(const ast_node& node)
+{
+	return node.value.id() == ids::float_constant_1 ||
+		node.value.id() == ids::float_constant_2 ||
+		node.value.id() == ids::float_constant_3;
+}
+
+bool is_constant(const ast_node& node)
+{
+	return is_int_constant(node) || is_float_constant(node);
 }
 
 bool is_declaration(const ast_node& node)
@@ -67,14 +94,24 @@ bool is_kind_of_mult(const string& s)
 	return s == "*" || s == "/" || s == "%";
 }
 
+bool is_kind_of_mult_node(const ast_node& node)
+{
+	return is_kind_of_mult(string(node.value.begin(), node.value.end()));
+}
+
 bool is_kind_of_add(const string& s)
 {
 	return s == "+" || s == "-";
 }
 
-bool is_ident_or_const(const ast_node& node)
+bool is_kind_of_add_node(const ast_node& node)
 {
-	return node.value.id() == ids::identifier || node.value.id() == ids::int_constant_dec;
+	return is_kind_of_add(string(node.value.begin(), node.value.end()));
+}
+
+bool is_ident_or_constant(const ast_node& node)
+{
+	return node.value.id() == ids::identifier || is_constant(node);
 }
 
 bool is_equals(const ast_node& node)
@@ -151,14 +188,14 @@ bool induction_equal(const string& induction, const forcond& f)
 	return induction == f.induction;
 }
 
-struct mult_op {
+struct array_mult_op {
 	const forcondlist& forconds;
 	bool& found_induction;
 	mult_expr& mult;
 	string& id;
 	bool found_op;
 
-	mult_op(const forcondlist& f, bool& found, mult_expr& m, string& i):
+	array_mult_op(const forcondlist& f, bool& found, mult_expr& m, string& i):
 		forconds(f), found_induction(found), mult(m), id(i), found_op(false)
 		{}
 	void operator()(ast_node& node)
@@ -167,7 +204,7 @@ struct mult_op {
 
 		if (node.value.id() == ids::multiplicative_expression) {
 			mult_expr m;
-			mult_op o(forconds, found_induction, m, id);
+			array_mult_op o(forconds, found_induction, m, id);
 			for_all(node.children, &o);
 
 			paren_expr p(new add_expr(m));
@@ -203,13 +240,13 @@ struct mult_op {
 	}
 };
 
-struct add_op {
+struct array_add_op {
 	const forcondlist& forconds;
 	bool& found_induction;
 	add_expr& add;
 	bool found_op;
 
-	add_op(const forcondlist& f, bool& found, add_expr& a):
+	array_add_op(const forcondlist& f, bool& found, add_expr& a):
 		forconds(f), found_induction(found), add(a), found_op(false)
 		{}
 	void operator()(ast_node& node)
@@ -219,7 +256,7 @@ struct add_op {
 		if (node.value.id() == ids::multiplicative_expression) {
 			mult_expr mult;
 			string id;
-			mult_op o(forconds, found_induction, mult, id);
+			array_mult_op o(forconds, found_induction, mult, id);
 			for_all(node.children, &o);
 
 			if (!found_op) {
@@ -229,7 +266,7 @@ struct add_op {
 				add.rhs(mult);
 			}
 		}
-		else if (is_ident_or_const(node)) {
+		else if (is_ident_or_constant(node)) {
 			mult_expr mult;
 			mult.lhs(val);
 
@@ -277,12 +314,12 @@ struct array_op {
 			}
 		}
 		else if (node.value.id() == ids::additive_expression) {
-			add_op o(forconds, found_induction, add);
+			array_add_op o(forconds, found_induction, add);
 			for_all(node.children, &o);
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
 			string id;
-			mult_op o(forconds, found_induction, lmult, id);
+			array_mult_op o(forconds, found_induction, lmult, id);
 			for_all(node.children, &o);
 
 			add.lhs(lmult);
@@ -294,27 +331,36 @@ struct array_op {
 };
 
 struct postfix_op {
-	const symtbl& symbols;
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	const forcondlist& forconds;
 	sharedset& vars;
 	bool found_induction;
 	bool found_shared;
-	shared_variable* var;
+	bool found_private;
+	shared_variable* shared_var;
+	private_variable* priv_var;
 	list<add_expr> accesses;
 	
-	postfix_op(const symtbl& s, const forcondlist& f, sharedset& v):
-		symbols(s), forconds(f), vars(v), found_induction(false), found_shared(false)
+	postfix_op(const shared_symtbl& s, const priv_symtbl& p, const forcondlist& f, sharedset& v):
+		shared_symbols(s), priv_symbols(p), forconds(f), vars(v), 
+		found_induction(false), found_shared(false), found_private(false), shared_var(NULL), priv_var(NULL)
 		{}
 	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
 		if (node.value.id() == ids::identifier) {
 			if (!found_shared) {
-				symtbl::const_iterator i = symbols.find(val);
-				if (i != symbols.end()) {
-					var = i->second;
-					vars.insert(var);
+				shared_symtbl::const_iterator s = shared_symbols.find(val);
+				priv_symtbl::const_iterator p = priv_symbols.find(val);
+				if (s != shared_symbols.end()) {
+					shared_var = s->second;
+					vars.insert(shared_var);
 					found_shared = true;
+				}
+				else if (p != priv_symbols.end()) {
+					priv_var = p->second;
+					found_private = true;
 				}
 			}
 		}
@@ -350,65 +396,189 @@ struct struct_access_search {
 
 class shared_variable_double_orientation {};
 
-struct assignment_split {
-	const symtbl& symbols;
+variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
+		type_ops& ops, const forcondlist& forconds, sharedset& vars)
+{
+	postfix_op o(shared_symbols, priv_symbols, forconds, vars);
+	for_all(node.children, &o);
+	variable_type type = UNKNOWN;
+
+	if (o.found_shared && o.found_induction) {
+		add_expr add = make_add_expr(o.shared_var->dimensions(), o.accesses);
+
+		// Column or row access?
+		if (o.accesses.back().str().find(forconds.back().induction) != string::npos) {
+			if (o.shared_var->is_column()) {
+				throw shared_variable_double_orientation();
+			}
+
+			o.shared_var->row();
+			node.value.xformations.push_back(new row_buffer_space(o.shared_var, add)); 
+		}
+		else {
+			if (o.shared_var->is_row()) {
+				throw shared_variable_double_orientation();
+			}
+
+			o.shared_var->column();
+			node.value.xformations.push_back(new column_buffer_space(o.shared_var, add)); 
+		}
+
+		o.shared_var->math(add);
+		
+		// The *_buffer_space xformer subsumes the code inside the original array access. But, 
+		// if it accesses a field in a struct, then we want to preserve that.
+		struct_access_search search;
+		for_all(node.children, &search);
+
+		ast_node copy;
+		if (search.parent) {
+			copy = *search.parent;
+		}
+
+		node.children.clear();
+		node.children.push_back(copy);
+		
+		type = o.shared_var->scalar_type();
+	}
+	else if (o.found_private) {
+		type = o.priv_var->scalar_type();
+	}
+
+	cout << "postfix_postop: " << type << endl;
+	return type;
+}
+
+template <class Splitter, class Pred>
+variable_type discover_type(ast_node& node, Pred pred, const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v)
+{
+	ast_iterator div = find_if_all(node.children, pred);
+	Splitter lhs(s, p, o, f, v);
+	Splitter rhs(s, p, o, f, v);
+
+	for_each(node.children.begin(), div, &lhs);
+	for_each(div, node.children.end(), &rhs);
+
+	if (lhs.type == DOUBLE || rhs.type == DOUBLE) {
+		return DOUBLE;
+	}
+	else if (lhs.type == FLOAT || rhs.type == FLOAT) {
+		return FLOAT;
+	}
+	else if (lhs.type == LONG || rhs.type == LONG) {
+		return LONG;
+	}
+	else if (lhs.type == INT || rhs.type == INT) {
+		return INT;
+	}
+	else if (lhs.type == CHAR || rhs.type == CHAR) {
+		return CHAR;
+	}
+
+	cout << "lhs " << lhs.type << ", rhs " << rhs.type << endl;
+
+	return UNKNOWN;
+}
+
+variable_type ident_or_constant_type(ast_node& node)
+{
+	variable_type type = UNKNOWN;
+
+	if (is_constant(node)) {
+		if (is_int_constant(node)) {
+			type = INT;
+		}
+		else if (is_float_constant(node)) {
+			type = DOUBLE;
+		}
+	}
+	else {
+		cout << "What is type of an ident?" << endl << flush;
+		// figure out type of ident
+	}
+
+	return type;
+}
+
+struct multiplicative_split {
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	type_ops& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
-	assignment_split(const symtbl& s, type_ops& o, const forcondlist& f, sharedset& v):
-		symbols(s), ops(o), forconds(f), vars(v)
+	variable_type type;
+	multiplicative_split(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::postfix_expression) {
-			postfix_op o(symbols, forconds, vars);
-			for_all(node.children, &o);
-
-			if (o.found_shared && o.found_induction) {
-				add_expr add = make_add_expr(o.var->dimensions(), o.accesses);
-
-				// Column or row access?
-				if (o.accesses.back().str().find(forconds.back().induction) != string::npos) {
-					if (o.var->is_column()) {
-						throw shared_variable_double_orientation();
-					}
-
-					o.var->row();
-					node.value.xformations.push_back(new row_buffer_space(o.var, add)); 
-				}
-				else {
-					if (o.var->is_row()) {
-						throw shared_variable_double_orientation();
-					}
-
-					o.var->column();
-					node.value.xformations.push_back(new column_buffer_space(o.var, add)); 
-				}
-
-				o.var->math(add);
-				
-				// The *_buffer_space xformer subsumes the code inside the original array access. But, 
-				// if it accesses a field in a struct, then we want to preserve that.
-				struct_access_search search;
-				for_all(node.children, &search);
-
-				ast_node copy;
-				if (search.parent) {
-					copy = *search.parent;
-				}
-
-				node.children.clear();
-				node.children.push_back(copy);
-			}
-		}
-		/*
-		else if (node.value.id() == ids::additive_expression) {
-
+			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
-
+			type = discover_type<multiplicative_split>(node, is_kind_of_mult_node, shared_symbols, priv_symbols, ops, forconds, vars);
+			ops.inc_mul(type);
 		}
-		*/
+		else if (is_ident_or_constant(node)) {
+			type = ident_or_constant_type(node);
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+struct additive_split {
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
+	type_ops& ops;
+	const forcondlist& forconds;
+	sharedset& vars;
+	variable_type type;
+	additive_split(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
+		{}
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::postfix_expression) {
+			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
+		}
+		else if (node.value.id() == ids::multiplicative_expression) {
+			type = discover_type<multiplicative_split>(node, is_kind_of_mult_node, shared_symbols, priv_symbols, ops, forconds, vars);
+			ops.inc_mul(type);
+		}
+		else if (is_ident_or_constant(node)) {
+			type = ident_or_constant_type(node);
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+struct assignment_split {
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
+	type_ops& ops;
+	const forcondlist& forconds;
+	sharedset& vars;
+	assignment_split(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v)
+		{}
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::postfix_expression) {
+			variable_type type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
+			cout << "? " << type << endl;
+		}
+		else if (node.value.id() == ids::additive_expression) {
+			variable_type type = discover_type<additive_split>(node, is_kind_of_add_node, shared_symbols, priv_symbols, ops, forconds, vars);
+			ops.inc_add(type);
+		}
+		else if (node.value.id() == ids::multiplicative_expression) {
+			variable_type type = discover_type<multiplicative_split>(node, is_kind_of_mult_node, shared_symbols, priv_symbols, ops, forconds, vars);
+			ops.inc_mul(type);
+		}
 		else {
 			for_all(node.children, this);
 		}
@@ -416,13 +586,14 @@ struct assignment_split {
 };
 
 struct assignment_search {
-	const symtbl& symbols;
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	type_ops& ops;
 	const forcondlist& forconds;
 	sharedset& out;
 	sharedset in;
-	assignment_search(const symtbl& s, type_ops& op, const forcondlist& f, sharedset& o):
-		symbols(s), ops(op), forconds(f), out(o)
+	assignment_search(const shared_symtbl& s, const priv_symtbl& p, type_ops& op, const forcondlist& f, sharedset& o):
+		shared_symbols(s), priv_symbols(p), ops(op), forconds(f), out(o)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -431,8 +602,8 @@ struct assignment_search {
 			ast_iterator eqs = find_if_all(node.children, is_equals);
 
 			try {
-				for_each(node.children.begin(), eqs, assignment_split(symbols, ops, forconds, out));
-				for_each(eqs, node.children.end(), assignment_split(symbols, ops, forconds, in));
+				for_each(node.children.begin(), eqs, assignment_split(shared_symbols, priv_symbols, ops, forconds, out));
+				for_each(eqs, node.children.end(), assignment_split(shared_symbols, priv_symbols, ops, forconds, in));
 			}
 			catch (shared_variable_double_orientation e) {
 				throw user_error("Shared variables can only be accessed in row major or column "
@@ -465,7 +636,8 @@ struct erase_from_set: unary_function<T, void> {
 };
 
 struct serial_for_op {
-	const symtbl& symbols;
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	type_ops& ops;
 	forcondlist& forconds;
 	bind_xformer& condnodes;
@@ -476,8 +648,8 @@ struct serial_for_op {
 	forcond sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const symtbl& s, type_ops& o, forcondlist& f, bind_xformer& c, const int u):
-		symbols(s), ops(o), forconds(f), condnodes(c), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, forcondlist& f, bind_xformer& c, const int u):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), condnodes(c), unroll(u), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
@@ -514,26 +686,26 @@ pair<ast_iterator, ast_node*> find_equals(ast_node& node)
 }
 
 struct declaration_op {
-	const symtbl& symbols;
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	varset& locals;
 	type_ops& ops;
 	const forcondlist& forconds;
 	sharedset in;
 	string type;
 
-	declaration_op(const symtbl& s, varset& l, type_ops& o, const forcondlist& f):
-		symbols(s), locals(l), ops(o), forconds(f)
+	declaration_op(const shared_symtbl& s, const priv_symtbl& p, varset& l, type_ops& o, const forcondlist& f):
+		shared_symbols(s), priv_symbols(p), locals(l), ops(o), forconds(f)
 		{}
 	void operator()(ast_node& node)
 	{
 		// TODO: parse/grab local definitions
 		if (is_type_specifier(node)) {
 			type = string(node.value.begin(), node.value.end());
-			cout << type << endl;
 		}
 		else if (node.value.id() == ids::init_declarator) {
 			pair<ast_iterator, ast_node*> p = find_equals(node);
-			for_each(p.first, p.second->children.end(), assignment_split(symbols, ops, forconds, in)); 
+			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, ops, forconds, in)); 
 		}
 		else if (node.value.id() == ids::identifier) {
 			string name = string(node.value.begin(), node.value.end());
@@ -569,7 +741,8 @@ struct lift_out_gen_in_rows {
 };
 
 struct for_compound_op {
-	const symtbl& symbols; 
+	const shared_symtbl& shared_symbols; 
+	const priv_symtbl& priv_symbols;
 	bind_gen_in& lazy_in;
 	sharedset& pre_out;
 	sharedset& in;
@@ -583,15 +756,15 @@ struct for_compound_op {
 	sharedset seen;
 	varset locals;
 
-	for_compound_op(const symtbl& s, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
+	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
 			type_ops& op, forcondlist& f, bind_xformer& c, const int u): 
-		symbols(s), lazy_in(li), pre_out(po), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), 
+		shared_symbols(s), priv_symbols(p), lazy_in(li), pre_out(po), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), 
 		unroll(u), par_induction(f.front().induction)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::declaration) {
-			declaration_op o(symbols, locals, ops, forconds);
+			declaration_op o(shared_symbols, priv_symbols, locals, ops, forconds);
 			for_all(node.children, &o);
 
 			// We need the indirection of o.in because in might already have variables,
@@ -614,7 +787,7 @@ struct for_compound_op {
 			}
 		}
 		else if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
-			assignment_search o(symbols, ops, forconds, pre_out);
+			assignment_search o(shared_symbols, priv_symbols, ops, forconds, pre_out);
 			for_all(node.children, &o);
 
 			// Store the function object somewhere, and call it later once I know 
@@ -639,7 +812,7 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(symbols, ops, forconds, condnodes, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, ops, forconds, condnodes, unroll);
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
@@ -771,7 +944,7 @@ void serial_for_op::operator()(ast_node& node)
 	else if (node.value.id() == ids::compound) {
 		bind_gen_in lazy_in;
 		sharedset pre_out;
-		for_compound_op o(symbols, lazy_in, pre_out, in, out, inout, ops, forconds, condnodes, unroll);
+		for_compound_op o(shared_symbols, priv_symbols, lazy_in, pre_out, in, out, inout, ops, forconds, condnodes, unroll);
 		for_all(node.children, &o);
 
 		// lazy_inout = intersection(lazy_in, pre_out)
@@ -836,7 +1009,8 @@ struct make_row_or_column: public unary_function<const shared_variable*, xformer
 };
 
 struct parallel_for_op {
-	const symtbl& symbols;
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
@@ -845,8 +1019,8 @@ struct parallel_for_op {
 	bind_xformer& condnodes;
 	int unroll;
 	forcond parcond;
-	parallel_for_op(const symtbl& s, sharedset& i, sharedset& o, sharedset& io, type_ops& op, forcondlist& f, bind_xformer& c, int u): 
-		symbols(s), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), unroll(u)
+	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, type_ops& op, forcondlist& f, bind_xformer& c, int u): 
+		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -877,7 +1051,7 @@ struct parallel_for_op {
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
-			serial_for_op o(symbols, ops, forconds, condnodes_col, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, ops, forconds, condnodes_col, unroll);
 			o(node);
 			o.merge_inout(in, out, inout);
 
@@ -1153,7 +1327,8 @@ struct unroll_for_op {
 };
 
 struct compound {
-	const symtbl& symbols;
+	const shared_symtbl& shared_symbols;
+	const priv_symtbl& priv_symbols;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
@@ -1161,13 +1336,13 @@ struct compound {
 	forcondlist& forconds;
 	bind_xformer& condnodes;
 	int unroll;
-	compound(const symtbl& s, sharedset& i, sharedset& o, sharedset& io, type_ops& op, forcondlist& f, bind_xformer& c, int u): 
-		symbols(s), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), unroll(u)
+	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, type_ops& op, forcondlist& f, bind_xformer& c, int u): 
+		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			parallel_for_op o(symbols, in, out, inout, ops, forconds, condnodes, unroll);
+			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, forconds, condnodes, unroll);
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
@@ -1302,7 +1477,8 @@ struct cell_region {
 			sharedset& inout = (*region)->inout();
 			const privset& priv = (*region)->priv();
 			const reduceset& reductions = (*region)->reductions();
-			const symtbl& symbols = (*region)->symbols();
+			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
+			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
 			const int unroll = (*region)->unroll();
 			const int buffer = (*region)->buffer();
 			const bool dma_unroll = (*region)->dma_unroll();
@@ -1310,8 +1486,8 @@ struct cell_region {
 			// Assumption: one parallel induction variable.
 			forcondlist forconds;
 			bind_xformer condnodes_row;
-			type_ops ops;
-			compound o(symbols, in, out, inout, ops, forconds, condnodes_row, unroll);
+			type_ops iteration;
+			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, forconds, condnodes_row, unroll);
 			for_all(node.children, &o);
 
 			const string& par_start = forconds.front().start;
@@ -1329,10 +1505,10 @@ struct cell_region {
 			(*region)->induction(par_induction);
 
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
-			/*
-			make_descend(accumulate_cost(ops))(node);	
-			cout << ops;
-			*/
+			type_ops overhead;
+			make_descend(accumulate_cost(overhead))(node);	
+			cout	<< "iteration: " << iteration << endl
+				<< "overhead: " << overhead << endl;
 
 			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));
 			const bool row = accumulate_all(shared, false, shared_or(&shared_variable::is_row));
