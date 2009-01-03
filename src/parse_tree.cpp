@@ -219,7 +219,7 @@ struct array_mult_op {
 			mult.op(val);
 			found_op = true;
 		}
-		else if (node.value.id() == ids::identifier || is_constant(node)) {
+		else if (is_ident_or_constant(node)) {
 			if (node.value.id() == ids::identifier) {
 				if (exists_in(forconds, val, induction_equal)) {
 					id = val;
@@ -445,37 +445,26 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 		type = o.priv_var->scalar_type();
 	}
 
-	cout << "postfix_postop: " << type << endl;
 	return type;
 }
 
-template <class Splitter, class Pred>
-variable_type discover_type(ast_node& node, Pred pred, const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v)
+variable_type type_promotion(const variable_type l, const variable_type r)
 {
-	ast_iterator div = find_if_all(node.children, pred);
-	Splitter lhs(s, p, o, f, v);
-	Splitter rhs(s, p, o, f, v);
-
-	for_each(node.children.begin(), div, &lhs);
-	for_each(div, node.children.end(), &rhs);
-
-	if (lhs.type == DOUBLE || rhs.type == DOUBLE) {
+	if (l == DOUBLE || r == DOUBLE) {
 		return DOUBLE;
 	}
-	else if (lhs.type == FLOAT || rhs.type == FLOAT) {
+	else if (l == FLOAT || r == FLOAT) {
 		return FLOAT;
 	}
-	else if (lhs.type == LONG || rhs.type == LONG) {
+	else if (l == LONG || r == LONG) {
 		return LONG;
 	}
-	else if (lhs.type == INT || rhs.type == INT) {
+	else if (l == INT || r == INT) {
 		return INT;
 	}
-	else if (lhs.type == CHAR || rhs.type == CHAR) {
+	else if (l == CHAR || r == CHAR) {
 		return CHAR;
 	}
-
-	cout << "lhs " << lhs.type << ", rhs " << rhs.type << endl;
 
 	return UNKNOWN;
 }
@@ -493,31 +482,39 @@ variable_type ident_or_constant_type(ast_node& node)
 		}
 	}
 	else {
-		cout << "What is type of an ident?" << endl << flush;
 		// figure out type of ident
+		assert(false);
 	}
 
 	return type;
 }
 
-struct multiplicative_split {
+struct multiplicative_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	type_ops& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
-	multiplicative_split(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::postfix_expression) {
-			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
+		if (node.value.id() == ids::multiplicative_expression) {
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			for_all(node.children, &o);
+			type = o.type;
 		}
-		else if (node.value.id() == ids::multiplicative_expression) {
-			type = discover_type<multiplicative_split>(node, is_kind_of_mult_node, shared_symbols, priv_symbols, ops, forconds, vars);
+		else if(node.value.id() == ids::multiplicative_expression_helper) {
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			for_all(node.children, &o);
+
+			type = type_promotion(type, o.type);
 			ops.inc_mul(type);
+		}
+		else if (node.value.id() == ids::postfix_expression) {
+			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (is_ident_or_constant(node)) {
 			type = ident_or_constant_type(node);
@@ -528,24 +525,33 @@ struct multiplicative_split {
 	}
 };
 
-struct additive_split {
+struct additive_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	type_ops& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
-	additive_split(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+	additive_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::postfix_expression) {
-			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
+		if (node.value.id() == ids::multiplicative_expression) {
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			for_all(node.children, &o);
+
+			type = o.type;
 		}
-		else if (node.value.id() == ids::multiplicative_expression) {
-			type = discover_type<multiplicative_split>(node, is_kind_of_mult_node, shared_symbols, priv_symbols, ops, forconds, vars);
-			ops.inc_mul(type);
+		else if (node.value.id() == ids::additive_expression_helper) {
+			additive_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			for_all(node.children, &o);
+
+			type = type_promotion(type, o.type);
+			ops.inc_add(type);
+		}
+		else if (node.value.id() == ids::postfix_expression) {
+			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (is_ident_or_constant(node)) {
 			type = ident_or_constant_type(node);
@@ -568,16 +574,16 @@ struct assignment_split {
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::postfix_expression) {
-			variable_type type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
-			cout << "? " << type << endl;
+			// Ignoring type because there's no computation.
+			postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (node.value.id() == ids::additive_expression) {
-			variable_type type = discover_type<additive_split>(node, is_kind_of_add_node, shared_symbols, priv_symbols, ops, forconds, vars);
-			ops.inc_add(type);
+			additive_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			for_all(node.children, &o);
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
-			variable_type type = discover_type<multiplicative_split>(node, is_kind_of_mult_node, shared_symbols, priv_symbols, ops, forconds, vars);
-			ops.inc_mul(type);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			for_all(node.children, &o);
 		}
 		else {
 			for_all(node.children, this);
@@ -1507,8 +1513,11 @@ struct cell_region {
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
 			type_ops overhead;
 			make_descend(accumulate_cost(overhead))(node);	
-			cout	<< "iteration: " << iteration << endl
-				<< "overhead: " << overhead << endl;
+			cout	<< "iteration: " << endl
+				<< iteration << endl
+				<< "overhead: " << endl
+				<< overhead << endl
+				<< endl;
 
 			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));
 			const bool row = accumulate_all(shared, false, shared_or(&shared_variable::is_row));
