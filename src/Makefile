@@ -9,7 +9,7 @@ CXXFLAGS = -Wall $(DEBUG) $(OPT)
 BOOST_LIBS = -lboost_program_options -lboost_regex
 LDFLAGS = -lstdc++ $(BOOST_LIBS)
 
-OBJS = main.o cellgen_grammar.o parse_tree.o math_exprs.o
+OBJS = main.o cellgen_grammar.o parse_tree.o math_exprs.o type_ops.o
 
 # All implementations need access to these declarations/defintions.
 COMMON_INCLUDES = variable.h math_exprs.h spe_region.h utility.h type_ops.h
@@ -27,4 +27,4 @@ main.o:			main.cpp cellgen_grammar.h streamops.h $(COMMON_INCLUDES)
 cellgen_grammar.o:	cellgen_grammar.cpp cellgen_grammar.h parse_tree.h c_grammar.h skip.h $(COMMON_INCLUDES)
 parse_tree.o:		parse_tree.cpp parse_tree.h ids.h xformers.h $(COMMON_INCLUDES)
 math_exprs.o:		math_exprs.cpp math_exprs.h 
-
+type_ops.o:		type_ops.cpp type_ops.h

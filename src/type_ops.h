@@ -2,31 +2,12 @@
 #define TYPE_OPS_H
 
 #include <iostream>
+#include <map>
 using namespace std;
 
-enum variable_type {INT, LONG, FLOAT, DOUBLE, CHAR, UNKNOWN};
+enum variable_type {CHAR, INT, LONG, FLOAT, DOUBLE, UNKNOWN};
 
-inline ostream& operator<<(ostream& out, const variable_type& type)
-{
-	string str;
-	switch (type) {
-		case INT:	str = "INT";
-				break;
-		case LONG:	str = "LONG";
-				break;
-		case FLOAT:	str = "FLOAT";
-				break;
-		case DOUBLE:	str = "DOUBLE";
-				break;
-		case CHAR:	str = "CHAR";
-				break;
-		case UNKNOWN:	str = "UNKNOWN";
-				break;
-	}
-
-	out << str;
-	return out;
-}
+extern map<variable_type, map<string, int> > cost_tbl;
 
 struct opcounts {
 	int add;
@@ -69,19 +50,10 @@ struct opcounts {
 	}
 };
 
-inline opcounts operator+(const opcounts& a, const opcounts& b)
-{
-	opcounts o;
-	o.add = a.add + b.add;
-	o.sub = a.sub + b.sub;
-	o.mul = a.mul + b.mul;
-	o.div = a.div + b.div;
-	o.mod = a.mod + b.mod;
-	return o;
-}
+opcounts operator+(const opcounts& a, const opcounts& b);
 
 template <class T>
-inline opcounts operator*(const T a, const opcounts& b)
+opcounts operator*(const T a, const opcounts& b)
 {
 	opcounts o = b;
 	o.add *= a;
@@ -94,7 +66,7 @@ inline opcounts operator*(const T a, const opcounts& b)
 }
 
 template <class T>
-inline opcounts operator*(const opcounts& a, const T b)
+opcounts operator*(const opcounts& a, const T b)
 {
 	opcounts o = a;
 	o.add *= b;
@@ -108,6 +80,7 @@ inline opcounts operator*(const opcounts& a, const T b)
 
 class unknown_variable_type {};
 class unsupported_variable_type {};
+class unknown_op_type {};
 
 class type_ops {
 	opcounts int_ops;
@@ -209,16 +182,31 @@ public:
 	{
 		mod(type, 1);
 	}
+
+	void inc(const string& op, const variable_type type)
+	{
+		if (op == "+") {
+			inc_add(type);
+		}
+		else if (op == "-") {
+			inc_sub(type);
+		}
+		else if (op == "*") {
+			inc_mul(type);
+		}
+		else if (op == "/") {
+			inc_div(type);
+		}
+		else if (op == "%") {
+			inc_mod(type);
+		}
+		else {
+			throw unknown_op_type();
+		}
+	}
 };
 
-inline type_ops operator+(const type_ops& a, const type_ops& b)
-{
-	type_ops o;
-	o.int_ops = a.int_ops + b.int_ops;
-	o.float_ops = a.float_ops + b.float_ops;
-	o.double_ops = a.double_ops + b.double_ops;
-	return o;
-}
+type_ops operator+(const type_ops& a, const type_ops& b);
 
 template <class T>
 type_ops operator*(const T a, const type_ops& b)
@@ -240,25 +228,9 @@ type_ops operator*(const type_ops& a, const T b)
 	return o;
 }
 
-inline ostream& operator<<(ostream& out, const opcounts& op)
-{
-	out	<< "add " << op.add << ", "
-		<< "sub " << op.sub << ", "
-		<< "mul " << op.mul << ", "
-		<< "div " << op.div << ", "
-		<< "mod " << op.mod;
-
-	return out;
-}
-
-inline ostream& operator<<(ostream& out, const type_ops& ops)
-{
-	out	<< "int (" << ops.int_ops << ")" << endl	
-		<< "float (" << ops.float_ops << ")" << endl
-		<< "double (" << ops.double_ops << ")" << endl;
-
-	return out;
-}
+ostream& operator<<(ostream& out, const variable_type& type);
+ostream& operator<<(ostream& out, const opcounts& op);
+ostream& operator<<(ostream& out, const type_ops& ops);
 
 #endif // TYPE_OPS_H
 

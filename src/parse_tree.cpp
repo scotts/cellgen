@@ -89,14 +89,14 @@ bool is_bracket(const string& s)
 	return s == ")" || s == "(" || s == "{" || s == "}" || s == "<" || s == ">" || s == "[" || s == "]";
 }
 
-bool is_kind_of_mult(const string& s)
+bool is_kind_of_mul(const string& s)
 {
 	return s == "*" || s == "/" || s == "%";
 }
 
-bool is_kind_of_mult_node(const ast_node& node)
+bool is_kind_of_mul(const ast_node& node)
 {
-	return is_kind_of_mult(string(node.value.begin(), node.value.end()));
+	return is_kind_of_mul(string(node.value.begin(), node.value.end()));
 }
 
 bool is_kind_of_add(const string& s)
@@ -104,7 +104,7 @@ bool is_kind_of_add(const string& s)
 	return s == "+" || s == "-";
 }
 
-bool is_kind_of_add_node(const ast_node& node)
+bool is_kind_of_add(const ast_node& node)
 {
 	return is_kind_of_add(string(node.value.begin(), node.value.end()));
 }
@@ -215,7 +215,7 @@ struct array_mult_op {
 				mult.rhs(p);
 			}
 		}
-		else if (is_kind_of_mult(val)) {
+		else if (is_kind_of_mul(val)) {
 			mult.op(val);
 			found_op = true;
 		}
@@ -483,7 +483,7 @@ variable_type ident_or_constant_type(ast_node& node)
 	}
 	else {
 		// figure out type of ident
-		assert(false);
+		assert("Not implemented!" && false);
 	}
 
 	return type;
@@ -496,6 +496,7 @@ struct multiplicative_op {
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
+	string op;
 	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
@@ -511,10 +512,13 @@ struct multiplicative_op {
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
-			ops.inc_mul(type);
+			ops.inc(o.op, type);
 		}
 		else if (node.value.id() == ids::postfix_expression) {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
+		}
+		else if (is_kind_of_mul(node)) {
+			op = string(node.value.begin(), node.value.end());
 		}
 		else if (is_ident_or_constant(node)) {
 			type = ident_or_constant_type(node);
@@ -532,6 +536,7 @@ struct additive_op {
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
+	string op;
 	additive_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
@@ -548,10 +553,13 @@ struct additive_op {
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
-			ops.inc_add(type);
+			ops.inc(o.op, type);
 		}
 		else if (node.value.id() == ids::postfix_expression) {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
+		}
+		else if (is_kind_of_add(node)) {
+			op = string(node.value.begin(), node.value.end());
 		}
 		else if (is_ident_or_constant(node)) {
 			type = ident_or_constant_type(node);
