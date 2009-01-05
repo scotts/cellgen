@@ -94,9 +94,9 @@ paren_expr::~paren_expr()
 	delete recurse;
 }
 
-type_ops paren_expr::cost() const
+operations paren_expr::cost() const
 {
-	type_ops ops;
+	operations ops;
 	if (recurse) {
 		ops = recurse->cost();
 	}
@@ -152,9 +152,9 @@ string mult_expr::factor(const string& ivar) const
 	}
 }
 
-type_ops mult_expr::factor_cost() const
+operations mult_expr::factor_cost() const
 {
-	type_ops ops;
+	operations ops;
 	if (_op == "*") {
 		ops.inc_mul(INT);
 	}
@@ -168,9 +168,9 @@ type_ops mult_expr::factor_cost() const
 	return ops;
 }
 
-type_ops mult_expr::cost() const
+operations mult_expr::cost() const
 {
-	type_ops ops;
+	operations ops;
 	ops += _lhs.cost();
 	ops += _rhs.cost();
 
@@ -229,9 +229,9 @@ string add_expr::factor(const string& ivar) const
 	}
 }
 
-type_ops add_expr::factor_cost(const string& ivar) const
+operations add_expr::factor_cost(const string& ivar) const
 {
-	type_ops ops;
+	operations ops;
 
 	if (_lhs.str().find(ivar) != string::npos) {
 		ops = _lhs.factor_cost();
@@ -243,9 +243,9 @@ type_ops add_expr::factor_cost(const string& ivar) const
 	return ops;
 }
 
-type_ops add_expr::cost() const
+operations add_expr::cost() const
 {
-	type_ops ops;
+	operations ops;
 	ops += _lhs.cost();
 	ops += _rhs.cost();
 

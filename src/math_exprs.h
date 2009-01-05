@@ -6,7 +6,7 @@
 #include <iostream>
 using namespace std;
 
-#include "type_ops.h"
+#include "operations.h"
 
 class add_expr;
 
@@ -31,7 +31,7 @@ public:
 	string next_iteration(const string& ivar) const;
 	add_expr eval() const;
 
-	type_ops cost() const;
+	operations cost() const;
 };
 
 class mult_expr {
@@ -66,8 +66,8 @@ public:
 	string next_iteration(const string& ivar) const;
 	string factor(const string& ivar) const;
 
-	type_ops factor_cost() const;
-	type_ops cost() const;
+	operations factor_cost() const;
+	operations cost() const;
 };
 
 class add_expr {
@@ -94,8 +94,8 @@ public:
 	string next_iteration(const string& ivar) const;
 	string factor(const string& ivar) const;
 
-	type_ops factor_cost(const string& ivar) const;
-	type_ops cost() const;
+	operations factor_cost(const string& ivar) const;
+	operations cost() const;
 };
 
 #endif	// MULT_EXPR_H

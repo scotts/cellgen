@@ -9,29 +9,29 @@ enum variable_type {CHAR, INT, LONG, FLOAT, DOUBLE, UNKNOWN};
 
 extern map<variable_type, map<string, int> > cost_tbl;
 
-struct opcounts {
+struct operation_counts {
 	int add;
 	int sub;
 	int mul;
 	int div;
 	int mod;
 
-	opcounts():
+	operation_counts():
 		add(0), sub(0), mul(0), div(0), mod(0)
 		{}
-	opcounts(const opcounts& o):
+	operation_counts(const operation_counts& o):
 		add(o.add), sub(o.sub), mul(o.mul), div(o.div), mod(o.mod)
 		{}
 
-	friend opcounts operator+(const opcounts&, const opcounts&);	
+	friend operation_counts operator+(const operation_counts&, const operation_counts&);	
 
 	template <class T>
-	friend opcounts operator*(const T, const opcounts&);	
+	friend operation_counts operator*(const T, const operation_counts&);	
 
 	template <class T>
-	friend opcounts operator*(const opcounts&, const T);	
+	friend operation_counts operator*(const operation_counts&, const T);	
 
-	void operator=(const opcounts& o)
+	void operator=(const operation_counts& o)
 	{
 		add = o.add;
 		sub = o.sub;
@@ -40,7 +40,7 @@ struct opcounts {
 		mod = o.mod;
 	}
 
-	void operator+=(const opcounts& o)
+	void operator+=(const operation_counts& o)
 	{
 		add += o.add;
 		sub += o.sub;
@@ -50,12 +50,12 @@ struct opcounts {
 	}
 };
 
-opcounts operator+(const opcounts& a, const opcounts& b);
+operation_counts operator+(const operation_counts& a, const operation_counts& b);
 
 template <class T>
-opcounts operator*(const T a, const opcounts& b)
+operation_counts operator*(const T a, const operation_counts& b)
 {
-	opcounts o = b;
+	operation_counts o = b;
 	o.add *= a;
 	o.sub *= a;
 	o.mul *= a;
@@ -66,9 +66,9 @@ opcounts operator*(const T a, const opcounts& b)
 }
 
 template <class T>
-opcounts operator*(const opcounts& a, const T b)
+operation_counts operator*(const operation_counts& a, const T b)
 {
-	opcounts o = a;
+	operation_counts o = a;
 	o.add *= b;
 	o.sub *= b;
 	o.mul *= b;
@@ -82,36 +82,36 @@ class unknown_variable_type {};
 class unsupported_variable_type {};
 class unknown_op_type {};
 
-class type_ops {
-	opcounts int_ops;
-	opcounts float_ops;
-	opcounts double_ops;
+class operations {
+	operation_counts int_ops;
+	operation_counts float_ops;
+	operation_counts double_ops;
 
 public:
-	type_ops()
+	operations()
 		{}
-	type_ops(const type_ops& o):
+	operations(const operations& o):
 		int_ops(o.int_ops), float_ops(o.float_ops), double_ops(o.double_ops)
 		{}
 
-	friend type_ops operator+(const type_ops&, const type_ops&);
+	friend operations operator+(const operations&, const operations&);
 
 	template <class T>
-	friend type_ops operator*(const T, const type_ops&);
+	friend operations operator*(const T, const operations&);
 
 	template <class T>
-	friend type_ops operator*(const type_ops&, const T);
+	friend operations operator*(const operations&, const T);
 
-	friend ostream& operator<<(ostream& out, const type_ops& ops);
+	friend ostream& operator<<(ostream& out, const operations& ops);
 		
-	void operator=(const type_ops& o)
+	void operator=(const operations& o)
 	{
 		int_ops = o.int_ops;
 		float_ops = o.float_ops;
 		double_ops = o.double_ops;
 	}
 
-	void operator+=(const type_ops& o)
+	void operator+=(const operations& o)
 	{
 		int_ops += o.int_ops;
 		float_ops += o.float_ops;
@@ -206,12 +206,12 @@ public:
 	}
 };
 
-type_ops operator+(const type_ops& a, const type_ops& b);
+operations operator+(const operations& a, const operations& b);
 
 template <class T>
-type_ops operator*(const T a, const type_ops& b)
+operations operator*(const T a, const operations& b)
 {
-	type_ops o = b;
+	operations o = b;
 	o.int_ops = o.int_ops * a;
 	o.float_ops = o.float_ops * a;
 	o.double_ops = o.double_ops * a;
@@ -219,9 +219,9 @@ type_ops operator*(const T a, const type_ops& b)
 }
 
 template <class T>
-type_ops operator*(const type_ops& a, const T b)
+operations operator*(const operations& a, const T b)
 {
-	type_ops o = a;
+	operations o = a;
 	o.int_ops = o.int_ops * b;
 	o.float_ops = o.float_ops * b;
 	o.double_ops = o.double_ops * b;
@@ -229,8 +229,8 @@ type_ops operator*(const type_ops& a, const T b)
 }
 
 ostream& operator<<(ostream& out, const variable_type& type);
-ostream& operator<<(ostream& out, const opcounts& op);
-ostream& operator<<(ostream& out, const type_ops& ops);
+ostream& operator<<(ostream& out, const operation_counts& op);
+ostream& operator<<(ostream& out, const operations& ops);
 
 #endif // TYPE_OPS_H
 

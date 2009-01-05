@@ -11,7 +11,7 @@ using namespace std;
 #include "ids.h"
 #include "variable.h"
 #include "spe_region.h"
-#include "type_ops.h"
+#include "operations.h"
 #include "utility.h"
 
 struct forcond {
@@ -397,7 +397,7 @@ struct struct_access_search {
 class shared_variable_double_orientation {};
 
 variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-		type_ops& ops, const forcondlist& forconds, sharedset& vars)
+		operations& ops, const forcondlist& forconds, sharedset& vars)
 {
 	postfix_op o(shared_symbols, priv_symbols, forconds, vars);
 	for_all(node.children, &o);
@@ -492,12 +492,12 @@ variable_type ident_or_constant_type(ast_node& node)
 struct multiplicative_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	type_ops& ops;
+	operations& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
 	string op;
-	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
 	void operator()(ast_node& node)
@@ -532,12 +532,12 @@ struct multiplicative_op {
 struct additive_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	type_ops& ops;
+	operations& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
 	string op;
-	additive_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
 		{}
 	void operator()(ast_node& node)
@@ -573,10 +573,10 @@ struct additive_op {
 struct assignment_split {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	type_ops& ops;
+	operations& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
-	assignment_split(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, const forcondlist& f, sharedset& v):
+	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v)
 		{}
 	void operator()(ast_node& node)
@@ -602,11 +602,11 @@ struct assignment_split {
 struct assignment_search {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	type_ops& ops;
+	operations& ops;
 	const forcondlist& forconds;
 	sharedset& out;
 	sharedset in;
-	assignment_search(const shared_symtbl& s, const priv_symtbl& p, type_ops& op, const forcondlist& f, sharedset& o):
+	assignment_search(const shared_symtbl& s, const priv_symtbl& p, operations& op, const forcondlist& f, sharedset& o):
 		shared_symbols(s), priv_symbols(p), ops(op), forconds(f), out(o)
 		{}
 	void operator()(ast_node& node)
@@ -652,7 +652,7 @@ struct erase_from_set: unary_function<T, void> {
 struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	type_ops& ops;
+	operations& ops;
 	forcondlist& forconds;
 	bind_xformer& condnodes;
 	const int unroll;
@@ -662,7 +662,7 @@ struct serial_for_op {
 	forcond sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, type_ops& o, forcondlist& f, bind_xformer& c, const int u):
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, forcondlist& f, bind_xformer& c, const int u):
 		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), condnodes(c), unroll(u), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
@@ -703,12 +703,12 @@ struct declaration_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	varset& locals;
-	type_ops& ops;
+	operations& ops;
 	const forcondlist& forconds;
 	sharedset in;
 	string type;
 
-	declaration_op(const shared_symtbl& s, const priv_symtbl& p, varset& l, type_ops& o, const forcondlist& f):
+	declaration_op(const shared_symtbl& s, const priv_symtbl& p, varset& l, operations& o, const forcondlist& f):
 		shared_symbols(s), priv_symbols(p), locals(l), ops(o), forconds(f)
 		{}
 	void operator()(ast_node& node)
@@ -762,7 +762,7 @@ struct for_compound_op {
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
-	type_ops& ops;
+	operations& ops;
 	forcondlist& forconds;
 	bind_xformer& condnodes;
 	const int unroll;
@@ -771,7 +771,7 @@ struct for_compound_op {
 	varset locals;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
-			type_ops& op, forcondlist& f, bind_xformer& c, const int u): 
+			operations& op, forcondlist& f, bind_xformer& c, const int u): 
 		shared_symbols(s), priv_symbols(p), lazy_in(li), pre_out(po), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), 
 		unroll(u), par_induction(f.front().induction)
 		{}
@@ -1028,12 +1028,12 @@ struct parallel_for_op {
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
-	type_ops& ops;
+	operations& ops;
 	forcondlist& forconds;
 	bind_xformer& condnodes;
 	int unroll;
 	forcond parcond;
-	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, type_ops& op, forcondlist& f, bind_xformer& c, int u): 
+	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, forcondlist& f, bind_xformer& c, int u): 
 		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), unroll(u)
 		{}
 	void operator()(ast_node& node)
@@ -1346,11 +1346,11 @@ struct compound {
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
-	type_ops& ops;
+	operations& ops;
 	forcondlist& forconds;
 	bind_xformer& condnodes;
 	int unroll;
-	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, type_ops& op, forcondlist& f, bind_xformer& c, int u): 
+	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, forcondlist& f, bind_xformer& c, int u): 
 		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), forconds(f), condnodes(c), unroll(u)
 		{}
 	void operator()(ast_node& node)
@@ -1459,20 +1459,20 @@ public:
 };
 
 struct xformer_cost {
-	type_ops operator()(type_ops ops, xformer* x)
+	operations operator()(operations ops, xformer* x)
 	{
 		return ops + x->cost();
 	}
 };
 
 struct accumulate_cost {
-	type_ops& cost;
-	accumulate_cost(type_ops& c):
+	operations& cost;
+	accumulate_cost(operations& c):
 		cost(c)
 		{}
 	void operator()(ast_node& node)
 	{
-		cost += accumulate_all(node.value.xformations, type_ops(), xformer_cost());
+		cost += accumulate_all(node.value.xformations, operations(), xformer_cost());
 	}
 };
 
@@ -1500,7 +1500,7 @@ struct cell_region {
 			// Assumption: one parallel induction variable.
 			forcondlist forconds;
 			bind_xformer condnodes_row;
-			type_ops iteration;
+			operations iteration;
 			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, forconds, condnodes_row, unroll);
 			for_all(node.children, &o);
 
@@ -1519,7 +1519,7 @@ struct cell_region {
 			(*region)->induction(par_induction);
 
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
-			type_ops overhead;
+			operations overhead;
 			make_descend(accumulate_cost(overhead))(node);	
 			cout	<< "iteration: " << endl
 				<< iteration << endl

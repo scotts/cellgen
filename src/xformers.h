@@ -8,7 +8,7 @@ using namespace std;
 #include <boost/regex.hpp>
 
 #include "variable.h"
-#include "type_ops.h"
+#include "operations.h"
 
 inline int count_ocurrences(const string& code, const string& find)
 {
@@ -37,9 +37,9 @@ struct xformer: public unary_function<const string&, string> {
 	virtual xformer* clone() const = 0;
 	virtual string class_name() const = 0; // For debugging purposes only.
 
-	virtual type_ops cost() 
+	virtual operations cost() 
 	{
-		type_ops ops;
+		operations ops;
 		const string code = operator()("");
 
 		ops.add(INT, count_ocurrences(code, "\\+"));
