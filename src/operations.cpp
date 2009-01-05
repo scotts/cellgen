@@ -1,4 +1,21 @@
 #include "operations.h"
+void operation_counts::operator=(const operation_counts& o)
+{
+	add = o.add;
+	sub = o.sub;
+	mul = o.mul;
+	div = o.div;
+	mod = o.mod;
+}
+
+void operation_counts::operator+=(const operation_counts& o)
+{
+	add += o.add;
+	sub += o.sub;
+	mul += o.mul;
+	div += o.div;
+	mod += o.mod;
+}
 
 operation_counts operator+(const operation_counts& a, const operation_counts& b)
 {
@@ -18,6 +35,107 @@ operations operator+(const operations& a, const operations& b)
 	o.float_ops = a.float_ops + b.float_ops;
 	o.double_ops = a.double_ops + b.double_ops;
 	return o;
+}
+
+void operations::operator=(const operations& o)
+{
+	int_ops = o.int_ops;
+	float_ops = o.float_ops;
+	double_ops = o.double_ops;
+}
+
+void operations::operator+=(const operations& o)
+{
+	int_ops += o.int_ops;
+	float_ops += o.float_ops;
+	double_ops += o.double_ops;
+}
+
+#define __SWITCH_TYPE_INCREMENT(op, type, n) \
+({ \
+	switch (type) { \
+		case INT:	int_ops.op += n; \
+				break; \
+		case FLOAT:	float_ops.op += n; \
+				break; \
+		case DOUBLE:	double_ops.op += n; \
+				break; \
+		case UNKNOWN:	throw unknown_variable_type(); \
+				break; \
+		default:	throw unsupported_variable_type(); \
+	} \
+})
+
+void operations::add(const variable_type type, const int n)
+{
+	__SWITCH_TYPE_INCREMENT(add, type, n);
+}
+
+void operations::inc_add(const variable_type type)
+{
+	add(type, 1);
+}
+
+void operations::sub(const variable_type type, const int n)
+{
+	__SWITCH_TYPE_INCREMENT(sub, type, n);
+}
+
+void operations::inc_sub(const variable_type type)
+{
+	sub(type, 1);
+}
+
+void operations::mul(const variable_type type, const int n)
+{
+	__SWITCH_TYPE_INCREMENT(mul, type, n);
+}
+
+void operations::inc_mul(const variable_type type)
+{
+	mul(type, 1);
+}
+
+void operations::div(const variable_type type, const int n)
+{
+	__SWITCH_TYPE_INCREMENT(div, type, n);
+}
+
+void operations::inc_div(const variable_type type)
+{
+	div(type, 1);
+}
+
+void operations::mod(const variable_type type, const int n)
+{
+	__SWITCH_TYPE_INCREMENT(mod, type, n);
+}
+
+void operations::inc_mod(const variable_type type)
+{
+	mod(type, 1);
+}
+
+void operations::inc(const string& op, const variable_type type)
+{
+	if (op == "+") {
+		inc_add(type);
+	}
+	else if (op == "-") {
+		inc_sub(type);
+	}
+	else if (op == "*") {
+		inc_mul(type);
+	}
+	else if (op == "/") {
+		inc_div(type);
+	}
+	else if (op == "%") {
+		inc_mod(type);
+	}
+	else {
+		throw unknown_op_type();
+	}
 }
 
 ostream& operator<<(ostream& out, const variable_type& type)
