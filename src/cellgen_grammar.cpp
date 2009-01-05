@@ -259,9 +259,6 @@ struct create_spe_region {
 	}
 };
 
-/*
- * 3: Allow program to start with cell region.
- */
 struct cellgen_grammar: public grammar<cellgen_grammar> {
 	privset privs;
 	sharedset shared;

@@ -401,7 +401,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 {
 	postfix_op o(shared_symbols, priv_symbols, forconds, vars);
 	for_all(node.children, &o);
-	variable_type type = UNKNOWN;
+	variable_type type = UNKNOWN_VAR;
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = make_add_expr(o.shared_var->dimensions(), o.accesses);
@@ -466,12 +466,12 @@ variable_type type_promotion(const variable_type l, const variable_type r)
 		return CHAR;
 	}
 
-	return UNKNOWN;
+	return UNKNOWN_VAR;
 }
 
 variable_type ident_or_constant_type(ast_node& node)
 {
-	variable_type type = UNKNOWN;
+	variable_type type = UNKNOWN_VAR;
 
 	if (is_constant(node)) {
 		if (is_int_constant(node)) {
@@ -496,9 +496,9 @@ struct multiplicative_op {
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
-	string op;
+	op_type op;
 	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
-		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -518,7 +518,7 @@ struct multiplicative_op {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (is_kind_of_mul(node)) {
-			op = string(node.value.begin(), node.value.end());
+			op = construct_op_type(string(node.value.begin(), node.value.end()));
 		}
 		else if (is_ident_or_constant(node)) {
 			type = ident_or_constant_type(node);
@@ -536,9 +536,9 @@ struct additive_op {
 	const forcondlist& forconds;
 	sharedset& vars;
 	variable_type type;
-	string op;
+	op_type op;
 	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
-		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN)
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -559,7 +559,7 @@ struct additive_op {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (is_kind_of_add(node)) {
-			op = string(node.value.begin(), node.value.end());
+			op = construct_op_type(string(node.value.begin(), node.value.end()));
 		}
 		else if (is_ident_or_constant(node)) {
 			type = ident_or_constant_type(node);
@@ -1522,9 +1522,12 @@ struct cell_region {
 			operations overhead;
 			make_descend(accumulate_cost(overhead))(node);	
 			cout	<< "iteration: " << endl
-				<< iteration << endl
+				<< iteration 
+				<< "cycles: " << iteration.cycles() << endl 
+				<< endl
 				<< "overhead: " << endl
-				<< overhead << endl
+				<< overhead
+				<< "cycles: " << overhead.cycles()
 				<< endl;
 
 			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));

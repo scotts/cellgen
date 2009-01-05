@@ -14,8 +14,6 @@ using namespace std;
 
 const string pass_var = "pass";
 
-//enum variable_type {INT, LONG, FLOAT, DOUBLE, CHAR, UNKNOWN};
-
 class variable {
 	string _type;
 	string _name;
@@ -63,7 +61,7 @@ public:
 			return CHAR;
 		}
 
-		return UNKNOWN;
+		return UNKNOWN_VAR;
 	}
 };
 
