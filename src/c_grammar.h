@@ -962,6 +962,7 @@ struct c_grammar: public grammar<c_grammar> {
 		= root_node_d[
 			(declaration_list || statement_list)
 			| IDENTIFIER >> array_index
+			| IDENTIFIER
 		];
 	 
             declaration_list

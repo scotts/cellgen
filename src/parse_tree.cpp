@@ -49,6 +49,8 @@ xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
 	return *this;
 }
 
+// FIXME: For some of these identities, I should use named constants, not string.
+
 bool is_int(const string& str)
 {
 	return str.find("int") != string::npos || str.find("long") != string::npos;
@@ -111,6 +113,11 @@ bool is_kind_of_add(const ast_node& node)
 	return is_kind_of_add(string(node.value.begin(), node.value.end()));
 }
 
+bool is_operation(const string& s)
+{
+	return is_kind_of_add(s) || is_kind_of_mul(s);
+}
+
 bool is_ident_or_constant(const ast_node& node)
 {
 	return node.value.id() == ids::identifier || is_constant(node);
@@ -143,6 +150,14 @@ bool is_type_specifier(const ast_node& node)
 bool is_struct_access(const ast_node& node)
 {
 	return node.value.id() == ids::dot || node.value.id() == ids::ptr_op;
+}
+
+template <class Node>
+bool is_statement(const Node& node)
+{
+	return node.value.id() == ids::compound || 
+		node.value.id() == ids::expression_statement || 
+		node.value.id() == ids::selection_statement;
 }
 
 add_expr make_add_expr(const list<string>& dimensions, const list<add_expr>& indices)
@@ -1460,32 +1475,70 @@ public:
 	}
 };
 
-struct overhead_op {
+struct count_operations {
 	operations& ops;
-	overhead_op(operations& o):
+	count_operations(operations& o):
 		ops(o)
 		{}
 	void operator()(string_node& node)
 	{
+		const string val = string(node.value.begin(), node.value.end());
 
+		if (is_operation(val)) {
+			ops.inc(construct_op_type(val), INT);
+		}
+
+		for_all(node.children, this);
 	}
 };
 
-struct startup_op {
-	operations& ops;
-	startup_op(operations& o):
-		ops(o)
+struct statement_op {
+	operations& overhead;
+	operations& startup;
+	statement_op(operations& o, operations& s):
+		overhead(o), startup(s)
 		{}
 	void operator()(string_node& node)
 	{
+		const string val = string(node.value.begin(), node.value.end());
 
+		if (is_statement(node)) {
+			for_all(node.children, count_operations(startup));
+		}
+		else if (is_operation(val)) {
+			overhead.inc(construct_op_type(val), INT);
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+struct selection_op {
+	operations& overhead;
+	operations& startup;
+	selection_op(operations& o, operations& s):
+		overhead(o), startup(s)
+		{}
+	void operator()(string_node& node)
+	{
+		const string val = string(node.value.begin(), node.value.end());
+
+		if (node.value.id() == ids::selection_statement) {
+			for_all(node.children, statement_op(overhead, startup));
+		}
+		else if (is_operation(val)) {
+			overhead.inc(construct_op_type(val), INT);
+		}
+		else {
+			for_all(node.children, this);
+		}
 	}
 };
 
 class failure_to_parse_xformer {};
 
-template <class F>
-operations parse_xformation(const string& code)
+operations parse_xformation(const string& code, operations& overhead, operations& startup)
 {
 	string::const_iterator first = code.begin();
 	string::const_iterator last = code.end();
@@ -1493,32 +1546,35 @@ operations parse_xformation(const string& code)
 	ast_parse_string parse = ast_parse(first, last, c_free_compound, skip);
 
 	if (!parse.full) {
-		cout << "---" << endl << code << "---" << endl;
 		throw failure_to_parse_xformer();
 	}
 
 	operations cost;
-	for_all(parse.trees, F(cost));
+	for_all(parse.trees, selection_op(overhead, startup));
 	return cost;
 }
 
-template <class F>
 struct calculate_cost {
-	operations operator()(operations ops, xformer* x)
+	operations& overhead;
+	operations& startup;
+	calculate_cost(operations& o, operations& s):
+		overhead(o), startup(s)
+		{}
+	void operator()(xformer* x)
 	{
-		return ops + parse_xformation<F>((*x)(""));
+		parse_xformation((*x)(""), overhead, startup);
 	}
 };
 
-template <class F>
 struct accumulate_cost {
-	operations& cost;
-	accumulate_cost(operations& c):
-		cost(c)
+	operations& overhead;
+	operations& startup;
+	accumulate_cost(operations& o, operations& s):
+		overhead(o), startup(s)
 		{}
 	void operator()(ast_node& node)
 	{
-		cost += accumulate_all(node.value.xformations, operations(), calculate_cost<F>());
+		for_all(node.value.xformations, calculate_cost(overhead, startup));
 	}
 };
 
@@ -1567,18 +1623,21 @@ struct cell_region {
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
 			operations overhead;
 			operations startup;
-			make_descend(accumulate_cost<overhead_op>(overhead))(node);	
-			make_descend(accumulate_cost<startup_op>(startup))(node);
+			make_descend(accumulate_cost(overhead, startup))(node);	
 
 			cout	<< "iteration: " << endl
 				<< iteration 
 				<< "cycles: " << iteration.cycles() << endl 
-				<< "buffer size: " << estimate_buffer_size(iteration.cycles()) << endl
 				<< endl
 				<< "overhead: " << endl
 				<< overhead
 				<< "cycles: " << overhead.cycles() << endl
-				<< "buffer size: " << estimate_buffer_size(overhead.cycles()) << endl
+				<< endl
+				<< "startup: " << endl
+				<< startup 
+				<< "cycles: " << startup.cycles() << endl
+				<< endl
+				<< "buffer size : " << estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
 				<< endl;
 
 			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));

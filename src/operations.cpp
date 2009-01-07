@@ -181,8 +181,8 @@ int counts_to_cycles(const int n, const op_type op, const variable_type var)
 	return n * latency[var][op];
 }
 
-int estimate_buffer_size(const int cycles)
+int estimate_buffer_size(const int iteration, const int startup)
 {
-	return static_cast<int>((cycles - dma_startup_cost) / dma_bandwidth_cycles);
+	return static_cast<int>((iteration - (dma_startup_cost + startup)) / dma_bandwidth_cycles);
 }
 
