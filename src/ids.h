@@ -44,7 +44,8 @@ namespace ids {
 	const int float_constant_1 = 32;
 	const int float_constant_2 = 33;
 	const int float_constant_3 = 34;
-	const int last = 34; // should equal one above
+	const int free_compound = 35;
+	const int last = 35; // should equal one above
 
 	static const string __mappings[] = { "",
 		"identifier",
@@ -80,7 +81,8 @@ namespace ids {
 		"ptr_op",
 		"float_constant_1",
 		"float_constant_2",
-		"float_constant_3"
+		"float_constant_3",
+		"free_compound"
 	};
 	static const vector<string> mappings(__mappings, __mappings + last + 1);
 

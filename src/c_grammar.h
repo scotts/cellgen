@@ -952,6 +952,18 @@ struct c_grammar: public grammar<c_grammar> {
 			(LEFT_BRACE >> !(declaration_list || statement_list) >> RIGHT_BRACE)
 		];
 
+	    // My own concept, needed for xformations. It's just a compound statement 
+	    // without the braces.
+	    //
+	    // Yeah... putting an array access in there is a hack, but it's the 
+	    // easiest/fastest solution I can think of for handling *_to_buffer_space
+	    // xformers.
+	    free_compound_statement
+		= root_node_d[
+			(declaration_list || statement_list)
+			| IDENTIFIER >> array_index
+		];
+	 
             declaration_list
                 = +declaration
                 ;
@@ -1100,6 +1112,7 @@ struct c_grammar: public grammar<c_grammar> {
 	rule<ScannerT, parser_tag<ids::float_constant_1> > FLOAT_CONSTANT_1;
 	rule<ScannerT, parser_tag<ids::float_constant_2> > FLOAT_CONSTANT_2;
 	rule<ScannerT, parser_tag<ids::float_constant_3> > FLOAT_CONSTANT_3;
+	rule<ScannerT, parser_tag<ids::free_compound> > free_compound_statement;
 
         rule<ScannerT> const&
         start() const { return translation_unit; }
@@ -1123,4 +1136,49 @@ struct c_compound_grammar: grammar<c_compound_grammar> {
 		}
 	};
 };
+
+struct c_free_compound_grammar: grammar<c_free_compound_grammar> {
+	c_grammar _c_code;
+
+	template <typename ScannerT>
+	struct definition {
+		c_grammar::definition<ScannerT> c_code;
+
+		definition(c_free_compound_grammar const& self): 
+			c_code(self._c_code) 
+			{}
+
+		const rule<ScannerT, parser_tag<ids::free_compound> >& start() const
+		{
+			return c_code.free_compound_statement;
+		}
+	};
+};
+
+/*
+ * Sigh. As close as I could get. Can't store a member pointer to definition 
+ * because I don't have the scanner type.
+ *
+template <class G, int id>
+struct arbitrary_entry: grammar<arbitrary_entry<G, id> > {
+	G _g;
+
+	template <typename ScannerT>
+	struct definition {
+		typename G::template definition<ScannerT> g;
+
+		definition(const arbitrary_entry<G, id>& self): 
+			g(self._g)
+			{}
+
+		const rule<ScannerT, parser_tag<id> >& start() const
+		{
+			return g.compound_statement;
+		}
+	};
+};
+*/
+
+const c_compound_grammar c_compound;
+const c_free_compound_grammar c_free_compound;
 

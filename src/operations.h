@@ -112,6 +112,7 @@ operation_counts<type> operator+(const operation_counts<type>& a, const operatio
 }
 
 int counts_to_cycles(const int n, const op_type op, const variable_type var);
+int estimate_buffer_size(const int cycles);
 
 template <variable_type type>
 int operation_counts<type>::cycles()

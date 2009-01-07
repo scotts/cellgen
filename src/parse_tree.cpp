@@ -7,6 +7,8 @@
 #include <map>
 using namespace std;
 
+#include "c_grammar.h"
+#include "skip.h"
 #include "parse_tree.h"
 #include "ids.h"
 #include "variable.h"
@@ -1458,13 +1460,57 @@ public:
 	}
 };
 
-struct xformer_cost {
-	operations operator()(operations ops, xformer* x)
+struct overhead_op {
+	operations& ops;
+	overhead_op(operations& o):
+		ops(o)
+		{}
+	void operator()(string_node& node)
 	{
-		return ops + x->cost();
+
 	}
 };
 
+struct startup_op {
+	operations& ops;
+	startup_op(operations& o):
+		ops(o)
+		{}
+	void operator()(string_node& node)
+	{
+
+	}
+};
+
+class failure_to_parse_xformer {};
+
+template <class F>
+operations parse_xformation(const string& code)
+{
+	string::const_iterator first = code.begin();
+	string::const_iterator last = code.end();
+
+	ast_parse_string parse = ast_parse(first, last, c_free_compound, skip);
+
+	if (!parse.full) {
+		cout << "---" << endl << code << "---" << endl;
+		throw failure_to_parse_xformer();
+	}
+
+	operations cost;
+	for_all(parse.trees, F(cost));
+	return cost;
+}
+
+template <class F>
+struct calculate_cost {
+	operations operator()(operations ops, xformer* x)
+	{
+		return ops + parse_xformation<F>((*x)(""));
+	}
+};
+
+template <class F>
 struct accumulate_cost {
 	operations& cost;
 	accumulate_cost(operations& c):
@@ -1472,7 +1518,7 @@ struct accumulate_cost {
 		{}
 	void operator()(ast_node& node)
 	{
-		cost += accumulate_all(node.value.xformations, operations(), xformer_cost());
+		cost += accumulate_all(node.value.xformations, operations(), calculate_cost<F>());
 	}
 };
 
@@ -1520,14 +1566,19 @@ struct cell_region {
 
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
 			operations overhead;
-			make_descend(accumulate_cost(overhead))(node);	
+			operations startup;
+			make_descend(accumulate_cost<overhead_op>(overhead))(node);	
+			make_descend(accumulate_cost<startup_op>(startup))(node);
+
 			cout	<< "iteration: " << endl
 				<< iteration 
 				<< "cycles: " << iteration.cycles() << endl 
+				<< "buffer size: " << estimate_buffer_size(iteration.cycles()) << endl
 				<< endl
 				<< "overhead: " << endl
 				<< overhead
-				<< "cycles: " << overhead.cycles()
+				<< "cycles: " << overhead.cycles() << endl
+				<< "buffer size: " << estimate_buffer_size(overhead.cycles()) << endl
 				<< endl;
 
 			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));

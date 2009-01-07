@@ -18,9 +18,6 @@ using namespace boost::spirit;
 #include "skip.h"
 #include "utility.h"
 
-const c_compound_grammar c_compound;
-const skip_grammar skip;
-
 void print_xform_names(xformer* x)
 {
 	cout << x->class_name() << " ";
@@ -448,21 +445,21 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions,
 	fileiter last = first.make_end();
 
 	cellgen_grammar cg(ppe_blocks, spe_regions);
-	ast_parse_info* p = new ast_parse_info(); // need to make sure the ast persists
-	*p = ast_parse<xformer_factory>(first, last, cg, skip);
+	ast_parse_file* parse = new ast_parse_file(); // need to make sure the ast persists
+	*parse = ast_parse<xformer_factory>(first, last, cg, skip);
 
-	if (!p->full) {
+	if (!parse->full) {
 		throw user_error(string("parse of ") + src_name + " failed.");
 	}
 
-	traverse_ast(p->trees, spe_regions);
+	traverse_ast(parse->trees, spe_regions);
 
 	if (print_ast) {
-		for_all(p->trees, astout(0, ""));
+		for_all(parse->trees, astout(0, ""));
 	}
 
 	spelist::iterator s = spe_regions.begin();
-	for (ast_iterator a = (*p->trees.begin()).children.begin(); a != (*p->trees.begin()).children.end(); ++a) {
+	for (ast_iterator a = (*parse->trees.begin()).children.begin(); a != (*parse->trees.begin()).children.end(); ++a) {
 		if ((*a).value.id() == ids::cell_region) {
 			(*s)->ast_root(&(*a));	
 			++s;

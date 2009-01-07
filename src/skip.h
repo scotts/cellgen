@@ -26,5 +26,7 @@ struct skip_grammar: public grammar<skip_grammar>
 	};
 };
 
+const skip_grammar skip;
+
 #endif	// SKIP_H
 

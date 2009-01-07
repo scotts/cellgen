@@ -66,11 +66,15 @@ struct xformer_factory {
 };
 
 typedef file_iterator<char>				fileiter;
-typedef tree_parse_info<fileiter, xformer_factory>	ast_parse_info;
-typedef tree_match<fileiter, xformer_factory>		ast_match;
-typedef ast_match::tree_iterator			ast_iterator;
-typedef ast_match::container_t				ast;
-typedef ast_match::node_t				ast_node;
+typedef tree_parse_info<fileiter, xformer_factory>	ast_parse_file;
+typedef tree_match<fileiter, xformer_factory>		file_match;
+typedef file_match::tree_iterator			ast_iterator;
+typedef file_match::container_t				ast;
+typedef file_match::node_t				ast_node;
+
+typedef tree_parse_info<string::const_iterator>		ast_parse_string;
+typedef tree_match<string::const_iterator>		string_match;
+typedef string_match::node_t				string_node;
 
 #include "spe_region.h"
 
