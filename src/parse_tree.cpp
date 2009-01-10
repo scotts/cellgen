@@ -486,7 +486,9 @@ variable_type type_promotion(const variable_type l, const variable_type r)
 	return UNKNOWN_VAR;
 }
 
-variable_type ident_or_constant_type(ast_node& node)
+class local_variable_not_found {};
+
+variable_type ident_or_constant_type(ast_node& node, const var_symtbl& locals)
 {
 	variable_type type = UNKNOWN_VAR;
 
@@ -499,8 +501,15 @@ variable_type ident_or_constant_type(ast_node& node)
 		}
 	}
 	else {
-		// figure out type of ident
-		assert("Not implemented!" && false);
+		const string name = string(node.value.begin(), node.value.end());
+		var_symtbl::const_iterator l = locals.find(name);
+
+		if (l != locals.end()) {
+			type = construct_variable_type(l->second->type());
+		}
+		else {
+			throw local_variable_not_found();
+		}
 	}
 
 	return type;
@@ -512,20 +521,21 @@ struct multiplicative_op {
 	operations& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
+	const var_symtbl& locals;
 	variable_type type;
 	op_type op;
-	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
-		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN_VAR), op(UNKNOWN_OP)
+	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::multiplicative_expression) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars, locals);
 			for_all(node.children, &o);
 			type = o.type;
 		}
 		else if(node.value.id() == ids::multiplicative_expression_helper) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars, locals);
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
@@ -538,7 +548,7 @@ struct multiplicative_op {
 			op = construct_op_type(string(node.value.begin(), node.value.end()));
 		}
 		else if (is_ident_or_constant(node)) {
-			type = ident_or_constant_type(node);
+			type = ident_or_constant_type(node, locals);
 		}
 		else {
 			for_all(node.children, this);
@@ -552,21 +562,22 @@ struct additive_op {
 	operations& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
+	const var_symtbl& locals;
 	variable_type type;
 	op_type op;
-	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
-		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), type(UNKNOWN_VAR), op(UNKNOWN_OP)
+	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::multiplicative_expression) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars, locals);
 			for_all(node.children, &o);
 
 			type = o.type;
 		}
 		else if (node.value.id() == ids::additive_expression_helper) {
-			additive_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			additive_op o(shared_symbols, priv_symbols, ops, forconds, vars, locals);
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
@@ -579,7 +590,7 @@ struct additive_op {
 			op = construct_op_type(string(node.value.begin(), node.value.end()));
 		}
 		else if (is_ident_or_constant(node)) {
-			type = ident_or_constant_type(node);
+			type = ident_or_constant_type(node, locals);
 		}
 		else {
 			for_all(node.children, this);
@@ -593,8 +604,9 @@ struct assignment_split {
 	operations& ops;
 	const forcondlist& forconds;
 	sharedset& vars;
-	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v):
-		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v)
+	const var_symtbl& locals;
+	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, const forcondlist& f, sharedset& v, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(o), forconds(f), vars(v), locals(l)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -603,11 +615,11 @@ struct assignment_split {
 			postfix_postop(node, shared_symbols, priv_symbols, ops, forconds, vars);
 		}
 		else if (node.value.id() == ids::additive_expression) {
-			additive_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			additive_op o(shared_symbols, priv_symbols, ops, forconds, vars, locals);
 			for_all(node.children, &o);
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, forconds, vars, locals);
 			for_all(node.children, &o);
 		}
 		else {
@@ -622,9 +634,10 @@ struct assignment_search {
 	operations& ops;
 	const forcondlist& forconds;
 	sharedset& out;
+	const var_symtbl& locals;
 	sharedset in;
-	assignment_search(const shared_symtbl& s, const priv_symtbl& p, operations& op, const forcondlist& f, sharedset& o):
-		shared_symbols(s), priv_symbols(p), ops(op), forconds(f), out(o)
+	assignment_search(const shared_symtbl& s, const priv_symtbl& p, operations& op, const forcondlist& f, sharedset& o, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(op), forconds(f), out(o), locals(l)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -633,8 +646,8 @@ struct assignment_search {
 			ast_iterator eqs = find_if_all(node.children, is_equals);
 
 			try {
-				for_each(node.children.begin(), eqs, assignment_split(shared_symbols, priv_symbols, ops, forconds, out));
-				for_each(eqs, node.children.end(), assignment_split(shared_symbols, priv_symbols, ops, forconds, in));
+				for_each(node.children.begin(), eqs, assignment_split(shared_symbols, priv_symbols, ops, forconds, out, locals));
+				for_each(eqs, node.children.end(), assignment_split(shared_symbols, priv_symbols, ops, forconds, in, locals));
 			}
 			catch (shared_variable_double_orientation e) {
 				throw user_error("Shared variables can only be accessed in row major or column "
@@ -719,13 +732,13 @@ pair<ast_iterator, ast_node*> find_equals(ast_node& node)
 struct declaration_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	varset& locals;
+	var_symtbl& locals;
 	operations& ops;
 	const forcondlist& forconds;
 	sharedset in;
 	string type;
 
-	declaration_op(const shared_symtbl& s, const priv_symtbl& p, varset& l, operations& o, const forcondlist& f):
+	declaration_op(const shared_symtbl& s, const priv_symtbl& p, var_symtbl& l, operations& o, const forcondlist& f):
 		shared_symbols(s), priv_symbols(p), locals(l), ops(o), forconds(f)
 		{}
 	void operator()(ast_node& node)
@@ -736,11 +749,11 @@ struct declaration_op {
 		}
 		else if (node.value.id() == ids::init_declarator) {
 			pair<ast_iterator, ast_node*> p = find_equals(node);
-			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, ops, forconds, in)); 
+			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, ops, forconds, in, locals)); 
 		}
 		else if (node.value.id() == ids::identifier) {
 			string name = string(node.value.begin(), node.value.end());
-			locals.insert(new variable(type, name));
+			locals[name] = new variable(type, name);
 		}
 		else {
 			for_all(node.children, this);
@@ -785,7 +798,7 @@ struct for_compound_op {
 	const int unroll;
 	const string par_induction;
 	sharedset seen;
-	varset locals;
+	var_symtbl locals;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
 			operations& op, forcondlist& f, bind_xformer& c, const int u): 
@@ -818,7 +831,7 @@ struct for_compound_op {
 			}
 		}
 		else if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
-			assignment_search o(shared_symbols, priv_symbols, ops, forconds, pre_out);
+			assignment_search o(shared_symbols, priv_symbols, ops, forconds, pre_out, locals);
 			for_all(node.children, &o);
 
 			// Store the function object somewhere, and call it later once I know 

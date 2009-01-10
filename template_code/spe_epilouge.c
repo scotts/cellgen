@@ -23,7 +23,6 @@ void compute_bounds(int *start, int *stop, int buff_sz)
 /*
  * Jae-seung's revision.
  */
-/*
 void compute_bounds (int *start, int *stop, int buff_sz)
 {
   int total_chunks = (*stop - *start) / buff_sz;
@@ -33,37 +32,47 @@ void compute_bounds (int *start, int *stop, int buff_sz)
 
   int id = SPE_threads - rem;
 
-  if (SPE_id == SPE_threads - 1)
-    {
-      if (SPE_id > id)
+  if (SPE_id == SPE_threads - 1) {
+      if (SPE_id > id) {
           *start = *start + (SPE_id * thread_chunks * buff_sz + buff_sz * (SPE_id - id));
-      else
+      }
+      else {
           *start = *start + (SPE_id * thread_chunks * buff_sz);
+      }
 
-      if (SPE_id >= id)
+      if (SPE_id >= id) {
           *stop = *start + ((thread_chunks + 1) * buff_sz + rem_rem);
-      else
+      }
+      else {
           *stop = *start + (thread_chunks * buff_sz + rem_rem);
-    }
-  else
-    {
-      if (SPE_id > id)
+      }
+  }
+  else {
+      if (SPE_id > id) {
           *start = *start + (SPE_id * thread_chunks * buff_sz + buff_sz * (SPE_id - id));
-      else
+      }
+      else {
           *start = *start + (SPE_id * thread_chunks * buff_sz);
+      }
 
-      if (SPE_id >= id)
+      if (SPE_id >= id) {
           *stop = *start + ((thread_chunks + 1) * buff_sz);
-      else
+      }
+      else {
           *stop = *start + (thread_chunks * buff_sz);
-    }
+      }
+  }
 }
-*/
 
 /*
  * Scott's new version. It distributes the remaineder iterations as close to evenly 
  * as possible.
+ *
+ * UPDATE: Sigh. I forgot when I wrote this that I actually do depend on iterations 
+ * being distributed in buffer size chunks. I don't feel like fixing this now, so I'm 
+ * going to revert to the above version.
  */
+/*
 void compute_bounds(int* start, int *stop, int buff_size)
 {
 	int base = (*stop - *start) / SPE_threads;
@@ -77,6 +86,7 @@ void compute_bounds(int* start, int *stop, int buff_size)
 		*stop += rem - (SPE_threads - SPE_id - 1);
 	}
 }
+*/
 
 int main()
 {

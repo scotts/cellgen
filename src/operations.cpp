@@ -21,6 +21,24 @@ op_type construct_op_type(const string& op)
 	return UNKNOWN_OP;
 }
 
+variable_type construct_variable_type(const string& type)
+{
+	if (type.find("char") != string::npos) {
+		return CHAR;
+	}
+	else if (type.find("int") != string::npos) {
+		return INT;
+	}
+	else if (type.find("long") != string::npos) {
+		return FLOAT;
+	}
+	else if (type.find("double") != string::npos) {
+		return DOUBLE;
+	}
+
+	return UNKNOWN_VAR;
+}
+
 operations operator+(const operations& a, const operations& b)
 {
 	operations o;

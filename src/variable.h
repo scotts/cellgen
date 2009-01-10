@@ -258,6 +258,7 @@ typedef set<variable*>			varset;
 typedef set<private_variable*>		privset;
 typedef set<shared_variable*>		sharedset;
 typedef set<reduction_variable*>	reduceset;
+typedef map<string, variable*>		var_symtbl;
 typedef map<string, shared_variable*>	shared_symtbl;
 typedef map<string, private_variable*>	priv_symtbl;
 typedef map<string, reduction_variable*>	reduc_symtbl;

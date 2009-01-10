@@ -22,6 +22,7 @@ enum op_type {ADD, SUB, MUL, DIV, MOD, UNKNOWN_OP};
  * ints, but really, is that better?
  */
 op_type construct_op_type(const string& op);
+variable_type construct_variable_type(const string& op);
 
 template <variable_type type>
 struct operation_counts {
