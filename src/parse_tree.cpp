@@ -430,7 +430,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			}
 
 			o.shared_var->row();
-			node.value.xformations.push_back(new row_buffer_space(o.shared_var, add)); 
+			node.value.xformations.push_back(new row_buffer_space(o.shared_var, forconds.back().induction)); 
 		}
 		else {
 			if (o.shared_var->is_row()) {
@@ -438,7 +438,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			}
 
 			o.shared_var->column();
-			node.value.xformations.push_back(new column_buffer_space(o.shared_var, add)); 
+			node.value.xformations.push_back(new column_buffer_space(o.shared_var, forconds.back().induction)); 
 		}
 
 		o.shared_var->math(add);
@@ -816,10 +816,10 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						node.value.xformations.push_back(new gen_in_row(*i, par_induction));
+						node.value.xformations.push_back(new gen_in_row(*i, forconds.back().induction, forconds.back().stop));
 					}
 					else if ((*i)->is_column()) {
-						node.value.xformations.push_back(new gen_in_column(*i, par_induction));
+						node.value.xformations.push_back(new gen_in_column(*i, forconds.back().induction, forconds.back().stop));
 					}
 					else {
 						throw unitialized_access_orientation();
@@ -839,10 +839,10 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						lazy_in.insert(bind_gen_in::value_type(new gen_in_row(*i, par_induction), &node));
+						lazy_in.insert(bind_gen_in::value_type(new gen_in_row(*i, forconds.back().induction, forconds.back().stop), &node));
 					}
 					else if ((*i)->is_column()){
-						lazy_in.insert(bind_gen_in::value_type(new gen_in_column(*i, par_induction), &node));
+						lazy_in.insert(bind_gen_in::value_type(new gen_in_column(*i, forconds.back().induction, forconds.back().stop), &node));
 					}
 					else {
 						throw unitialized_access_orientation();
@@ -860,7 +860,15 @@ struct for_compound_op {
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
+			const string& cur_induction = forconds.back().induction;
+			const string& cur_stop = forconds.back().stop;
+			const string& par_stop = forconds.front().stop;
+
 			xformerlist& nested = node.value.xformations;
+			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(cur_induction, cur_stop), in));
+			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(cur_induction, cur_stop), inout));
+
+			/* TODO: optimization if buffer is same as last dimension?
 			xformerlist lifted;
 			for_all(node.children, make_descend(lift_out_gen_in_rows(lifted)))(node);
 			nested.splice(nested.begin(), lifted);
@@ -869,18 +877,26 @@ struct for_compound_op {
 			for_all(in, make_append_induction_if<gen_in_first_column>(colinits, mem_fn(&shared_variable::is_column), par_induction));
 			for_all(inout, make_append_induction_if<gen_in_first_column>(colinits, mem_fn(&shared_variable::is_column), par_induction));
 			append(nested, colinits);
+			*/
 
 			// It's more natural to do this in serial_for_op, at the node for a compound expression. But,
 			// that means this would get called once for each for loop encountered, which generates extra 
 			// xformers.
+
+			/*
 			xformerlist colout;
 			for_all(out, make_append_induction_if<gen_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
 			for_all(inout, make_append_induction_if<gen_out_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
 			for_all(out, make_append_induction_if<gen_out_final_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
 			for_all(inout, make_append_induction_if<gen_out_final_column>(colout, mem_fn(&shared_variable::is_column), par_induction));
+			append(lbrace, colout);
+			*/
 
 			xformerlist& lbrace = node.children.back().children.back().value.xformations;
-			append(lbrace, colout);
+			append(lbrace, fmap(make_choice<gen_out_row, gen_out_column>(cur_induction, cur_stop), out));
+			append(lbrace, fmap(make_choice<gen_out_row, gen_out_column>(cur_induction, cur_stop), inout));
+			append(lbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(par_induction, par_stop), out));
+			append(lbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(par_induction, par_stop), inout));
 		}
 		else {
 			for_all(node.children, this);
@@ -1105,6 +1121,7 @@ struct parallel_for_op {
 			}
 
 			xformerlist& xformations = node.children.back().value.xformations;
+			/*
 			xformerlist rows;
 
 			for_all(out, make_append_induction_if<gen_out_row>(rows, mem_fn(&shared_variable::is_row), parcond.induction));
@@ -1112,6 +1129,7 @@ struct parallel_for_op {
 			for_all(out, make_append_induction_if<gen_out_final_row>(rows, mem_fn(&shared_variable::is_row), parcond.induction));
 			for_all(inout, make_append_induction_if<gen_out_final_row>(rows, mem_fn(&shared_variable::is_row), parcond.induction));
 			append(xformations, rows);
+			*/
 
 			xformations.push_back(new total_timer_stop());
 		}
@@ -1354,12 +1372,16 @@ struct unroll_for_op {
 			}
 
 			// Columns already have a gen_in_first.
+			/*
 			xformerlist rows;
 			for_all(in, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
 			for_all(inout, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
+			append(last.value.xformations, rows);
+			*/
 
 			ast_node& last = node.children.back();
-			append(last.value.xformations, rows);
+			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(induction, stop), in));
+			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(induction, stop), inout));
 
 			descend<epilogue_all>()(last);
 			make_descend(unroll_all(unroll))(node);
@@ -1549,17 +1571,22 @@ struct selection_op {
 	}
 };
 
-class failure_to_parse_xformer {};
+struct failure_to_parse_xformer {
+	const string code;
+	const string name;
+	failure_to_parse_xformer(const string& c, const string& n): code(c), name(n) {}
+};
 
-operations parse_xformation(const string& code, operations& overhead, operations& startup)
+operations parse_xformation(xformer* x, operations& overhead, operations& startup)
 {
+	const string code = (*x)("");
 	string::const_iterator first = code.begin();
 	string::const_iterator last = code.end();
 
 	ast_parse_string parse = ast_parse(first, last, c_free_compound, skip);
 
 	if (!parse.full) {
-		throw failure_to_parse_xformer();
+		throw failure_to_parse_xformer(code, x->class_name());
 	}
 
 	operations cost;
@@ -1575,7 +1602,7 @@ struct calculate_cost {
 		{}
 	void operator()(xformer* x)
 	{
-		parse_xformation((*x)(""), overhead, startup);
+		parse_xformation(x, overhead, startup);
 	}
 };
 
@@ -1636,8 +1663,19 @@ struct cell_region {
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
 			operations overhead;
 			operations startup;
-			make_descend(accumulate_cost(overhead, startup))(node);	
+			try {
+				make_descend(accumulate_cost(overhead, startup))(node);	
+			}
+			catch (failure_to_parse_xformer e)
+			{
+				cerr	<< "Failed to parse " << e.name << ":" << endl
+					<< "---" << endl
+					<< e.code << endl
+					<< "---" << endl;
+			}
 
+
+			/*
 			cout	<< "iteration: " << endl
 				<< iteration 
 				<< "cycles: " << iteration.cycles() << endl 
@@ -1652,6 +1690,7 @@ struct cell_region {
 				<< endl
 				<< "buffer size : " << estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
 				<< endl;
+			*/
 
 			const bool column = accumulate_all(shared, false, shared_or(&shared_variable::is_column));
 			const bool row = accumulate_all(shared, false, shared_or(&shared_variable::is_row));
@@ -1706,11 +1745,15 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
+			/*
 			xformerlist rows;
 			for_all(in, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			for_all(inout, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), par_induction));
 			append(front, rows);
+			*/
 
+			append(front, fmap(make_choice<gen_in_first_row, gen_in_first_column>(par_induction, par_stop), in));
+			append(front, fmap(make_choice<gen_in_first_row, gen_in_first_column>(par_induction, par_stop), inout));
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
 			append(front, fmap(make_xformer<reduction_declare, reduction_variable>(), reductions));
 

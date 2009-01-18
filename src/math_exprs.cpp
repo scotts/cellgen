@@ -200,10 +200,10 @@ string add_expr::str() const
 string add_expr::next_iteration(const string& ivar) const
 {
 	if (_lhs.str().find(ivar) != string::npos) {
-		return _lhs.next_iteration(ivar);
+		return _lhs.next_iteration(ivar) + _op + _rhs.str();
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		return _rhs.next_iteration(ivar);
+		return _lhs.str() + _op + _rhs.next_iteration(ivar);
 	}
 	else {
 		// Design decision: we're saying it's nonsense to ask 

@@ -6,8 +6,8 @@
 using namespace std;
 
 const int dma_startup_cost = 16; // cycles
-const double dma_bandwidth_s = 16.8; // GBytes/s
-const double spe_frequency = 2.1; // GHz
+const double dma_bandwidth_s = 1; // GBytes/s
+const double spe_frequency = 3.192; // GHz
 const double dma_bandwidth_cycles = dma_bandwidth_s / spe_frequency;
 
 enum variable_type {CHAR, INT, LONG, FLOAT, DOUBLE, UNKNOWN_VAR};

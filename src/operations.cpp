@@ -187,11 +187,11 @@ __attribute__((constructor)) void construct_latency()
 	latency[FLOAT][DIV] = 6; // assuming div is same as mul
 	latency[FLOAT][MOD] = 6; // complete guess
 
-	latency[DOUBLE][ADD] = 13;
-	latency[DOUBLE][SUB] = 13;
-	latency[DOUBLE][MUL] = 13;
-	latency[DOUBLE][DIV] = 13; // assuming div is same cost as mul
-	latency[DOUBLE][MOD] = 13; // complete guess
+	latency[DOUBLE][ADD] = 7;
+	latency[DOUBLE][SUB] = 7;
+	latency[DOUBLE][MUL] = 7;
+	latency[DOUBLE][DIV] = 7; // assuming div is same cost as mul
+	latency[DOUBLE][MOD] = 7; // complete guess
 }
 
 int counts_to_cycles(const int n, const op_type op, const variable_type var)

@@ -65,8 +65,9 @@ struct make_xformer: public unary_function<const V*, xformer*> {
 class induction_xformer: virtual public xformer {
 protected:
 	string induction;
+	string stop;
 public:
-	induction_xformer(const string& i): induction(i) {}
+	induction_xformer(const string& i, const string& s): induction(i), stop(s) {}
 };
 
 template <class X>
@@ -106,8 +107,9 @@ class unrollable_xformer: public induction_xformer {
 protected:
 	int unroll;
 public:
-	unrollable_xformer(const string& i): induction_xformer(i), unroll(NO_UNROLL) {}
-	unrollable_xformer(const string& i, const int u): induction_xformer(i), unroll(u) {}
+	unrollable_xformer(const string& i, const string& s): induction_xformer(i, s), unroll(NO_UNROLL) {}
+	unrollable_xformer(const string& i, const string& s, const int u): induction_xformer(i, s), unroll(u) {}
+	unrollable_xformer(const int u): induction_xformer("", ""), unroll(u) {}
 	virtual void unroll_me(int u)
 	{
 		// TODO: Do I need to know induction information to determine if 
@@ -138,9 +140,9 @@ struct nop: public xformer {
 
 class row_buffer_space: virtual public xformer, public epilogue_xformer {
 	const shared_variable* v;
-	add_expr add;
+	const string induction;
 public:
-	row_buffer_space(const shared_variable* v, add_expr a): v(v), add(a) {}
+	row_buffer_space(const shared_variable* v, const string& i): v(v), induction(i) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -154,7 +156,7 @@ public:
 			buff_size = buff.size();
 		}
 
-		return old + orig.name() + "[(" + add.str() + ")%" + buff_size + "]";
+		return old + orig.name() + "[(" + induction + ")%" + buff_size + "]";
 	}
 
 	xformer* clone() const { return new row_buffer_space(*this); }
@@ -163,15 +165,15 @@ public:
 
 class column_buffer_space: public xformer {
 	const shared_variable* v;
-	add_expr add;
+	const string induction;
 public:
-	column_buffer_space(const shared_variable* v, add_expr a): v(v), add(a) {}
+	column_buffer_space(const shared_variable* v, const string& i): v(v), induction(i) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		return old + orig.name() + "[(" + add.lhs().lhs().str() + ")%" + buff.size() + "]";
+		return old + orig.name() + "[(" + induction + ")%" + buff.size() + "]";
 	}
 
 	xformer* clone() const { return new column_buffer_space(*this); }
@@ -262,7 +264,7 @@ class shared_buffer_size: public unrollable_xformer {
 	const int buffer;
 
 public:
-	shared_buffer_size(const shared_variable* v, const int b, const int u): unrollable_xformer("", u), v(v), buffer(b) {}
+	shared_buffer_size(const shared_variable* v, const int b, const int u): unrollable_xformer(u), v(v), buffer(b) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -461,7 +463,7 @@ protected:
 	string buff_size;
 
 public:
-	gen_in_first(const shared_variable* _v, const string& i): unrollable_xformer(i), v(_v) {}
+	gen_in_first(const shared_variable* _v, const string& i, const string& s): unrollable_xformer(i, s), v(_v) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
@@ -486,7 +488,7 @@ public:
 
 class gen_in_first_row: public gen_in_first {
 public:
-	gen_in_first_row(const shared_variable* v, const string& i): gen_in_first(v, i) {}
+	gen_in_first_row(const shared_variable* v, const string& i, const string& s): gen_in_first(v, i, s) {}
 
 	void set_buff_size()
 	{
@@ -516,10 +518,10 @@ public:
 		}
 
 		if (unroll) {
-			address = "(unsigned long)(" + v->name() + "+ (" + unrolled.name() + v->math().factor(induction) + "))";
+			address = "(unsigned long)(" + v->name() + "+ (" + unrolled.name() + "*" + stop + "))";
 		}
 		else {
-			address = "(unsigned long)(" + v->name() + " + (SPE_start" + v->math().factor(induction) + "))";
+			address = "(unsigned long)(" + v->name() + " + (" + induction + "*" + stop + "))";
 		}
 
 		return	prev.name() + "=" + next.name() + "; \n" +
@@ -537,7 +539,7 @@ public:
 
 class gen_in_first_column: public gen_in_first {
 public:
-	gen_in_first_column(const shared_variable* v, const string& i): gen_in_first(v, i) {}
+	gen_in_first_column(const shared_variable* v, const string& i, const string& s): gen_in_first(v, i, s) {}
 	string dma_in()
 	{
 		dma_list_adaptor list(v);
@@ -564,19 +566,21 @@ public:
 	string class_name() const { return "gen_in_first_column"; }
 };
 
-struct make_gen_in_first: public unary_function<shared_variable*, xformer*>  {
+template <class Xrow, class Xcolumn>
+struct make_choice: public unary_function<shared_variable*, xformer*>  {
 	const string& induction;
-	make_gen_in_first(const string& i): induction(i) {}
+	const string& stop;
+	make_choice(const string& i, const string& s): induction(i), stop(s) {}
 
 	xformer* operator()(shared_variable* v)
 	{
 		xformer* x = NULL;
 
 		if (v->is_row()) {
-			x = new gen_in_first_row(v, induction);
+			x = new Xrow(v, induction, stop);
 		}
 		else if (v->is_column()) {
-			x = new gen_in_first_column(v, induction);
+			x = new Xcolumn(v, induction, stop);
 		}
 		else {
 			throw unitialized_access_orientation();
@@ -670,7 +674,7 @@ public:
 struct gen_in: public unrollable_xformer, public epilogue_xformer {
 	shared_variable* v;
 	string buff_size;
-	gen_in(shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
+	gen_in(shared_variable* v, const string& i, const string& s): unrollable_xformer(i, s), v(v) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
@@ -710,7 +714,7 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer {
 };
 
 struct gen_in_row: public gen_in {
-	gen_in_row(shared_variable* v, const string& i): gen_in(v, i) {}
+	gen_in_row(shared_variable* v, const string& i, const string& s): gen_in(v, i, s) {}
 
 	void set_buff_size()
 	{
@@ -729,7 +733,7 @@ struct gen_in_row: public gen_in {
 		if (!unroll) {
 			buffer_adaptor buff(v);
 
-			return "if (!((" + v->math().lhs().str() + ")%" + buff_size + "))"; 
+			return "if (!((" + induction + ")%" + buff_size + "))"; 
 		}
 		else {
 			return string();
@@ -739,7 +743,7 @@ struct gen_in_row: public gen_in {
 	string inner_if()
 	{
 		if (!unroll) {
-			return "if (" + induction + "+1 < SPE_stop)";
+			return "if (" + induction + "+1 <" + stop + ")";
 		}
 		else {
 			return string();
@@ -750,7 +754,7 @@ struct gen_in_row: public gen_in {
 	{
 		buffer_adaptor buff(v);
 
-		return "(unsigned long)(" + v->name() + "+((" + v->math().lhs().str() + ")+" + buff_size + "))";
+		return "(unsigned long)(" + v->name() + "+((" + v->math().str() + ")+" + buff_size + "))";
 	}
 
 	string dma_in()
@@ -769,14 +773,14 @@ struct gen_in_row: public gen_in {
 };
 
 struct gen_in_column: public gen_in {
-	gen_in_column(shared_variable* v, const string& i): gen_in(v, i) {}
+	gen_in_column(shared_variable* v, const string& i, const string& s): gen_in(v, i, s) {}
 
 	string outer_if()
 	{
 		if (!unroll) {
 			buffer_adaptor buff(v);
 
-			return "if (!((" + v->math().lhs().lhs().str() + ")%" + buff.size() + "))"; 
+			return "if (!((" + induction + ")%" + buff.size() + "))"; 
 		}
 		else {
 			return string();
@@ -788,7 +792,7 @@ struct gen_in_column: public gen_in {
 		if (!unroll) {
 			buffer_adaptor buff(v);
 
-			return "if (" + v->math().lhs().lhs().str() + "+" + buff.size() + "<" + v->dimensions().front() + ")";
+			return "if (" + induction + "+" + buff.size() + "<" + stop + ")";
 		}
 		else {
 			return string();
@@ -799,7 +803,8 @@ struct gen_in_column: public gen_in {
 	{
 		buffer_adaptor buff(v);
 
-		return "(unsigned long)(" + v->name() + "+(" + v->math().lhs().lhs().str() + "+" + buff.size() + ")*" + v->dimensions().back() + "+" + induction + ")";
+		return "(unsigned long)(" + v->name() + "+(" + v->math().lhs().lhs().str() + "+" + buff.size() + ")*" + 
+			v->dimensions().back() + "+" + v->math().rhs().str() + ")";
 	}
 
 	string dma_in()
@@ -829,7 +834,7 @@ struct gen_in_column: public gen_in {
 struct gen_out: public unrollable_xformer, public epilogue_xformer {
 	const shared_variable* v;
 	string buff_size;
-	gen_out(const shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
+	gen_out(const shared_variable* v, const string& i, const string& s): unrollable_xformer(i, s), v(v) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -865,7 +870,7 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer {
 };
 
 struct gen_out_row: public gen_out {
-	gen_out_row(const shared_variable* v, const string& i): gen_out(v, i) {}
+	gen_out_row(const shared_variable* v, const string& i, const string& s): gen_out(v, i, s) {}
 
 	void set_buff_size()
 	{
@@ -882,8 +887,7 @@ struct gen_out_row: public gen_out {
 	string if_statement()
 	{
 		if (!unroll) {
-			buffer_adaptor buff(v);
-			return "if (!(" + v->math().next_iteration(induction) + "%" + buff_size + "))";
+			return "if (!((" + induction + "+1)%" + buff_size + "))";
 		}
 		else {
 			return string();
@@ -893,7 +897,7 @@ struct gen_out_row: public gen_out {
 	string address()
 	{
 		buffer_adaptor buff(v);
-		return "(unsigned long)(" + v->name() + "+" + v->math().next_iteration(induction) + "-" + buff_size + ")";
+		return "(unsigned long)(" + v->name() + "+" + v->math().next_iteration(v->math().rhs().str()) + "-" + buff_size + ")";
 	}
 
 	string dma_out()
@@ -913,13 +917,13 @@ struct gen_out_row: public gen_out {
 };
 
 struct gen_out_column: public gen_out {
-	gen_out_column(const shared_variable* v, const string& i): gen_out(v, i) {}
+	gen_out_column(const shared_variable* v, const string& i, const string& s): gen_out(v, i, s) {}
 
 	string if_statement()
 	{
 		if (!unroll) {
 			buffer_adaptor buff(v);
-			return "if (!((" + v->math().lhs().lhs().str() + "+1)%" + buff.size() + "))";
+			return "if (!((" + induction + "+1)%" + buff.size() + "))";
 		}
 		else {
 			return string();
@@ -966,7 +970,7 @@ struct gen_out_column: public gen_out {
 struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
 	const shared_variable* v;
 	string buff_size;
-	gen_out_final(const shared_variable* v, const string& i): unrollable_xformer(i), v(v) {}
+	gen_out_final(const shared_variable* v, const string& i, const string& s): unrollable_xformer(i, s), v(v) {}
 	string operator()(const string& old)
 	{
 		string ret;
@@ -1004,19 +1008,19 @@ struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
 };
 
 struct gen_out_final_row: public gen_out_final {
-	gen_out_final_row(const shared_variable* v, const string& i): gen_out_final(v, i) {}
+	gen_out_final_row(const shared_variable* v, const string& i, const string& s): gen_out_final(v, i, s) {}
 
 	string if_statement()
 	{
 		buffer_adaptor buff(v);
-		return "if ((((SPE_stop - SPE_start)" + v->math().factor(induction) + ")%" + buff_size + "))";
+		return "if (" + v->dimensions().back() + "%" + buff_size + ")";
 	}
 
 	string address()
 	{
 		buffer_adaptor buff(v);
 		const string factor = v->math().factor(induction);
-		return "(unsigned long)(" + v->name() + "+(SPE_stop" + factor + ")-(((SPE_stop-SPE_start)" + factor + ")%" + buff_size + "))";
+		return "(unsigned long)(" + v->name() + "+((" + induction +"+1)*" + v->dimensions().back() + ")-(" + v->dimensions().back() + "%" + buff_size + "))";
 	}
 
 	string dma_final_out()
@@ -1024,10 +1028,11 @@ struct gen_out_final_row: public gen_out_final {
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 		next_adaptor next(v);
+		const string factor = v->math().factor(induction);
 
 		return "DMA_put(" + orig.name() + "," +
 				address() + ","
-				"sizeof(" + buff.type() + ")*(((SPE_stop-SPE_start)" + v->math().factor(induction) + ")%" + buff_size + ")," +
+				"sizeof(" + buff.type() + ")*(" + v->dimensions().back() + "%" + buff_size + ")," +
 				next.name() + "); \n";
 	}
 
@@ -1036,7 +1041,7 @@ struct gen_out_final_row: public gen_out_final {
 };
 
 struct gen_out_final_column: public gen_out_final {
-	gen_out_final_column(const shared_variable* v, const string& i): gen_out_final(v, i) {}
+	gen_out_final_column(const shared_variable* v, const string& i, const string& s): gen_out_final(v, i, s) {}
 
 	string if_statement()
 	{
