@@ -161,18 +161,8 @@ public:
 	}
 
 	list<string> dimensions() const { return _dimensions; }
+	bool is_flat() const { return _dimensions.size() == 0; }
 };
-
-struct shared_or: public binary_function<bool, bool, const shared_variable*> {
-	bool (shared_variable::*func)() const;
-	shared_or(bool (shared_variable::*f)() const): func(f) {}
-
-	bool operator()(bool init, const shared_variable* v)
-	{
-		return init || (v->*func)();
-	}
-};
-
 
 class reduction_variable: public region_variable {
 public:

@@ -119,10 +119,27 @@ bool is_type(X* t)
 	return dynamic_cast<Test*>(t) != NULL;
 }
 
-template <class I>
-I next(I i)
+template <class I, class C>
+I next(I i, const C& c)
 {
-	return ++i;
+	I nxt = i;
+	++nxt;
+
+	if (nxt != c.end()) {
+		return nxt;
+	}
+
+	return i;
+}
+
+template <class I, class C>
+I previous(I i, const C& c)
+{
+	if (i == c.begin()) {
+		return i;
+	}
+
+	return --i;
 }
 
 template <class Container1, class Container2, class Out, class Comp>
@@ -189,6 +206,42 @@ template <class T, class Container, class Pred>
 bool exists_in(const Container& c, const T& val, Pred p)
 {
 	return find_if(c.begin(), c.end(), boost::bind(p, val, _1)) != c.end();
+}
+
+template <class T>
+struct fn_and: public binary_function<bool, bool, const T*> {
+	bool (T::*func1)() const;
+	bool (T::*func2)() const;
+	fn_and(bool (T::*f1)() const, bool (T::*f2)() const): 
+		func1(f1), func2(f2)
+		{}
+	bool operator()(const T* v) const
+	{
+		return (v->*func1)() && (v->*func2)();
+	}
+};
+
+template <class T>
+fn_and<T> make_fn_and(bool (T::*f1)() const, bool (T::*f2)() const)
+{
+	return fn_and<T>(f1, f2);
+}
+
+template <class T>
+struct acc_or: public binary_function<bool, bool, const T*> {
+	bool (T::*func)() const;
+	acc_or(bool (T::*f)() const): func(f) {}
+
+	bool operator()(bool init, const T* v)
+	{
+		return init || (v->*func)();
+	}
+};
+
+template <class T>
+acc_or<T> make_acc_or(bool (T::*f)() const)
+{
+	return acc_or<T>(f);
 }
 
 template <class T>
