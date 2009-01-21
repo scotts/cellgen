@@ -858,30 +858,21 @@ struct for_compound_op {
 			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(outer), in));
 			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(outer), inout));
 
-			/* TODO: optimization if buffer is same as last dimension?
-			xformerlist lifted;
-			for_all(node.children, make_descend(lift_out_gen_in_rows(lifted)))(node);
-			nested.splice(nested.begin(), lifted);
-
-			xformerlist colinits;
-			for_all(in, make_append_induction_if<gen_in_first_column>(colinits, mem_fn(&shared_variable::is_column), par_induction));
-			for_all(inout, make_append_induction_if<gen_in_first_column>(colinits, mem_fn(&shared_variable::is_column), par_induction));
-			append(nested, colinits);
-			*/
+			// TODO: optimization if buffer is same as last dimension?
 
 			// It's more natural to do this in serial_for_op, at the node for a compound expression. But,
 			// that means this would get called once for each for loop encountered, which generates extra 
 			// xformers.
-			xformerlist& lbrace = node.children.back().children.back().value.xformations;
-			append(lbrace, fmap(make_choice<gen_out_row, gen_out_column>(conds.back()), out));
-			append(lbrace, fmap(make_choice<gen_out_row, gen_out_column>(conds.back()), inout));
+			xformerlist& rbrace = node.children.back().children.back().value.xformations;
+			append(rbrace, fmap(make_choice<gen_out_row, gen_out_column>(conds.back()), out));
+			append(rbrace, fmap(make_choice<gen_out_row, gen_out_column>(conds.back()), inout));
 
 			// This is a hack. I need the induction variable of the outer loop, but the start/stop of the 
 			// inner loop.
 			conditions bridge = conds.back();
 			bridge.induction = outer.induction;
-			append(lbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(bridge), out));
-			append(lbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(bridge), inout));
+			append(rbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(bridge), out));
+			append(rbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(bridge), inout));
 		}
 		else {
 			for_all(node.children, this);
@@ -1105,16 +1096,13 @@ struct parallel_for_op {
 				for_all(condnodes_col, add_xformer_to_node);
 			}
 
-			xformerlist& xformations = node.children.back().value.xformations;
+			xformerlist& rbrace = node.children.back().value.xformations;
+			for_all(out, make_append_conditions_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(inout, make_append_conditions_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(out, make_append_conditions_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(inout, make_append_conditions_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
 
-			xformerlist rows;
-			for_all(out, make_append_conditions_if<gen_out_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_conditions_if<gen_out_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(out, make_append_conditions_if<gen_out_final_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_conditions_if<gen_out_final_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			append(xformations, rows);
-
-			xformations.push_back(new total_timer_stop());
+			rbrace.push_back(new total_timer_stop());
 		}
 		else {
 			for_all(node.children, this);
@@ -1733,11 +1721,9 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
-			xformerlist rows;
-			for_all(in, make_append_conditions_if<gen_in_first_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			for_all(in, make_append_conditions_if<gen_in_first_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			for_all(inout, make_append_conditions_if<gen_in_first_row>(rows, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			append(front, rows);
+			for_all(in, make_append_conditions_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			for_all(in, make_append_conditions_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			for_all(inout, make_append_conditions_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
 
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
 			append(front, fmap(make_xformer<reduction_declare, reduction_variable>(), reductions));
