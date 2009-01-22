@@ -73,7 +73,7 @@ struct conditions {
 		start(_start), stop(_stop), induction(_induction)
 		{}
 };
-typedef list<conditions> conditionslist;
+typedef list<conditions> condslist;
 
 class conditions_xformer: virtual public xformer {
 protected:
@@ -93,11 +93,11 @@ struct make_conditions: public unary_function<const shared_variable*, xformer*> 
 };
 
 template <class X, class P>
-struct append_conditions_if: public unary_function<const shared_variable*, void> {
+struct append_if: public unary_function<const shared_variable*, void> {
 	xformerlist& lst;
 	P pred;
 	const conditions& conds;
-	append_conditions_if(xformerlist& l, P p, const conditions& c): lst(l), pred(p), conds(c) {}
+	append_if(xformerlist& l, P p, const conditions& c): lst(l), pred(p), conds(c) {}
 
 	void operator()(const shared_variable* v)
 	{
@@ -108,9 +108,9 @@ struct append_conditions_if: public unary_function<const shared_variable*, void>
 };
 
 template <class X, class P>
-append_conditions_if<X, P> make_append_conditions_if(xformerlist& lst, P pred, const conditions& conds)
+append_if<X, P> make_append_if(xformerlist& lst, P pred, const conditions& conds)
 {
-	return append_conditions_if<X, P>(lst, pred, conds);
+	return append_if<X, P>(lst, pred, conds);
 }
 
 const int NO_UNROLL = 0;
@@ -152,9 +152,9 @@ struct nop: public xformer {
 
 class row_buffer_space: virtual public xformer, public epilogue_xformer {
 	const shared_variable* v;
-	const string induction;
+	const add_expr math;
 public:
-	row_buffer_space(const shared_variable* v, const string& i): v(v), induction(i) {}
+	row_buffer_space(const shared_variable* v, const add_expr& m): v(v), math(m) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -168,7 +168,7 @@ public:
 			buff_size = buff.size();
 		}
 
-		return old + orig.name() + "[(" + induction + ")%" + buff_size + "]";
+		return old + orig.name() + "[(" + math.str() + ")%" + buff_size + "]";
 	}
 
 	xformer* clone() const { return new row_buffer_space(*this); }
@@ -177,15 +177,15 @@ public:
 
 class column_buffer_space: public xformer {
 	const shared_variable* v;
-	const string induction;
+	const add_expr math;
 public:
-	column_buffer_space(const shared_variable* v, const string& i): v(v), induction(i) {}
+	column_buffer_space(const shared_variable* v, const add_expr& m): v(v), math(m) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		return old + orig.name() + "[(" + induction + ")%" + buff.size() + "]";
+		return old + orig.name() + "[(" + math.str() + ")%" + buff.size() + "]";
 	}
 
 	xformer* clone() const { return new column_buffer_space(*this); }
@@ -520,7 +520,7 @@ public:
 		next_adaptor next(v);
 		orig_adaptor orig(v);
 		string initial;
-		string stride = "1";
+		string stride;
 		string address;
 		string buff_size;
 
@@ -532,15 +532,20 @@ public:
 		}
 
 		if (!v->is_flat()) {
-			initial = conds.induction + "*";
-			stride = v->dimensions().back();
+			initial = conds.induction;
+			stride = "*" + v->dimensions().back();
 		}
 		else {
-			stride = conds.start;
+			initial = conds.start;
+
+			const string factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+			if (factor != "") {
+				stride = "*" + factor;
+			}
 		}
 
 		if (unroll) {
-			initial = unrolled.name() + "*";
+			stride = "*" + unrolled.name();
 		}
 
 		address = "(unsigned long)(" + v->name() + " + (" + initial + stride + "))";
@@ -751,9 +756,7 @@ struct gen_in_row: public gen_in {
 	string outer_if()
 	{
 		if (!unroll) {
-			buffer_adaptor buff(v);
-
-			return "if (!((" + conds.induction + ")%" + buff_size + "))"; 
+			return "if (!((" + v->math().ihs(conds.induction).str() + ")%" + buff_size + "))"; 
 		}
 		else {
 			return string();
@@ -763,7 +766,7 @@ struct gen_in_row: public gen_in {
 	string inner_if()
 	{
 		if (!unroll) {
-			return "if (" + conds.induction + "+1 <" + conds.stop + ")";
+			return "if (" + conds.induction + "+1<" + conds.stop + ")";
 		}
 		else {
 			return string();
@@ -772,9 +775,7 @@ struct gen_in_row: public gen_in {
 
 	string address()
 	{
-		buffer_adaptor buff(v);
-
-		return "(unsigned long)(" + v->name() + "+((" + v->math().str() + ")+" + buff_size + "))";
+		return "(unsigned long)(" + v->name() + "+((" + v->math().ihs(conds.induction).str() + ")+" + buff_size + "))";
 	}
 
 	string dma_in()
@@ -907,7 +908,7 @@ struct gen_out_row: public gen_out {
 	string if_statement()
 	{
 		if (!unroll) {
-			return "if (!((" + conds.induction + "+1)%" + buff_size + "))";
+			return "if (!((" + v->math().next_iteration(conds.induction) + ")%" + buff_size + "))";
 		}
 		else {
 			return string();
@@ -1031,10 +1032,19 @@ struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
 struct gen_out_final_row: public gen_out_final {
 	gen_out_final_row(const shared_variable* v, const conditions& c): gen_out_final(v, c) {}
 
+	string factor()
+	{
+		string s = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+		if (s != "") {
+			s = "*" + s;
+		}
+
+		return s;
+	}
+
 	string if_statement()
 	{
-		buffer_adaptor buff(v);
-		return "if ((" + conds.stop + "-" + conds.start + ")%" + buff_size + ")";
+		return "if (((" + conds.stop + "-" + conds.start + ")" + factor() + ")%" + buff_size + ")";
 	}
 
 	string address()
@@ -1044,8 +1054,8 @@ struct gen_out_final_row: public gen_out_final {
 			offset = conds.induction + "*" + v->dimensions().back() + "+";
 		}
 
-		return "(unsigned long)(" + v->name() + "+((" + offset + 
-			"(" + conds.stop + "-" + conds.start + ")-((" + conds.stop + "-" + conds.start + ")%" + buff_size + "))))";
+		return "(unsigned long)(" + v->name() + "+" + offset + 
+			"(" + conds.stop + factor() + ")-(((" + conds.stop + "-" + conds.start + ")" + factor() + ")%" + buff_size + "))";
 	}
 
 	string dma_final_out()
@@ -1053,11 +1063,10 @@ struct gen_out_final_row: public gen_out_final {
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 		next_adaptor next(v);
-		const string factor = v->math().factor(conds.induction);
 
 		return "DMA_put(" + orig.name() + "," +
 				address() + ","
-				"sizeof(" + buff.type() + ")*((" + conds.stop + "-" + conds.start + ")%" + buff_size + ")," +
+				"sizeof(" + buff.type() + ")*(((" + conds.stop + "-" + conds.start + ")" + factor() + ")%" + buff_size + ")," +
 				next.name() + "); \n";
 	}
 

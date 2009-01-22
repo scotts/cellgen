@@ -209,7 +209,7 @@ bool exists_in(const Container& c, const T& val, Pred p)
 }
 
 template <class T>
-struct fn_and: public binary_function<bool, bool, const T*> {
+struct fn_and: public unary_function<bool, const T*> {
 	bool (T::*func1)() const;
 	bool (T::*func2)() const;
 	fn_and(bool (T::*f1)() const, bool (T::*f2)() const): 

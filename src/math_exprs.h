@@ -39,6 +39,8 @@ class mult_expr {
 	string _op;
 	paren_expr _rhs;
 
+	paren_expr side(const string& ivar, const paren_expr* l, const paren_expr* r) const;
+
 public:
 	mult_expr() {}
 	mult_expr(const string& l): _lhs(l) {}
@@ -62,11 +64,12 @@ public:
 	void build_lhs(const string& s) { _lhs += s; }
 	void build_rhs(const string& s) { _rhs += s; }
 
+	paren_expr ihs(const string& ivar) const;
+	paren_expr non_ihs(const string& ivar) const;
+
 	string str() const;
 	string next_iteration(const string& ivar) const;
-	string factor(const string& ivar) const;
 
-	operations factor_cost() const;
 	operations cost() const;
 };
 
@@ -74,6 +77,8 @@ class add_expr {
 	mult_expr _lhs;
 	string _op;
 	mult_expr _rhs;
+
+	mult_expr side(const string& ivar, const mult_expr* l, const mult_expr* r) const;
 	
 public:
 	add_expr() {}
@@ -90,11 +95,12 @@ public:
 	string op() const	{ return _op; }
 	mult_expr rhs() const	{ return _rhs; }
 
+	mult_expr ihs(const string& ivar) const;
+	mult_expr non_ihs(const string& ivar) const;
+
 	string str() const;
 	string next_iteration(const string& ivar) const;
-	string factor(const string& ivar) const;
 
-	operations factor_cost(const string& ivar) const;
 	operations cost() const;
 };
 

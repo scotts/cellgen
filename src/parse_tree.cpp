@@ -199,13 +199,13 @@ bool induction_equal(const string& induction, const conditions& c)
 }
 
 struct array_mult_op {
-	const conditionslist& conds;
+	const condslist& conds;
 	bool& found_induction;
 	mult_expr& mult;
 	string& id;
 	bool found_op;
 
-	array_mult_op(const conditionslist& c, bool& found, mult_expr& m, string& i):
+	array_mult_op(const condslist& c, bool& found, mult_expr& m, string& i):
 		conds(c), found_induction(found), mult(m), id(i), found_op(false)
 		{}
 	void operator()(ast_node& node)
@@ -251,12 +251,12 @@ struct array_mult_op {
 };
 
 struct array_add_op {
-	const conditionslist& conds;
+	const condslist& conds;
 	bool& found_induction;
 	add_expr& add;
 	bool found_op;
 
-	array_add_op(const conditionslist& c, bool& found, add_expr& a):
+	array_add_op(const condslist& c, bool& found, add_expr& a):
 		conds(c), found_induction(found), add(a), found_op(false)
 		{}
 	void operator()(ast_node& node)
@@ -298,12 +298,12 @@ struct array_add_op {
 };
 
 struct array_op {
-	const conditionslist& conds;
+	const condslist& conds;
 	bool& found_induction;
 	add_expr& add;
 	mult_expr lmult;
 
-	array_op(const conditionslist& c, bool& found, add_expr& a):
+	array_op(const condslist& c, bool& found, add_expr& a):
 		conds(c), found_induction(found), add(a)
 		{}
 	void operator()(ast_node& node)
@@ -343,7 +343,7 @@ struct array_op {
 struct postfix_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	const conditionslist& conds;
+	const condslist& conds;
 	sharedset& vars;
 	bool found_induction;
 	bool found_shared;
@@ -352,7 +352,7 @@ struct postfix_op {
 	private_variable* priv_var;
 	list<add_expr> accesses;
 	
-	postfix_op(const shared_symtbl& s, const priv_symtbl& p, const conditionslist& c, sharedset& v):
+	postfix_op(const shared_symtbl& s, const priv_symtbl& p, const condslist& c, sharedset& v):
 		shared_symbols(s), priv_symbols(p), conds(c), vars(v), 
 		found_induction(false), found_shared(false), found_private(false), shared_var(NULL), priv_var(NULL)
 		{}
@@ -407,7 +407,7 @@ struct struct_access_search {
 class shared_variable_double_orientation {};
 
 variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-		operations& ops, const conditionslist& conds, sharedset& vars)
+		operations& ops, const condslist& conds, sharedset& vars)
 {
 	postfix_op o(shared_symbols, priv_symbols, conds, vars);
 	for_all(node.children, &o);
@@ -415,6 +415,9 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = make_add_expr(o.shared_var->dimensions(), o.accesses);
+		//add_expr add = o.accesses.back();
+		//cout << add.str() << endl;
+		o.shared_var->math(add);
 
 		// Column or row access?
 		if (o.accesses.back().str().find(conds.back().induction) != string::npos) {
@@ -423,7 +426,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			}
 
 			o.shared_var->row();
-			node.value.xformations.push_back(new row_buffer_space(o.shared_var, conds.back().induction)); 
+			node.value.xformations.push_back(new row_buffer_space(o.shared_var, add)); 
 		}
 		else {
 			if (o.shared_var->is_row()) {
@@ -431,10 +434,8 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			}
 
 			o.shared_var->column();
-			node.value.xformations.push_back(new column_buffer_space(o.shared_var, conds.back().induction)); 
+			node.value.xformations.push_back(new column_buffer_space(o.shared_var, add)); 
 		}
-
-		o.shared_var->math(add);
 		
 		// The *_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
@@ -512,12 +513,12 @@ struct multiplicative_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
-	const conditionslist& conds;
+	const condslist& conds;
 	sharedset& vars;
 	const var_symtbl& locals;
 	variable_type type;
 	op_type op;
-	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const conditionslist& c, sharedset& v, const var_symtbl& l):
+	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const condslist& c, sharedset& v, const var_symtbl& l):
 		shared_symbols(s), priv_symbols(p), ops(o), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
@@ -553,12 +554,12 @@ struct additive_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
-	const conditionslist& conds;
+	const condslist& conds;
 	sharedset& vars;
 	const var_symtbl& locals;
 	variable_type type;
 	op_type op;
-	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const conditionslist& c, sharedset& v, const var_symtbl& l):
+	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const condslist& c, sharedset& v, const var_symtbl& l):
 		shared_symbols(s), priv_symbols(p), ops(o), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
@@ -595,10 +596,10 @@ struct assignment_split {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
-	const conditionslist& conds;
+	const condslist& conds;
 	sharedset& vars;
 	const var_symtbl& locals;
-	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, const conditionslist& c, sharedset& v, const var_symtbl& l):
+	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, const condslist& c, sharedset& v, const var_symtbl& l):
 		shared_symbols(s), priv_symbols(p), ops(o), conds(c), vars(v), locals(l)
 		{}
 	void operator()(ast_node& node)
@@ -625,11 +626,11 @@ struct assignment_search {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
-	const conditionslist& conds;
+	const condslist& conds;
 	sharedset& out;
 	const var_symtbl& locals;
 	sharedset in;
-	assignment_search(const shared_symtbl& s, const priv_symtbl& p, operations& op, const conditionslist& c, sharedset& o, const var_symtbl& l):
+	assignment_search(const shared_symtbl& s, const priv_symtbl& p, operations& op, const condslist& c, sharedset& o, const var_symtbl& l):
 		shared_symbols(s), priv_symbols(p), ops(op), conds(c), out(o), locals(l)
 		{}
 	void operator()(ast_node& node)
@@ -676,7 +677,7 @@ struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
-	conditionslist& conds;
+	condslist& conds;
 	bind_xformer& condnodes;
 	const int unroll;
 	sharedset in;
@@ -685,7 +686,7 @@ struct serial_for_op {
 	conditions sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, conditionslist& c, bind_xformer& n, const int u):
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, condslist& c, bind_xformer& n, const int u):
 		shared_symbols(s), priv_symbols(p), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
@@ -727,11 +728,11 @@ struct declaration_op {
 	const priv_symtbl& priv_symbols;
 	var_symtbl& locals;
 	operations& ops;
-	const conditionslist& conds;
+	const condslist& conds;
 	sharedset in;
 	string type;
 
-	declaration_op(const shared_symtbl& s, const priv_symtbl& p, var_symtbl& l, operations& o, const conditionslist& c):
+	declaration_op(const shared_symtbl& s, const priv_symtbl& p, var_symtbl& l, operations& o, const condslist& c):
 		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c)
 		{}
 	void operator()(ast_node& node)
@@ -786,7 +787,7 @@ struct for_compound_op {
 	sharedset& out;
 	sharedset& inout;
 	operations& ops;
-	conditionslist& conds;
+	condslist& conds;
 	bind_xformer& condnodes;
 	const int unroll;
 	const string par_induction;
@@ -794,7 +795,7 @@ struct for_compound_op {
 	var_symtbl locals;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
-			operations& op, conditionslist& c, bind_xformer& n, const int u): 
+			operations& op, condslist& c, bind_xformer& n, const int u): 
 		shared_symbols(s), priv_symbols(p), lazy_in(li), pre_out(po), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), 
 		unroll(u), par_induction(c.front().induction)
 		{}
@@ -1051,11 +1052,11 @@ struct parallel_for_op {
 	sharedset& out;
 	sharedset& inout;
 	operations& ops;
-	conditionslist& conds;
+	condslist& conds;
 	bind_xformer& condnodes;
 	int unroll;
 	conditions parconds;
-	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, conditionslist& c, bind_xformer& n, int u): 
+	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
 		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), unroll(u)
 		{}
 	void operator()(ast_node& node)
@@ -1097,10 +1098,10 @@ struct parallel_for_op {
 			}
 
 			xformerlist& rbrace = node.children.back().value.xformations;
-			for_all(out, make_append_conditions_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_conditions_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(out, make_append_conditions_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_conditions_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(out, make_append_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(inout, make_append_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(out, make_append_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(inout, make_append_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
 
 			rbrace.push_back(new total_timer_stop());
 		}
@@ -1343,13 +1344,6 @@ struct unroll_for_op {
 			}
 
 			// Columns already have a gen_in_first.
-			/*
-			xformerlist rows;
-			for_all(in, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
-			for_all(inout, make_append_induction_if<gen_in_first_row>(rows, mem_fn(&shared_variable::is_row), induction));
-			append(last.value.xformations, rows);
-			*/
-
 			ast_node& last = node.children.back();
 			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(conditions("", induction, stop)), in));
 			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(conditions("", induction, stop)), inout));
@@ -1370,10 +1364,10 @@ struct compound {
 	sharedset& out;
 	sharedset& inout;
 	operations& ops;
-	conditionslist& conds;
+	condslist& conds;
 	bind_xformer& condnodes;
 	int unroll;
-	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, conditionslist& c, bind_xformer& n, int u): 
+	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
 		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), unroll(u)
 		{}
 	void operator()(ast_node& node)
@@ -1414,8 +1408,8 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	void operator()(shared_variable* v)
 	{
 		if (max) {
-			int max_int = from_string<int>(remove_multop(max->math().factor(induction))); 
-			int prov = from_string<int>(remove_multop(v->math().factor(induction)));
+			int max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
+			int prov = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
 			if (max_int < prov) {
 				max = v;
 			}
@@ -1616,24 +1610,18 @@ struct cell_region {
 			const bool dma_unroll = (*region)->dma_unroll();
 
 			// Assumption: one parallel induction variable.
-			conditionslist conds;
+			condslist conds;
 			bind_xformer condnodes_row;
 			operations iteration;
 			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, conds, condnodes_row, unroll);
 			for_all(node.children, &o);
-
-			const string& par_start = conds.front().start;
-			const string& par_stop = conds.front().stop;
-			const string& par_induction = conds.front().induction;
-			const string& serial_induction = conds.back().induction;
-			const string& serial_start = conds.back().start;
-			const string& serial_stop = conds.back().stop;
 
 			for_all(priv, assign_depth(1));
 			for_all(in, assign_depth(2));
 			for_all(out, assign_depth(2));
 			for_all(inout, assign_depth(3));
 
+			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
 
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
@@ -1671,7 +1659,11 @@ struct cell_region {
 			const bool column = accumulate_all(shared, false, make_acc_or(&shared_variable::is_column));
 			const bool row = accumulate_all(shared, false, make_acc_or(&shared_variable::is_row));
 			if (unroll) {
+				const string& serial_induction = conds.back().induction;
+				const string& serial_start = conds.back().start;
+				const string& serial_stop = conds.back().stop;
 				string unroll_induction;
+
 				pair<ast_node*, ast_node::tree_iterator> pos;
 				if (column && row) {
 					throw user_error("unroll requested when shared variables have both row and column access.");
@@ -1715,15 +1707,17 @@ struct cell_region {
 			front.push_back(new compute_bounds((for_all(shared, max_buffer(par_induction)).max)));
 
 			if (unroll && row) {
+				const string& par_start = conds.front().start;
+				const string& par_stop = conds.front().stop;
+
 				front.push_back(new define_unroll_boundaries(par_start, par_stop, unroll));
 			}
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
-			for_all(in, make_append_conditions_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			for_all(in, make_append_conditions_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			for_all(inout, make_append_conditions_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			for_all(in, make_append_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			for_all(inout, make_append_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
 
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
 			append(front, fmap(make_xformer<reduction_declare, reduction_variable>(), reductions));

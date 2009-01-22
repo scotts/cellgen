@@ -137,35 +137,30 @@ string mult_expr::next_iteration(const string& ivar) const
 
 class ivar_not_found: public exception {};
 
-string mult_expr::factor(const string& ivar) const
+paren_expr mult_expr::side(const string& ivar, const paren_expr* left_result, const paren_expr* right_result) const
 {
-	//cout << "\tmult_expr::factor(): " << _lhs.str() << endl;
+	const paren_expr* p = NULL;
 	if (_lhs.str().find(ivar) != string::npos) {
-		return _op + _rhs.str();
+		p = left_result;
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		return _op + _lhs.str();
+		p = right_result;
 	}
 	else {
-		// See comment in add_expr::factor().
-		return "";
+		throw ivar_not_found();
 	}
+
+	return *p;
 }
 
-operations mult_expr::factor_cost() const
+paren_expr mult_expr::ihs(const string& ivar) const
 {
-	operations ops;
-	if (_op == "*") {
-		ops.inc_mul(INT);
-	}
-	else if (_op == "/") {
-		ops.inc_div(INT);
-	}
-	else if (_op == "%") {
-		ops.inc_mod(INT);
-	}
+	return side(ivar, &_lhs, &_rhs);
+}
 
-	return ops;
+paren_expr mult_expr::non_ihs(const string& ivar) const
+{
+	return side(ivar, &_rhs, &_lhs);
 }
 
 operations mult_expr::cost() const
@@ -200,47 +195,40 @@ string add_expr::str() const
 string add_expr::next_iteration(const string& ivar) const
 {
 	if (_lhs.str().find(ivar) != string::npos) {
-		return _lhs.next_iteration(ivar) + _op + _rhs.str();
+		return _lhs.next_iteration(ivar);
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		return _lhs.str() + _op + _rhs.next_iteration(ivar);
+		return _rhs.next_iteration(ivar);
 	}
 	else {
-		// Design decision: we're saying it's nonsense to ask 
-		// for the "next iteration" when the induction variable 
-		// is not in the expression.
 		throw ivar_not_found();
 	}
 }
 
-string add_expr::factor(const string& ivar) const
+mult_expr add_expr::side(const string& ivar, const mult_expr* left_result, const mult_expr* right_result) const
 {
-	//cout << "\tadd_expr::factor(): lhs " << _lhs.str() << ", rhs " << _rhs.str() << ", ivar " << ivar << endl;
+	const mult_expr* m = NULL;
 	if (_lhs.str().find(ivar) != string::npos) {
-		return _lhs.factor(ivar);
+		m = left_result;
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		return _rhs.factor(ivar);
+		m = right_result;
 	}
 	else {
-		// Design decision: we're saying it's valid to call 
-		// factor() on an expression without an induction variable.
-		return "";
+		throw ivar_not_found();
 	}
+
+	return *m;
 }
 
-operations add_expr::factor_cost(const string& ivar) const
+mult_expr add_expr::ihs(const string& ivar) const
 {
-	operations ops;
+	return side(ivar, &_lhs, &_rhs);
+}
 
-	if (_lhs.str().find(ivar) != string::npos) {
-		ops = _lhs.factor_cost();
-	}
-	else if (_rhs.str().find(ivar) != string::npos) {
-		ops = _rhs.factor_cost();
-	}
-
-	return ops;
+mult_expr add_expr::non_ihs(const string& ivar) const
+{
+	return side(ivar, &_rhs, &_lhs);
 }
 
 operations add_expr::cost() const
