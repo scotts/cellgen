@@ -150,11 +150,18 @@ struct nop: public xformer {
 	string class_name() const { return "nop"; }
 };
 
-class row_buffer_space: virtual public xformer, public epilogue_xformer {
+class to_buffer_space: virtual public xformer {
+protected:
 	const shared_variable* v;
+
+public:
+	to_buffer_space(const shared_variable* _v): v(_v) {}
+};
+
+class flat_buffer_space: virtual public to_buffer_space, public epilogue_xformer {
 	const add_expr math;
 public:
-	row_buffer_space(const shared_variable* v, const add_expr& m): v(v), math(m) {}
+	flat_buffer_space(const shared_variable* v, const add_expr& m): to_buffer_space(v), math(m) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -171,25 +178,24 @@ public:
 		return old + orig.name() + "[(" + math.str() + ")%" + buff_size + "]";
 	}
 
-	xformer* clone() const { return new row_buffer_space(*this); }
-	string class_name() const { return "row_buffer_space"; }
+	xformer* clone() const { return new flat_buffer_space(*this); }
+	string class_name() const { return "flat_buffer_space"; }
 };
 
-class column_buffer_space: public xformer {
-	const shared_variable* v;
-	const add_expr math;
+class multi_buffer_space: public to_buffer_space {
+	const string induction;
 public:
-	column_buffer_space(const shared_variable* v, const add_expr& m): v(v), math(m) {}
+	multi_buffer_space(const shared_variable* v, const string& i): to_buffer_space(v), induction(i) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		return old + orig.name() + "[(" + math.str() + ")%" + buff.size() + "]";
+		return old + orig.name() + "[(" + induction + ")%" + buff.size() + "]";
 	}
 
-	xformer* clone() const { return new column_buffer_space(*this); }
-	string class_name() const { return "column_buffer_space"; }
+	xformer* clone() const { return new multi_buffer_space(*this); }
+	string class_name() const { return "multi_buffer_space"; }
 };
 
 class total_timer_start: public xformer {
@@ -469,6 +475,224 @@ public:
 	string class_name() const { return "define_buffer"; }
 };
 
+class base_access {
+protected:
+	const shared_variable* v;
+	const conditions conds;
+
+public:
+	base_access(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
+	virtual ~base_access() {}
+	
+	virtual string iteration() = 0;
+	virtual string next_iteration() = 0;
+	virtual string access() = 0;
+	virtual string next_access() = 0;
+	virtual string first_access() = 0;
+	virtual string final_access() = 0;
+	virtual string dma_in(const string& address) = 0;
+	virtual string dma_out(const string& address) = 0;
+};
+
+class row_access: public base_access {
+public:
+	row_access(const shared_variable* v, const conditions& c): base_access(v, c) {}
+
+	string iteration()
+	{
+		return v->math().ihs(conds.induction).str();
+	}
+
+	string next_iteration()
+	{
+		return v->math().next_iteration(conds.induction);
+	}
+
+	string access()
+	{
+		string a;
+		if (v->is_flat()) {
+			a = iteration(); 
+		}
+		else {
+			a = v->math().str();
+		}
+
+		return a;
+	}
+
+	string next_access()
+	{
+		string a;
+		if (v->is_flat()) {
+			a = next_iteration(); 
+		}
+		else {
+			a = v->math().str() + "+1";
+		}
+
+		return a;
+	}
+
+	string first_access()
+	{
+		string initial;
+		string stride;
+
+		if (!v->is_flat()) {
+			initial = conds.induction;
+			stride = "*" + v->dimensions().back();
+		}
+		else {
+			initial = conds.start;
+
+			const string factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+			if (factor != "") {
+				stride = "*" + factor;
+			}
+		}
+
+		return initial + stride;
+	}
+
+	string factor()
+	{
+		string s = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+		if (s != "") {
+			s = "*" + s;
+		}
+
+		return s;
+	}
+
+	string final_access()
+	{
+		buffer_adaptor buff(v);
+
+		string offset;
+		if (!v->is_flat()) {
+			offset = conds.induction + "*" + v->dimensions().back() + "+";
+		}
+
+		return offset + "(" + conds.stop + factor() + ")-(((" + conds.stop + "-" + conds.start + ")" + factor() + ")%" + buff.size() + ")";
+	}
+
+	string dma_in(const string& address)
+	{
+		buffer_adaptor buff(v);
+		next_adaptor next(v);
+
+		return "DMA_get(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+				address + ","
+				"sizeof(" + buff.type() + ") *" + buff.size() + "," +
+				next.name() + ");\n";
+	}
+
+	string dma_out(const string& address)
+	{
+		buffer_adaptor buff(v);
+		orig_adaptor orig(v);
+		next_adaptor next(v);
+
+		return "DMA_put(" + orig.name() + "," + 
+				address + "," +
+				"sizeof(" + buff.type() + ")*" + buff.size() + "," +
+				next.name() + "); \n";
+	}
+};
+
+class column_access: public base_access {
+public:
+	column_access(const shared_variable* v, const conditions& c): base_access(v, c) {}
+
+	string iteration()
+	{
+		return conds.induction;
+	}
+
+	string next_iteration()
+	{
+		return iteration() + "+1";
+	}
+
+	string access()
+	{
+		buffer_adaptor buff(v);
+
+		return "(" + v->math().lhs().lhs().str() + "+" + buff.size() + ")*" + 
+			v->dimensions().back() + "+" + v->math().rhs().str() + ")";
+	}
+
+	string next_access()
+	{
+		buffer_adaptor buff(v);
+		return "(" + v->math().lhs().lhs().str() + "+1-" + buff.size() + ")*" + 
+			v->dimensions().back() + "+" + conds.induction + ")";
+	}
+
+	string first_access()
+	{
+		return conds.induction;
+	}
+
+	string final_access()
+	{
+		buffer_adaptor buff(v);
+		const string dim1 = v->dimensions().front();
+		const string dim2 = v->dimensions().back();
+
+		return "((" + dim1 + "-(" + dim1 + "%" + buff.size() + "))*" + dim2 + ")+" + conds.induction;
+	}
+
+	string dma_in(const string& address)
+	{
+		dma_list_adaptor list(v);
+		buffer_adaptor buff(v);
+		next_adaptor next(v);
+
+		return	"add_to_dma_list(&" + list.name(next.name()) + "," + 
+				buff.size() + "," +
+				address + ","
+				"sizeof(" + buff.type() + "), " + 
+				v->dimensions().back() + "* sizeof(" + buff.type() + "),"
+				"1); \n" +
+			"DMA_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+				address + "," +
+				"&" + list.name(next.name()) + "," + 
+				next.name() + ","
+				"1," +
+				"sizeof(" + buff.type() + ")); \n";
+	}
+
+	string dma_out(const string& address)
+	{
+		dma_list_adaptor list(v);
+		buffer_adaptor buff(v);
+		next_adaptor next(v);
+		orig_adaptor orig(v);
+		string make_list;
+		const string depth = to_string(v->depth());
+
+		if (v->depth() < 3) {
+			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + depth + "-1))%" + depth) + "," + 
+					buff.size() + "," +
+					address + ","
+					"sizeof(" + buff.type() + "), " + 
+					v->dimensions().back() + "* sizeof(" + buff.type() + "),"
+					"1); \n";
+		}
+
+		return 	make_list + 
+			"DMA_putl(" + orig.name() + "," +
+				address + "," +
+				"&" + list.name("(" + next.name() + "+(" + depth + "-1))%" + depth) + "," + 
+				"(" + next.name() + "+(" + depth + "-1))%" + depth + ","
+				"1," +
+				"sizeof(" + buff.type() + ")); \n";
+	}
+};
+
+/*
 class gen_in_first: public unrollable_xformer, public epilogue_xformer {
 protected:
 	const shared_variable* v;
@@ -590,6 +814,27 @@ public:
 
 	xformer* clone() const { return new gen_in_first_column(*this); }
 	string class_name() const { return "gen_in_first_column"; }
+};
+*/
+
+template <class Access>
+class gen_in_first: public unrollable_xformer, public epilogue_xformer, public Access {
+public:
+	gen_in_first(const shared_variable* v, const conditions& c): unrollable_xformer(c), Access(v, c) {}
+	string operator()(const string& old)
+	{
+		next_adaptor next(Access::v);
+		buffer_adaptor buff(Access::v);
+		orig_adaptor orig(Access::v);
+
+		return old + 
+			"cellgen_dma_prep_start(); \n" + 
+			dma_in("(unsigned long)(" + Access::v->name() + " + (" + Access::first_access() + "))") + 
+			"cellgen_dma_prep_stop(); \n";
+	}
+
+	xformer* clone() const { return new gen_in_first<Access>(*this); }
+	string class_name() const { return "gen_in_first<Access>"; }
 };
 
 template <class Xrow, class Xcolumn>
@@ -775,7 +1020,15 @@ struct gen_in_row: public gen_in {
 
 	string address()
 	{
-		return "(unsigned long)(" + v->name() + "+((" + v->math().ihs(conds.induction).str() + ")+" + buff_size + "))";
+		string access;
+		if (v->is_flat()) {
+			access = v->math().ihs(conds.induction).str(); 
+		}
+		else {
+			access = v->math().str();
+		}
+
+		return "(unsigned long)(" + v->name() + "+((" + access + ")+" + buff_size + "))";
 	}
 
 	string dma_in()
@@ -917,8 +1170,15 @@ struct gen_out_row: public gen_out {
 
 	string address()
 	{
-		buffer_adaptor buff(v);
-		return "(unsigned long)(" + v->name() + "+" + v->math().next_iteration(conds.induction) + "-" + buff_size + ")";
+		string access;
+		if (v->is_flat()) {
+			access = v->math().next_iteration(conds.induction); 
+		}
+		else {
+			access = v->math().str() + "+1";
+		}
+
+		return "(unsigned long)(" + v->name() + "+" + access + "-" + buff_size + ")";
 	}
 
 	string dma_out()

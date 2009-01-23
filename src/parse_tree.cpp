@@ -426,7 +426,6 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			}
 
 			o.shared_var->row();
-			node.value.xformations.push_back(new row_buffer_space(o.shared_var, add)); 
 		}
 		else {
 			if (o.shared_var->is_row()) {
@@ -434,9 +433,15 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			}
 
 			o.shared_var->column();
-			node.value.xformations.push_back(new column_buffer_space(o.shared_var, add)); 
 		}
 		
+		if (o.shared_var->is_flat()) {
+			node.value.xformations.push_back(new flat_buffer_space(o.shared_var, add));
+		}
+		else {
+			node.value.xformations.push_back(new multi_buffer_space(o.shared_var, conds.back().induction));
+		}
+
 		// The *_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
 		struct_access_search search;
@@ -856,8 +861,12 @@ struct for_compound_op {
 
 			xformerlist& nested = node.value.xformations;
 			const conditions& outer = *previous(previous(conds.end(), conds), conds);
+			/*
 			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(outer), in));
 			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(outer), inout));
+			*/
+			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), in));
+			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), inout));
 
 			// TODO: optimization if buffer is same as last dimension?
 
@@ -1345,8 +1354,12 @@ struct unroll_for_op {
 
 			// Columns already have a gen_in_first.
 			ast_node& last = node.children.back();
+			/*
 			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(conditions("", induction, stop)), in));
 			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(conditions("", induction, stop)), inout));
+			*/
+			append(last.value.xformations, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(conditions("", induction, stop)), in));
+			append(last.value.xformations, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(conditions("", induction, stop)), inout));
 
 			descend<epilogue_all>()(last);
 			make_descend(unroll_all(unroll))(node);
@@ -1716,8 +1729,12 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
+			/*
 			for_all(in, make_append_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
 			for_all(inout, make_append_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			*/
+			for_all(in, make_append_if<gen_in_first<row_access> >(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			for_all(inout, make_append_if<gen_in_first<row_access> >(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
 
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
 			append(front, fmap(make_xformer<reduction_declare, reduction_variable>(), reductions));
