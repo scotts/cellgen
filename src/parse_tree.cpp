@@ -660,13 +660,7 @@ struct assignment_search {
 	}
 };
 
-struct less_gen_in {
-	bool operator()(const gen_in* a, const gen_in* b)
-	{
-		return (a->v) < (b->v);
-	}
-};
-typedef map<gen_in*, ast_node*, less_gen_in> bind_gen_in;
+typedef map<conditions_xformer*, ast_node*> bind_condxformer;
 
 template <class T>
 struct erase_from_set: unary_function<T, void> {
@@ -766,7 +760,8 @@ struct extract_gen_in_rows {
 
 	void operator()(xformer* x)
 	{
-		if (is_type<gen_in_row>(x)) {
+		//if (is_type<gen_in_row>(x)) {
+		if (is_type<gen_in<row_access> >(x)) {
 			lifted.push_back(x);
 		}
 	}
@@ -779,14 +774,15 @@ struct lift_out_gen_in_rows {
 	void operator()(ast_node& node)
 	{
 		for_all(node.value.xformations, extract_gen_in_rows(lifted));
-		node.value.xformations.remove_if(is_type<gen_in_row, xformer>);
+		//node.value.xformations.remove_if(is_type<gen_in_row, xformer>);
+		node.value.xformations.remove_if(is_type<gen_in<row_access>, xformer>);
 	}
 };
 
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
-	bind_gen_in& lazy_in;
+	bind_condxformer& lazy_in;
 	sharedset& pre_out;
 	sharedset& in;
 	sharedset& out;
@@ -799,7 +795,7 @@ struct for_compound_op {
 	sharedset seen;
 	var_symtbl locals;
 
-	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_gen_in& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
+	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_condxformer& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
 			operations& op, condslist& c, bind_xformer& n, const int u): 
 		shared_symbols(s), priv_symbols(p), lazy_in(li), pre_out(po), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), 
 		unroll(u), par_induction(c.front().induction)
@@ -815,10 +811,12 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						node.value.xformations.push_back(new gen_in_row(*i, conds.back()));
+						//node.value.xformations.push_back(new gen_in_row(*i, conds.back()));
+						node.value.xformations.push_back(new gen_in<row_access>(*i, conds.back()));
 					}
 					else if ((*i)->is_column()) {
-						node.value.xformations.push_back(new gen_in_column(*i, conds.back()));
+						//node.value.xformations.push_back(new gen_in_column(*i, conds.back()));
+						node.value.xformations.push_back(new gen_in<column_access>(*i, conds.back()));
 					}
 					else {
 						throw unitialized_access_orientation();
@@ -838,10 +836,12 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						lazy_in.insert(bind_gen_in::value_type(new gen_in_row(*i, conds.back()), &node));
+						//lazy_in.insert(bind_condxformer::value_type(new gen_in_row(*i, conds.back()), &node));
+						lazy_in.insert(bind_condxformer::value_type(new gen_in<row_access>(*i, conds.back()), &node));
 					}
 					else if ((*i)->is_column()){
-						lazy_in.insert(bind_gen_in::value_type(new gen_in_column(*i, conds.back()), &node));
+						//lazy_in.insert(bind_condxformer::value_type(new gen_in_column(*i, conds.back()), &node));
+						lazy_in.insert(bind_condxformer::value_type(new gen_in<column_access>(*i, conds.back()), &node));
 					}
 					else {
 						throw unitialized_access_orientation();
@@ -890,18 +890,18 @@ struct for_compound_op {
 	}
 };
 
-struct bind_gen_in_void_less {
-	bool operator()(const void* v, const bind_gen_in::value_type& p)
+struct bind_condxformer_void_less {
+	bool operator()(const void* v, const bind_condxformer::value_type& p)
 	{
 		return v < p.first->v;
 	}
 
-	bool operator()(const bind_gen_in::value_type& p, const void* v)
+	bool operator()(const bind_condxformer::value_type& p, const void* v)
 	{
 		return p.first->v < v;
 	}
 
-	bool operator()(const bind_gen_in::value_type& a, const bind_gen_in::value_type& b)
+	bool operator()(const bind_condxformer::value_type& a, const bind_condxformer::value_type& b)
 	{
 		return a.first->v < b.first->v;
 	}
@@ -988,35 +988,35 @@ void serial_for_op::operator()(ast_node& node)
 		}
 	}
 	else if (node.value.id() == ids::compound) {
-		bind_gen_in lazy_in;
+		bind_condxformer lazy_in;
 		sharedset pre_out;
 		for_compound_op o(shared_symbols, priv_symbols, lazy_in, pre_out, in, out, inout, ops, conds, condnodes, unroll);
 		for_all(node.children, &o);
 
 		// lazy_inout = intersection(lazy_in, pre_out)
-		bind_gen_in lazy_inout;
+		bind_condxformer lazy_inout;
 		set_intersection_all(lazy_in, pre_out, 
-				inserter(lazy_inout, lazy_inout.begin()), 
-				bind_gen_in_void_less());
+				inserter(lazy_inout, lazy_inout.begin()),
+				bind_condxformer_void_less());
 
 		// out = pre_out - lazy_inout
 		set_difference_all(pre_out, lazy_inout, 
-				inserter(out, out.begin()), 
-				bind_gen_in_void_less());
+				inserter(out, out.begin()),
+				bind_condxformer_void_less());
 
 		// diff_in = lazy_in - lazy_inout
-		bind_gen_in diff_in;
+		bind_condxformer diff_in;
 		set_difference_all(lazy_in, lazy_inout, 
-				inserter(diff_in, diff_in.begin()), 
-				bind_gen_in_void_less());
+				inserter(diff_in, diff_in.begin()),
+				bind_condxformer_void_less());
 
 		// Lazily call gen_in on both in and inout variables.
-		for (bind_gen_in::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
+		for (bind_condxformer::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
 			i->second->value.xformations.push_back(i->first);
 			in.insert(i->first->v);
 		}
 
-		for (bind_gen_in::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
+		for (bind_condxformer::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
 			i->second->value.xformations.push_back(i->first);
 			inout.insert(i->first->v);
 		}
@@ -1339,7 +1339,7 @@ struct unroll_for_op {
 					// of the final iteration needs an increment so the induction 
 					// variable is correct for the next iteration.
 					if (!dma_unroll) {
-						descend< remove_xforms<gen_in> >()(copy);
+						//descend< remove_xforms<gen_in> >()(copy);
 					}
 					if (i < unroll - 2) {
 						if (!dma_unroll) {

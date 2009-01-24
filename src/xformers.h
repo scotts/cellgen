@@ -76,30 +76,33 @@ struct conditions {
 typedef list<conditions> condslist;
 
 class conditions_xformer: virtual public xformer {
+public:
+	// FIXME: this should not be public
+	shared_variable* v;
 protected:
 	conditions conds;
 public:
-	conditions_xformer(const conditions& c): conds(c) {}
+	conditions_xformer(shared_variable* _v, const conditions& c): v(_v), conds(c) {}
 };
 
 template <class X>
-struct make_conditions: public unary_function<const shared_variable*, xformer*> {
+struct make_conditions: public unary_function<shared_variable*, xformer*> {
 	const conditions& conds;
 	make_conditions(const conditions& c): conds(c) {}
-	xformer* operator()(const shared_variable* v)
+	xformer* operator()(shared_variable* v)
 	{
 		return new X(v, conds);
 	}
 };
 
 template <class X, class P>
-struct append_if: public unary_function<const shared_variable*, void> {
+struct append_if: public unary_function<shared_variable*, void> {
 	xformerlist& lst;
 	P pred;
 	const conditions& conds;
 	append_if(xformerlist& l, P p, const conditions& c): lst(l), pred(p), conds(c) {}
 
-	void operator()(const shared_variable* v)
+	void operator()(shared_variable* v)
 	{
 		if (pred(v)) {
 			lst.push_back(new X(v, conds));
@@ -119,9 +122,9 @@ class unrollable_xformer: public conditions_xformer {
 protected:
 	int unroll;
 public:
-	unrollable_xformer(const conditions& c): conditions_xformer(c), unroll(NO_UNROLL) {}
-	unrollable_xformer(const conditions& c, const int u): conditions_xformer(c), unroll(u) {}
-	unrollable_xformer(const int u): conditions_xformer(conditions()), unroll(u) {}
+	unrollable_xformer(shared_variable* v, const conditions& c): conditions_xformer(v, c), unroll(NO_UNROLL) {}
+	unrollable_xformer(shared_variable* v, const conditions& c, const int u): conditions_xformer(v, c), unroll(u) {}
+	unrollable_xformer(shared_variable* v, const int u): conditions_xformer(v, conditions()), unroll(u) {}
 	virtual void unroll_me(int u)
 	{
 		// TODO: Do I need to know induction information to determine if 
@@ -278,11 +281,10 @@ struct reduction_assign: public xformer {
 };
 
 class shared_buffer_size: public unrollable_xformer {
-	const shared_variable* v;
 	const int buffer;
 
 public:
-	shared_buffer_size(const shared_variable* v, const int b, const int u): unrollable_xformer(u), v(v), buffer(b) {}
+	shared_buffer_size(shared_variable* v, const int b, const int u): unrollable_xformer(v, u), buffer(b) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -320,12 +322,12 @@ public:
 	string class_name() const { return "shared_buffer_size"; }
 };
 
-struct make_shared_buffer_size: public unary_function<const shared_variable*, xformer*> {
+struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*> {
 	const int buffer;
 	const int unroll;
 	make_shared_buffer_size(const int b, const int u): buffer(b), unroll(u) {}
 
-	xformer* operator()(const shared_variable* v)
+	xformer* operator()(shared_variable* v)
 	{
 		return new shared_buffer_size(v, buffer, unroll);
 	}
@@ -477,11 +479,13 @@ public:
 
 class base_access {
 protected:
-	const shared_variable* v;
 	const conditions conds;
 
 public:
-	base_access(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
+	// FIXME: this should be protected, at least
+	shared_variable* v; 
+
+	base_access(shared_variable* _v, const conditions& c): conds(c), v(_v) {}
 	virtual ~base_access() {}
 	
 	virtual string iteration() = 0;
@@ -492,27 +496,38 @@ public:
 	virtual string final_access() = 0;
 	virtual string dma_in(const string& address) = 0;
 	virtual string dma_out(const string& address) = 0;
+
+	bool operator<(const base_access& other)
+	{
+		return v < other.v;
+	}
+
+	bool operator<(const void* ptr)
+	{
+		return v < ptr;
+	}
+
 };
 
 class row_access: public base_access {
 public:
-	row_access(const shared_variable* v, const conditions& c): base_access(v, c) {}
+	row_access(shared_variable* v, const conditions& c): base_access(v, c) {}
 
 	string iteration()
 	{
-		return v->math().ihs(conds.induction).str();
+		return conds.induction;
 	}
 
 	string next_iteration()
 	{
-		return v->math().next_iteration(conds.induction);
+		return conds.induction + "+1";
 	}
 
 	string access()
 	{
 		string a;
 		if (v->is_flat()) {
-			a = iteration(); 
+			a = v->math().ihs(conds.induction).str(); 
 		}
 		else {
 			a = v->math().str();
@@ -525,7 +540,7 @@ public:
 	{
 		string a;
 		if (v->is_flat()) {
-			a = next_iteration(); 
+			a = v->math().next_iteration(conds.induction);
 		}
 		else {
 			a = v->math().str() + "+1";
@@ -603,7 +618,7 @@ public:
 
 class column_access: public base_access {
 public:
-	column_access(const shared_variable* v, const conditions& c): base_access(v, c) {}
+	column_access(shared_variable* v, const conditions& c): base_access(v, c) {}
 
 	string iteration()
 	{
@@ -695,11 +710,10 @@ public:
 /*
 class gen_in_first: public unrollable_xformer, public epilogue_xformer {
 protected:
-	const shared_variable* v;
 	string buff_size;
 
 public:
-	gen_in_first(const shared_variable* _v, const conditions& c): unrollable_xformer(c), v(_v) {}
+	gen_in_first(shared_variable* _v, const conditions& c): unrollable_xformer(v, c) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
@@ -724,7 +738,7 @@ public:
 
 class gen_in_first_row: public gen_in_first {
 public:
-	gen_in_first_row(const shared_variable* v, const conditions& c): gen_in_first(v, c) {}
+	gen_in_first_row(shared_variable* v, const conditions& c): gen_in_first(v, c) {}
 
 	void set_buff_size()
 	{
@@ -789,7 +803,7 @@ public:
 
 class gen_in_first_column: public gen_in_first {
 public:
-	gen_in_first_column(const shared_variable* v, const conditions& c): gen_in_first(v, c) {}
+	gen_in_first_column(shared_variable* v, const conditions& c): gen_in_first(v, c) {}
 	string dma_in()
 	{
 		dma_list_adaptor list(v);
@@ -820,7 +834,7 @@ public:
 template <class Access>
 class gen_in_first: public unrollable_xformer, public epilogue_xformer, public Access {
 public:
-	gen_in_first(const shared_variable* v, const conditions& c): unrollable_xformer(c), Access(v, c) {}
+	gen_in_first(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(Access::v);
@@ -941,10 +955,10 @@ public:
 	string class_name() const { return "reduction_declare"; }
 };
 
+/*
 struct gen_in: public unrollable_xformer, public epilogue_xformer {
-	shared_variable* v;
 	string buff_size;
-	gen_in(shared_variable* v, const conditions& c): unrollable_xformer(c), v(v) {}
+	gen_in(shared_variable* v, const conditions& c): unrollable_xformer(v, c) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
@@ -1104,11 +1118,46 @@ struct gen_in_column: public gen_in {
 	xformer* clone() const { return new gen_in_column(*this); }
 	string class_name() const { return "gen_in_column"; }
 };
+*/
+
+template <class Access>
+struct gen_in: public unrollable_xformer, public epilogue_xformer, public Access {
+	gen_in(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
+	string operator()(const string& old)
+	{
+		next_adaptor next(Access::v);
+		buffer_adaptor buff(Access::v);
+		orig_adaptor orig(Access::v);
+
+		const string wait_next = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id); \n";
+		const string wait_prev = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); \n";
+		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + buff.depth() + "; \n";
+		const string outer_if = "if (!((" + Access::access() + ")%" + buff.size() + "))";
+		const string inner_if = "if (" + Access::next_iteration() + "<" + conds.stop + ")";
+
+		return old + 
+			"cellgen_dma_prep_start(); \n" + 
+			outer_if + "{ \n" +
+				prev.name() + "=" + next.name() + "; \n" +
+				rotate_next + 
+				wait_next +
+				inner_if + "{ \n" + 
+					dma_in("(unsigned long)(" + Access::v->name() + "+" + Access::access() + "+" + buff.size() + ")") + 
+				"} \n" +
+				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + "; \n" +
+				wait_prev +
+			"} \n"
+			"cellgen_dma_prep_stop(); \n";
+	}
+
+	xformer* clone() const { return new gen_in<Access>(*this); }
+	string class_name() const { return "gen_in<Access>"; }
+};
+
 
 struct gen_out: public unrollable_xformer, public epilogue_xformer {
-	const shared_variable* v;
 	string buff_size;
-	gen_out(const shared_variable* v, const conditions& c): unrollable_xformer(c), v(v) {}
+	gen_out(shared_variable* v, const conditions& c): unrollable_xformer(v, c) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -1144,7 +1193,7 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer {
 };
 
 struct gen_out_row: public gen_out {
-	gen_out_row(const shared_variable* v, const conditions& c): gen_out(v, c) {}
+	gen_out_row(shared_variable* v, const conditions& c): gen_out(v, c) {}
 
 	void set_buff_size()
 	{
@@ -1198,7 +1247,7 @@ struct gen_out_row: public gen_out {
 };
 
 struct gen_out_column: public gen_out {
-	gen_out_column(const shared_variable* v, const conditions& c): gen_out(v, c) {}
+	gen_out_column(shared_variable* v, const conditions& c): gen_out(v, c) {}
 
 	string if_statement()
 	{
@@ -1250,9 +1299,8 @@ struct gen_out_column: public gen_out {
 };
 
 struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
-	const shared_variable* v;
 	string buff_size;
-	gen_out_final(const shared_variable* v, const conditions& c): unrollable_xformer(c), v(v) {}
+	gen_out_final(shared_variable* v, const conditions& c): unrollable_xformer(v, c) {}
 	string operator()(const string& old)
 	{
 		string ret;
@@ -1290,7 +1338,7 @@ struct gen_out_final: public unrollable_xformer, public epilogue_xformer {
 };
 
 struct gen_out_final_row: public gen_out_final {
-	gen_out_final_row(const shared_variable* v, const conditions& c): gen_out_final(v, c) {}
+	gen_out_final_row(shared_variable* v, const conditions& c): gen_out_final(v, c) {}
 
 	string factor()
 	{
@@ -1335,7 +1383,7 @@ struct gen_out_final_row: public gen_out_final {
 };
 
 struct gen_out_final_column: public gen_out_final {
-	gen_out_final_column(const shared_variable* v, const conditions& c): gen_out_final(v, c) {}
+	gen_out_final_column(shared_variable* v, const conditions& c): gen_out_final(v, c) {}
 
 	string if_statement()
 	{
