@@ -2,7 +2,7 @@
 #include <assert.h>
 
 #define __ROW 4096
-#define __COL 256
+#define __COL (256+32)
 const int ROW = __ROW;
 const int COL = __COL;
 
@@ -14,7 +14,7 @@ void in_and_out(int in[ROW][COL], int out[ROW][COL])
 	int i, j;
 	for (i = 0; i < ROW; ++i) {
 		for (j = 0; j < COL; ++j) {
-			in[i][j] = i*j;
+			in[i][j] = (i+1)*(j+1);
 			out[i][j] = 0;
 		}
 	}
@@ -136,9 +136,9 @@ void inout_unroll(int ref[ROW][COL], int test[ROW][COL])
 int main()
 {
 	in_and_out(first, second);
-	in_and_out_unroll(first, second);
+	//in_and_out_unroll(first, second);
 	inout(first, second);
-	inout_unroll(first, second);
+	//inout_unroll(first, second);
 
 	return 0;
 }

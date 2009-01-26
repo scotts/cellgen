@@ -139,9 +139,9 @@ void inout_unroll(int16b_t ref[ROW][COL], int16b_t test[ROW][COL])
 int main()
 {
 	in_and_out(test_in, test_out);
-	in_and_out_unroll(test_in, test_out);
+	//in_and_out_unroll(test_in, test_out);
 	inout(ref_inout, test_inout);
-	inout_unroll(ref_inout, test_inout);
+	//inout_unroll(ref_inout, test_inout);
 
 	return 0;
 }

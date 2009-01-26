@@ -415,8 +415,6 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = make_add_expr(o.shared_var->dimensions(), o.accesses);
-		//add_expr add = o.accesses.back();
-		//cout << add.str() << endl;
 		o.shared_var->math(add);
 
 		// Column or row access?
@@ -662,16 +660,6 @@ struct assignment_search {
 
 typedef map<conditions_xformer*, ast_node*> bind_condxformer;
 
-template <class T>
-struct erase_from_set: unary_function<T, void> {
-	set<T>& container;
-	erase_from_set(set<T>& c): container(c) {}
-	void operator()(T value)
-	{
-		container.erase(value);
-	}
-};
-
 struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -736,7 +724,6 @@ struct declaration_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		// TODO: parse/grab local definitions
 		if (is_type_specifier(node)) {
 			type = string(node.value.begin(), node.value.end());
 		}
@@ -760,7 +747,6 @@ struct extract_gen_in_rows {
 
 	void operator()(xformer* x)
 	{
-		//if (is_type<gen_in_row>(x)) {
 		if (is_type<gen_in<row_access> >(x)) {
 			lifted.push_back(x);
 		}
@@ -774,7 +760,6 @@ struct lift_out_gen_in_rows {
 	void operator()(ast_node& node)
 	{
 		for_all(node.value.xformations, extract_gen_in_rows(lifted));
-		//node.value.xformations.remove_if(is_type<gen_in_row, xformer>);
 		node.value.xformations.remove_if(is_type<gen_in<row_access>, xformer>);
 	}
 };
@@ -811,11 +796,9 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						//node.value.xformations.push_back(new gen_in_row(*i, conds.back()));
 						node.value.xformations.push_back(new gen_in<row_access>(*i, conds.back()));
 					}
 					else if ((*i)->is_column()) {
-						//node.value.xformations.push_back(new gen_in_column(*i, conds.back()));
 						node.value.xformations.push_back(new gen_in<column_access>(*i, conds.back()));
 					}
 					else {
@@ -836,11 +819,9 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						//lazy_in.insert(bind_condxformer::value_type(new gen_in_row(*i, conds.back()), &node));
 						lazy_in.insert(bind_condxformer::value_type(new gen_in<row_access>(*i, conds.back()), &node));
 					}
 					else if ((*i)->is_column()){
-						//lazy_in.insert(bind_condxformer::value_type(new gen_in_column(*i, conds.back()), &node));
 						lazy_in.insert(bind_condxformer::value_type(new gen_in<column_access>(*i, conds.back()), &node));
 					}
 					else {
@@ -861,10 +842,6 @@ struct for_compound_op {
 
 			xformerlist& nested = node.value.xformations;
 			const conditions& outer = *previous(previous(conds.end(), conds), conds);
-			/*
-			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(outer), in));
-			append(nested, fmap(make_choice<gen_in_first_row, gen_in_first_column>(outer), inout));
-			*/
 			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), in));
 			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), inout));
 
@@ -874,15 +851,15 @@ struct for_compound_op {
 			// that means this would get called once for each for loop encountered, which generates extra 
 			// xformers.
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
-			append(rbrace, fmap(make_choice<gen_out_row, gen_out_column>(conds.back()), out));
-			append(rbrace, fmap(make_choice<gen_out_row, gen_out_column>(conds.back()), inout));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(conds.back()), out));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(conds.back()), inout));
 
 			// This is a hack. I need the induction variable of the outer loop, but the start/stop of the 
 			// inner loop.
 			conditions bridge = conds.back();
 			bridge.induction = outer.induction;
-			append(rbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(bridge), out));
-			append(rbrace, fmap(make_choice<gen_out_final_row, gen_out_final_column>(bridge), inout));
+			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge), out));
+			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge), inout));
 		}
 		else {
 			for_all(node.children, this);
@@ -1107,10 +1084,10 @@ struct parallel_for_op {
 			}
 
 			xformerlist& rbrace = node.children.back().value.xformations;
-			for_all(out, make_append_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_if<gen_out_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(out, make_append_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_if<gen_out_final_row>(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(out, make_append_if<gen_out<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(inout, make_append_if<gen_out<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(out, make_append_if<gen_out_final<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			for_all(inout, make_append_if<gen_out_final<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
 
 			rbrace.push_back(new total_timer_stop());
 		}
@@ -1318,8 +1295,10 @@ struct unroll_for_op {
 			copy_all(node.children, back_inserter(to_copy));
 
 			// First iteration doesn't need sending out stuff.
-			for_all(node.children, remove_xforms<gen_out>());
-			for_all(node.children, remove_xforms<gen_out_final>());
+			for_all(node.children, remove_xforms<gen_out<row_access> >());
+			for_all(node.children, remove_xforms<gen_out<column_access> >());
+			for_all(node.children, remove_xforms<gen_out_final<row_access> >());
+			for_all(node.children, remove_xforms<gen_out_final<column_access> >());
 
 			if (!to_copy.empty()) {
 				// front or back?
@@ -1339,13 +1318,16 @@ struct unroll_for_op {
 					// of the final iteration needs an increment so the induction 
 					// variable is correct for the next iteration.
 					if (!dma_unroll) {
-						//descend< remove_xforms<gen_in> >()(copy);
+						descend< remove_xforms<gen_in<row_access> > >()(copy);
+						descend< remove_xforms<gen_in<column_access> > >()(copy);
 					}
 					if (i < unroll - 2) {
 						if (!dma_unroll) {
-							remove_xforms<gen_out>()(copy);
+							remove_xforms<gen_out<row_access> >()(copy);
+							remove_xforms<gen_out<column_access> >()(copy);
 						}
-						remove_xforms<gen_out_final>()(copy);
+						remove_xforms<gen_out_final<row_access> >()(copy);
+						remove_xforms<gen_out_final<column_access> >()(copy);
 					}
 
 					node.children.insert(node.children.end() - 1, copy);
@@ -1354,10 +1336,6 @@ struct unroll_for_op {
 
 			// Columns already have a gen_in_first.
 			ast_node& last = node.children.back();
-			/*
-			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(conditions("", induction, stop)), in));
-			append(last.value.xformations, fmap(make_choice<gen_in_first_row, gen_in_first_column>(conditions("", induction, stop)), inout));
-			*/
 			append(last.value.xformations, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(conditions("", induction, stop)), in));
 			append(last.value.xformations, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(conditions("", induction, stop)), inout));
 
@@ -1729,10 +1707,6 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
-			/*
-			for_all(in, make_append_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			for_all(inout, make_append_if<gen_in_first_row>(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			*/
 			for_all(in, make_append_if<gen_in_first<row_access> >(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
 			for_all(inout, make_append_if<gen_in_first<row_access> >(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
 

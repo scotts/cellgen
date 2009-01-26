@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <numeric>
 #include <list>
+#include <set>
 #include <string>
 #include <sstream>
 #include <boost/bind.hpp>
@@ -195,6 +196,16 @@ Container set_union_all(const Container& c1, const Container& c2, const Containe
 	set_union_all(c1, c2, c3, inserter(u, u.begin()));
 	return u;
 }
+
+template <class T>
+struct erase_from_set: unary_function<T, void> {
+	set<T>& container;
+	erase_from_set(set<T>& c): container(c) {}
+	void operator()(T value)
+	{
+		container.erase(value);
+	}
+};
 
 template <class T, class Container>
 bool exists_in(const Container& c, const T& val)
