@@ -8,8 +8,8 @@ const int N1 = __N1;
 const int N2 = __N2;
 const int N3 = __N3;
 
-int in[__N1][__N2][__N3] __attribute((aligned(128)));
-int out[__N1][__N2][__N3] __attribute((aligned(128)));
+int a[__N1][__N2][__N3] __attribute((aligned(128)));
+int b[__N1][__N2][__N3] __attribute((aligned(128)));
 
 void in_and_out(int in[N1][N2][N3], int out[N1][N2][N3])
 {
@@ -47,8 +47,46 @@ void in_and_out(int in[N1][N2][N3], int out[N1][N2][N3])
 	}
 }
 
+void inout(int ref[N1][N2][N3], int test[N1][N2][N3])
+{
+	int i, j, k;
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N2; ++j) {
+			for (k = 0; k < N3; ++k) {
+				test[i][j][k] = (i+1)*(j+1)*(k+1);
+				ref[i][j][k] = 2 * (i+1)*(j+1)*(k+1);
+			}
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int* test = test[N1][N2][N3])
+	{
+		int i, j, k;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < N2; ++j) {
+				for (k = 0; k < N3; ++k) {
+					test[i][j][k] = 2 * test[i][j][k];
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N2; ++j) {
+			for (k = 0; k < N3; ++k) {
+				if (ref[i][j][k] != test[i][j][k]) {
+					printf("inout failure at (%d,%d,%d), ref %d, test %d\n", i, j, k, ref[i][j][k], test[i][j][k]);
+					return;
+				}
+			}
+		}
+	}
+}
+
 int main()
 {
-	in_and_out(in, out);
+	in_and_out(a, b);
+	inout(a, b);
+
 	return 0;
 }
