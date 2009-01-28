@@ -840,14 +840,16 @@ struct for_compound_op {
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
-			//const bool seen = accumulate_all(set_union_all(in, out, inout), false, make_acc_or(&shared_variable::seen));
 			xformerlist& nested = node.value.xformations;
+			const conditions& inner = conds.back();
 			const conditions& outer = *previous(previous(conds.end(), conds), conds);
 			const fn_and<shared_variable> seen_but_not_generated(&shared_variable::seen, &shared_variable::is_not_generated);
 			const sharedset& seen_ins = filter(seen_but_not_generated, set_union_all(in, inout));
 			const sharedset& seen_outs = filter(seen_but_not_generated, set_union_all(out, inout));
 
-			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), seen_ins));
+			conditions bridge_in = outer;
+			bridge_in.induction = inner.induction;
+			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in), seen_ins));
 
 			// TODO: optimization if buffer is same as last dimension?
 
@@ -855,13 +857,11 @@ struct for_compound_op {
 			// that means this would get called once for each for loop encountered, which generates extra 
 			// xformers.
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
-			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(conds.back()), seen_outs));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner), seen_outs));
 
-			// This is a hack. I need the induction variable of the outer loop, but the start/stop of the 
-			// inner loop.
-			conditions bridge = conds.back();
-			bridge.induction = outer.induction;
-			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge), seen_outs));
+			conditions bridge_out = inner;
+			bridge_out.induction = outer.induction;
+			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out), seen_outs));
 
 			for_all(set_union_all(in, out), mem_fn(&shared_variable::generated));
 		}

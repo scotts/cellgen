@@ -673,23 +673,22 @@ public:
 
 	string first_access() const
 	{
-		string initial;
-		string stride;
+		string first;
 
 		if (!v->is_flat()) {
-			initial = conds.induction;
-			stride = "*" + v->dimensions().back();
+			//first = conds.induction + "*" + v->dimensions().back();
+			first = v->math().non_ihs(conds.induction).str();
 		}
 		else {
-			initial = conds.start;
-
-			const string factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+			string factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
 			if (factor != "") {
-				stride = "*" + factor;
+				factor = "*" + factor;
 			}
+
+			first = conds.start + factor;
 		}
 
-		return initial + stride;
+		return first;
 	}
 
 	string final_size() const

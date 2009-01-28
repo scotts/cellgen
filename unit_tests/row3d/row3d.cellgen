@@ -17,7 +17,7 @@ void in_and_out(int in[N1][N2][N3], int out[N1][N2][N3])
 	for (i = 0; i < N1; ++i) {
 		for (j = 0; j < N2; ++j) {
 			for (k = 0; k < N3; ++k) {
-				in[i][j][k] = i*j*k;
+				in[i][j][k] = (i+1)*(j+1)*(k+1);
 				out[i][j][k] = 0;
 			}
 		}
