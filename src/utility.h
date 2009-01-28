@@ -27,15 +27,15 @@ F* for_each(I first, I last, F* f)
 }
 
 template <class C, class F>
-F for_all(C& c, F f)
+F for_all(const C& c, F f)
 {
 	return for_each(c.begin(), c.end(), f);
 }
 
 template <class C, class F>
-F for_all(C* c, F f)
+F for_all(C& c, F f)
 {
-	return for_each(c->begin(), c->end(), f);
+	return for_each(c.begin(), c.end(), f);
 }
 
 template <class C, class P>
@@ -86,20 +86,32 @@ O copy_all(C& c, O o)
 	return copy(c.begin(), c.end(), o);
 }
 
-template <class S, class F>
-list<typename F::result_type> fmap(F f, const S& seq)
+template <class F, class Sequence>
+list<typename F::result_type> fmap(F f, const Sequence& in)
 {
-	list<typename F::result_type> lst;
-	for (typename S::const_iterator i = seq.begin(); i != seq.end(); ++i) {
-		lst.push_back(f(*i));
+	list<typename F::result_type> out;
+	for (typename Sequence::const_iterator i = in.begin(); i != in.end(); ++i) {
+		out.push_back(f(*i));
 	}
-	return lst;
+	return out;
 }
 
-template <class S, class F>
-list<typename F::result_type> fmap(F f, S* seq)
+template <class Sequence, class F>
+list<typename F::value_type> fmap(F f, Sequence* in)
 {
-	return fmap(f, *seq);
+	return fmap(f, *in);
+}
+
+template <class Pred, class Sequence>
+Sequence filter(Pred p, const Sequence& in)
+{
+	Sequence out; 
+	for (typename Sequence::const_iterator i = in.begin(); i != in.end(); ++i) {
+		if (p(*i)) {
+			out.insert(out.end(), *i);
+		}
+	}
+	return out;
 }
 
 template <class L1, class L2>

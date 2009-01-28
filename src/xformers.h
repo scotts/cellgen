@@ -95,27 +95,6 @@ struct make_conditions: public unary_function<shared_variable*, xformer*> {
 	}
 };
 
-template <class X, class P>
-struct append_if: public unary_function<shared_variable*, void> {
-	xformerlist& lst;
-	P pred;
-	const conditions& conds;
-	append_if(xformerlist& l, P p, const conditions& c): lst(l), pred(p), conds(c) {}
-
-	void operator()(shared_variable* v)
-	{
-		if (pred(v)) {
-			lst.push_back(new X(v, conds));
-		}
-	}
-};
-
-template <class X, class P>
-append_if<X, P> make_append_if(xformerlist& lst, P pred, const conditions& conds)
-{
-	return append_if<X, P>(lst, pred, conds);
-}
-
 const int NO_UNROLL = 0;
 
 class unrollable_xformer: public conditions_xformer {

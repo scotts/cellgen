@@ -1,0 +1,54 @@
+#include <stdio.h>
+#include <assert.h>
+
+#define __N1 8
+#define __N2 256
+#define __N3 4096
+const int N1 = __N1;
+const int N2 = __N2;
+const int N3 = __N3;
+
+int in[__N1][__N2][__N3] __attribute((aligned(128)));
+int out[__N1][__N2][__N3] __attribute((aligned(128)));
+
+void in_and_out(int in[N1][N2][N3], int out[N1][N2][N3])
+{
+	int i, j, k;
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N2; ++j) {
+			for (k = 0; k < N3; ++k) {
+				in[i][j][k] = i*j*k;
+				out[i][j][k] = 0;
+			}
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int* in = in[N1][N2][N3], int* out = out[N1][N2][N3])
+	{
+		int i, j, k;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < N2; ++j) {
+				for (k = 0; k < N3; ++k) {
+					out[i][j][k] = in[i][j][k];
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N2; ++j) {
+			for (k = 0; k < N3; ++k) {
+				if (in[i][j][k] != out[i][j][k]) {
+					printf("in and out failure at (%d,%d,%d), in %d, out %d\n", i, j, k, in[i][j][k], out[i][j][k]);
+					return;
+				}
+			}
+		}
+	}
+}
+
+int main()
+{
+	in_and_out(in, out);
+	return 0;
+}

@@ -75,13 +75,6 @@ public:
 	const_variable(const string& t, const string& l, const string& a):
 		variable("const " + t, l, a)
 		{}
-
-	// FIXME: I had a reason for wanting constant variables to define when asked to declare.
-	// I can not remember what it was. It's inconvenient now, so I'm commenting it out and 
-	// will delete it if all is okay.
-	/*
-	virtual string declare() const { return type() + " " + name() + "=" + definition() + ";"; }
-	*/
 };
 /* The Cell SPU C compiler doesn't allow const variables in static expressions. Oh well.
 const const_variable buff_size("int", "buff_size", "16");
@@ -136,13 +129,14 @@ class shared_variable: public region_variable {
 	add_expr _math;
 	list<string> _dimensions; // Dimensions for multidimensional array
 	orientation_t _orientation;
+	bool _generated;
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNINITIALIZED)
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _generated(false)
 		{}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED)
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _generated(false)
 		{}
 
 	add_expr math() const { return _math; }
@@ -155,13 +149,13 @@ public:
 	void column() { _orientation = COLUMN; }
 
 	bool has_orientation() const { return _orientation != UNINITIALIZED; }
-	virtual string name() const
-	{
-		return region_variable::name() + "_adr"; 
-	}
+	virtual string name() const { return region_variable::name() + "_adr"; }
 
 	list<string> dimensions() const { return _dimensions; }
 	bool is_flat() const { return _dimensions.size() == 0; }
+	bool seen() const { return _orientation != UNINITIALIZED; }
+	bool is_not_generated() const { return !_generated; }
+	void generated() { _generated = true; }
 };
 
 class reduction_variable: public region_variable {

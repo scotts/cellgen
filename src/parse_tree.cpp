@@ -658,8 +658,6 @@ struct assignment_search {
 	}
 };
 
-typedef map<conditions_xformer*, ast_node*> bind_condxformer;
-
 struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -764,10 +762,12 @@ struct lift_out_gen_in_rows {
 	}
 };
 
+typedef map<conditions_xformer*, ast_node*> bind_cond;
+
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
-	bind_condxformer& lazy_in;
+	bind_cond& lazy_in;
 	sharedset& pre_out;
 	sharedset& in;
 	sharedset& out;
@@ -780,8 +780,8 @@ struct for_compound_op {
 	sharedset seen;
 	var_symtbl locals;
 
-	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_condxformer& li, sharedset& po, sharedset& i, sharedset& o, sharedset& io, 
-			operations& op, condslist& c, bind_xformer& n, const int u): 
+	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, bind_cond& li, sharedset& po, 
+			sharedset& i, sharedset& o, sharedset& io, operations& op, condslist& c, bind_xformer& n, const int u): 
 		shared_symbols(s), priv_symbols(p), lazy_in(li), pre_out(po), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), 
 		unroll(u), par_induction(c.front().induction)
 		{}
@@ -819,10 +819,10 @@ struct for_compound_op {
 			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
 				if (seen.find(*i) == seen.end()) {
 					if ((*i)->is_row()) {
-						lazy_in.insert(bind_condxformer::value_type(new gen_in<row_access>(*i, conds.back()), &node));
+						lazy_in.insert(bind_cond::value_type(new gen_in<row_access>(*i, conds.back()), &node));
 					}
 					else if ((*i)->is_column()){
-						lazy_in.insert(bind_condxformer::value_type(new gen_in<column_access>(*i, conds.back()), &node));
+						lazy_in.insert(bind_cond::value_type(new gen_in<column_access>(*i, conds.back()), &node));
 					}
 					else {
 						throw unitialized_access_orientation();
@@ -840,10 +840,14 @@ struct for_compound_op {
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
+			//const bool seen = accumulate_all(set_union_all(in, out, inout), false, make_acc_or(&shared_variable::seen));
 			xformerlist& nested = node.value.xformations;
 			const conditions& outer = *previous(previous(conds.end(), conds), conds);
-			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), in));
-			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), inout));
+			const fn_and<shared_variable> seen_but_not_generated(&shared_variable::seen, &shared_variable::is_not_generated);
+			const sharedset& seen_ins = filter(seen_but_not_generated, set_union_all(in, inout));
+			const sharedset& seen_outs = filter(seen_but_not_generated, set_union_all(out, inout));
+
+			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(outer), seen_ins));
 
 			// TODO: optimization if buffer is same as last dimension?
 
@@ -851,15 +855,15 @@ struct for_compound_op {
 			// that means this would get called once for each for loop encountered, which generates extra 
 			// xformers.
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
-			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(conds.back()), out));
-			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(conds.back()), inout));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(conds.back()), seen_outs));
 
 			// This is a hack. I need the induction variable of the outer loop, but the start/stop of the 
 			// inner loop.
 			conditions bridge = conds.back();
 			bridge.induction = outer.induction;
-			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge), out));
-			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge), inout));
+			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge), seen_outs));
+
+			for_all(set_union_all(in, out), mem_fn(&shared_variable::generated));
 		}
 		else {
 			for_all(node.children, this);
@@ -867,18 +871,18 @@ struct for_compound_op {
 	}
 };
 
-struct bind_condxformer_void_less {
-	bool operator()(const void* v, const bind_condxformer::value_type& p)
+struct bind_cond_void_less {
+	bool operator()(const void* v, const bind_cond::value_type& p)
 	{
 		return v < p.first->v;
 	}
 
-	bool operator()(const bind_condxformer::value_type& p, const void* v)
+	bool operator()(const bind_cond::value_type& p, const void* v)
 	{
 		return p.first->v < v;
 	}
 
-	bool operator()(const bind_condxformer::value_type& a, const bind_condxformer::value_type& b)
+	bool operator()(const bind_cond::value_type& a, const bind_cond::value_type& b)
 	{
 		return a.first->v < b.first->v;
 	}
@@ -965,35 +969,29 @@ void serial_for_op::operator()(ast_node& node)
 		}
 	}
 	else if (node.value.id() == ids::compound) {
-		bind_condxformer lazy_in;
+		bind_cond lazy_in;
 		sharedset pre_out;
 		for_compound_op o(shared_symbols, priv_symbols, lazy_in, pre_out, in, out, inout, ops, conds, condnodes, unroll);
 		for_all(node.children, &o);
 
 		// lazy_inout = intersection(lazy_in, pre_out)
-		bind_condxformer lazy_inout;
-		set_intersection_all(lazy_in, pre_out, 
-				inserter(lazy_inout, lazy_inout.begin()),
-				bind_condxformer_void_less());
+		bind_cond lazy_inout;
+		set_intersection_all(lazy_in, pre_out, inserter(lazy_inout, lazy_inout.begin()), bind_cond_void_less());
 
 		// out = pre_out - lazy_inout
-		set_difference_all(pre_out, lazy_inout, 
-				inserter(out, out.begin()),
-				bind_condxformer_void_less());
+		set_difference_all(pre_out, lazy_inout, inserter(out, out.begin()), bind_cond_void_less());
 
 		// diff_in = lazy_in - lazy_inout
-		bind_condxformer diff_in;
-		set_difference_all(lazy_in, lazy_inout, 
-				inserter(diff_in, diff_in.begin()),
-				bind_condxformer_void_less());
+		bind_cond diff_in;
+		set_difference_all(lazy_in, lazy_inout, inserter(diff_in, diff_in.begin()), bind_cond_void_less());
 
 		// Lazily call gen_in on both in and inout variables.
-		for (bind_condxformer::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
+		for (bind_cond::iterator i = diff_in.begin(); i != diff_in.end(); ++i) {
 			i->second->value.xformations.push_back(i->first);
 			in.insert(i->first->v);
 		}
 
-		for (bind_condxformer::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
+		for (bind_cond::iterator i = lazy_inout.begin(); i != lazy_inout.end(); ++i) {
 			i->second->value.xformations.push_back(i->first);
 			inout.insert(i->first->v);
 		}
@@ -1009,28 +1007,6 @@ struct multiple_parallel_induction_variables {
 	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
 };
 
-template <class Row, class Column>
-struct make_row_or_column: public unary_function<const shared_variable*, xformer*> {
-	const string& inductions;
-	make_row_or_column(const string& i): inductions(i) {}
-	xformer* operator()(const shared_variable* v)
-	{
-		xformer* x = NULL;
-
-		if (v->is_row()) {
-			x = new Row(v, inductions);
-		}
-		else if (v->is_column()) {
-			x = new Column(v, inductions);
-		}
-		else {
-			throw unitialized_access_orientation();
-		}
-
-		return x;
-	}
-};
-
 struct parallel_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -1042,7 +1018,8 @@ struct parallel_for_op {
 	bind_xformer& condnodes;
 	int unroll;
 	conditions parconds;
-	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
+	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, 
+			sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
 		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), unroll(u)
 		{}
 	void operator()(ast_node& node)
@@ -1084,10 +1061,13 @@ struct parallel_for_op {
 			}
 
 			xformerlist& rbrace = node.children.back().value.xformations;
-			for_all(out, make_append_if<gen_out<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_if<gen_out<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(out, make_append_if<gen_out_final<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
-			for_all(inout, make_append_if<gen_out_final<row_access> >(rbrace, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), parconds));
+			const sharedset& allouts = set_union_all(out, inout);
+			const fn_and<shared_variable> row_and_flat(&shared_variable::is_row, &shared_variable::is_flat);
+			const make_conditions<gen_out<row_access> > make_gen_out_row(parconds);
+			const make_conditions<gen_out_final<row_access> > make_gen_out_final_row(parconds);
+
+			append(rbrace, fmap(make_gen_out_row, filter(row_and_flat, allouts)));
+			append(rbrace, fmap(make_gen_out_final_row, filter(row_and_flat, allouts)));
 
 			rbrace.push_back(new total_timer_stop());
 		}
@@ -1273,7 +1253,8 @@ struct unroll_for_op {
 	const string& induction;
 	const int unroll;
 	const bool dma_unroll;
-	unroll_for_op(const sharedset& i, const sharedset& io, const bool r, const string& _stop, const string& ind, const int u, const bool d): 
+	unroll_for_op(const sharedset& i, const sharedset& io, const bool r, const string& _stop, 
+			const string& ind, const int u, const bool d): 
 		in(i), inout(io), is_row(r), stop(_stop), induction(ind), unroll(u), dma_unroll(d)
 		{}
 	void operator()(ast_node& node)
@@ -1336,8 +1317,11 @@ struct unroll_for_op {
 
 			// Columns already have a gen_in_first.
 			ast_node& last = node.children.back();
-			append(last.value.xformations, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(conditions("", induction, stop)), in));
-			append(last.value.xformations, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(conditions("", induction, stop)), inout));
+			xformerlist& xforms = last.value.xformations;
+			const sharedset& allins = set_union_all(in, inout);
+			const conditions no_start("", induction, stop);
+
+			append(xforms, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(no_start), allins)); 
 
 			descend<epilogue_all>()(last);
 			make_descend(unroll_all(unroll))(node);
@@ -1358,7 +1342,8 @@ struct compound {
 	condslist& conds;
 	bind_xformer& condnodes;
 	int unroll;
-	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
+	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, 
+			condslist& c, bind_xformer& n, int u): 
 		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), unroll(u)
 		{}
 	void operator()(ast_node& node)
@@ -1574,11 +1559,6 @@ struct accumulate_cost {
 	}
 };
 
-bool is_row_and_flat(const shared_variable* v)
-{
-	return v->is_row() && v->is_flat();
-}
-
 struct cell_region {
 	spelist::iterator region;
 
@@ -1707,8 +1687,10 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
 
-			for_all(in, make_append_if<gen_in_first<row_access> >(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
-			for_all(inout, make_append_if<gen_in_first<row_access> >(front, make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), conds.front()));
+			const sharedset& allins = set_union_all(in, inout);
+			append(front, fmap(
+						make_conditions<gen_in_first<row_access> >(conds.front()),
+						filter(make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), allins)));
 
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
 			append(front, fmap(make_xformer<reduction_declare, reduction_variable>(), reductions));
