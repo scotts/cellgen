@@ -153,7 +153,7 @@ bool is_statement(const Node& node)
 		node.value.id() == ids::selection_statement;
 }
 
-add_expr make_add_expr(const list<string>& dimensions, const list<add_expr>& indices)
+add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices)
 {
 	if (indices.size() > 1) {
 		// Combine dimensions and indices to get string versions of:
@@ -414,7 +414,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 	variable_type type = UNKNOWN_VAR;
 
 	if (o.found_shared && o.found_induction) {
-		add_expr add = make_add_expr(o.shared_var->dimensions(), o.accesses);
+		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
 		o.shared_var->math(add);
 
 		// Column or row access?
@@ -1313,13 +1313,18 @@ struct unroll_for_op {
 			}
 
 			// Columns already have a gen_in_first.
-			ast_node& last = node.children.back();
+			//
+			// TODO: I don't think this is needed anymore. Need to check.
+			/*
 			xformerlist& xforms = last.value.xformations;
 			const sharedset& allins = set_union_all(in, inout);
 			const conditions no_start("", induction, stop);
+			cout << "unroll: " << no_start.induction << endl;
 
 			append(xforms, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(no_start), allins)); 
+			*/
 
+			ast_node& last = node.children.back();
 			descend<epilogue_all>()(last);
 			make_descend(unroll_all(unroll))(node);
 		}

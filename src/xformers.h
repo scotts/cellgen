@@ -64,13 +64,13 @@ struct make_xformer: public unary_function<const V*, xformer*> {
 
 struct conditions {
 	string start;
-	string stop;
 	string induction;
+	string stop;
 
 	conditions()
 		{}
-	conditions(const string& _start, const string& _stop, const string& _induction):
-		start(_start), stop(_stop), induction(_induction)
+	conditions(const string& _start, const string& _induction, const string& _stop):
+		start(_start), induction(_induction), stop(_stop)
 		{}
 };
 typedef list<conditions> condslist;
@@ -676,8 +676,7 @@ public:
 		string first;
 
 		if (!v->is_flat()) {
-			//first = conds.induction + "*" + v->dimensions().back();
-			first = v->math().non_ihs(conds.induction).str();
+			first = v->math().zero_induction(conds.induction);
 		}
 		else {
 			string factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
@@ -782,7 +781,7 @@ public:
 
 	string first_access() const
 	{
-		return conds.induction;
+		return v->math().zero_induction(conds.induction);
 	}
 
 	string final_size() const

@@ -40,6 +40,7 @@ string paren_expr::str() const
 			return "(" + recurse->str() + ")";
 		}
 	}
+
 	return terminal;
 }
 
@@ -92,6 +93,17 @@ paren_expr& paren_expr::operator+=(const string& s)
 paren_expr::~paren_expr()
 {
 	delete recurse;
+}
+
+class cant_zero_string {};
+
+string paren_expr::zero_induction(const string& ivar) const
+{
+	if (terminal.find(ivar) != string::npos) {
+		throw cant_zero_string();
+	}
+
+	return recurse->zero_induction(ivar);
 }
 
 operations paren_expr::cost() const
@@ -163,6 +175,26 @@ paren_expr mult_expr::non_ihs(const string& ivar) const
 	return side(ivar, &_rhs, &_lhs);
 }
 
+string mult_expr::zero_induction(const string& ivar) const
+{
+	string zeroed;
+
+	if (_lhs.str() == ivar || _rhs.str() == ivar) {
+		zeroed = "0";
+	}
+	else if (_lhs.str().find(ivar) != string::npos) {
+		zeroed = _lhs.zero_induction(ivar) + _op + _rhs.str();
+	}
+	else if (_rhs.str().find(ivar) != string::npos) {
+		zeroed = _lhs.str() + _op + _lhs.zero_induction(ivar);
+	}
+	else {
+		throw ivar_not_found();
+	}
+
+	return zeroed;
+}
+
 operations mult_expr::cost() const
 {
 	operations ops;
@@ -229,6 +261,29 @@ mult_expr add_expr::ihs(const string& ivar) const
 mult_expr add_expr::non_ihs(const string& ivar) const
 {
 	return side(ivar, &_rhs, &_lhs);
+}
+
+string add_expr::zero_induction(const string& ivar) const
+{
+	string zeroed;
+
+	if (_lhs.str() == ivar) {
+		zeroed = _rhs.str();
+	}
+	else if (_rhs.str() == ivar) {
+		zeroed = _lhs.str();
+	}
+	else if (_lhs.str().find(ivar) != string::npos) {
+		zeroed = _lhs.zero_induction(ivar) + _op + _rhs.str();
+	}
+	else if (_rhs.str().find(ivar) != string::npos) {
+		zeroed = _lhs.str() + _op + _rhs.zero_induction(ivar);
+	}
+	else {
+		throw ivar_not_found();
+	}
+
+	return zeroed; 
 }
 
 operations add_expr::cost() const

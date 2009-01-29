@@ -30,6 +30,7 @@ public:
 	string str() const;
 	string next_iteration(const string& ivar) const;
 	add_expr eval() const;
+	string zero_induction(const string& ivar) const;
 
 	operations cost() const;
 };
@@ -69,6 +70,7 @@ public:
 
 	string str() const;
 	string next_iteration(const string& ivar) const;
+	string zero_induction(const string& ivar) const;
 
 	operations cost() const;
 };
@@ -100,6 +102,7 @@ public:
 
 	string str() const;
 	string next_iteration(const string& ivar) const;
+	string zero_induction(const string& ivar) const;
 
 	operations cost() const;
 };
