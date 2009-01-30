@@ -763,20 +763,17 @@ public:
 
 	string final_iteration() const
 	{
-		return v->dimensions().front();
+		return "(" + conds.stop + "-" + conds.start + ")";
 	}
 
 	string access() const
 	{
-		buffer_adaptor buff(v);
-
-		return "(" + conds.induction + "+" + buff.size() + ")*" + v->dimensions().back() + "+" + v->math().non_ihs(conds.induction).str();
+		return "(" + v->math().add_iteration(conds.induction, buffer_adaptor(v).size()) + ")";
 	}
 
 	string previous_access() const
 	{
-		buffer_adaptor buff(v);
-		return "(" + conds.induction + "+1-" + buff.size() + ")*" + v->dimensions().back() + "+" + v->math().non_ihs(conds.induction).str();
+		return "(" + v->math().add_iteration(conds.induction, "(1-" + buffer_adaptor(v).size() + ")") + ")";
 	}
 
 	string first_access() const

@@ -20,10 +20,10 @@ add_expr paren_expr::eval() const
 	return add_expr(mult_expr(terminal));
 }
 
-string paren_expr::next_iteration(const string& ivar) const
+string paren_expr::add_iteration(const string& ivar, const string& size) const
 {
 	if (recurse) {
-		return recurse->next_iteration(ivar);
+		return recurse->add_iteration(ivar, size);
 	}
 	else {
 		return terminal;
@@ -33,12 +33,7 @@ string paren_expr::next_iteration(const string& ivar) const
 string paren_expr::str() const
 {
 	if (recurse) {
-		if (recurse->op() == "") {
-			return recurse->str();
-		}
-		else {
-			return "(" + recurse->str() + ")";
-		}
+		return recurse->str();
 	}
 
 	return terminal;
@@ -128,23 +123,28 @@ string mult_expr::str() const
 	}
 }
 
-string mult_expr::next_iteration(const string& ivar) const
+string mult_expr::add_iteration(const string& ivar, const string& size) const
 {
 	assert(ivar != "");
 
-	const string plus_one = "(" + ivar + "+1)";
+	const string plus_size = "(" + ivar + "+" + size + ")";
 	if (_lhs.str() == ivar) {
-		return "(" + plus_one + _op + _rhs.str() + ")";
+		return "(" + plus_size + _op + _rhs.str() + ")";
 	}
 	else if (_rhs.str() == ivar) {
-		return "(" + _lhs.str() + _op + plus_one + ")";
+		return "(" + _lhs.str() + _op + plus_size + ")";
 	}
 	else {
-		return "(" +	_lhs.next_iteration(ivar) + 
+		return "(" +	_lhs.add_iteration(ivar, size) + 
 				_op + 
-				_rhs.next_iteration(ivar) + 
+				_rhs.add_iteration(ivar, size) + 
 			")";
 	}
+}
+
+string mult_expr::next_iteration(const string& ivar) const
+{
+	return add_iteration(ivar, "1");
 }
 
 class ivar_not_found: public exception {};
@@ -183,10 +183,10 @@ string mult_expr::zero_induction(const string& ivar) const
 		zeroed = "0";
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		zeroed = _lhs.zero_induction(ivar) + _op + _rhs.str();
+		zeroed = "(" + _lhs.zero_induction(ivar) + _op + _rhs.str() + ")";
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		zeroed = _lhs.str() + _op + _lhs.zero_induction(ivar);
+		zeroed = "(" + _lhs.str() + _op + _lhs.zero_induction(ivar) + ")";
 	}
 	else {
 		throw ivar_not_found();
@@ -224,17 +224,22 @@ string add_expr::str() const
 	return _lhs.str() + _op + _rhs.str();
 }
 
-string add_expr::next_iteration(const string& ivar) const
+string add_expr::add_iteration(const string& ivar, const string& size) const
 {
 	if (_lhs.str().find(ivar) != string::npos) {
-		return _lhs.next_iteration(ivar);
+		return "(" + _lhs.add_iteration(ivar, size) + _op + _rhs.str() + ")";
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		return _rhs.next_iteration(ivar);
+		return "(" + _lhs.str() + _op + _rhs.add_iteration(ivar, size) + ")";
 	}
 	else {
 		throw ivar_not_found();
 	}
+}
+
+string add_expr::next_iteration(const string& ivar) const
+{
+	return add_iteration(ivar, "1");
 }
 
 mult_expr add_expr::side(const string& ivar, const mult_expr* left_result, const mult_expr* right_result) const
@@ -268,16 +273,16 @@ string add_expr::zero_induction(const string& ivar) const
 	string zeroed;
 
 	if (_lhs.str() == ivar) {
-		zeroed = _rhs.str();
+		zeroed = "(" + _rhs.str() + ")";
 	}
 	else if (_rhs.str() == ivar) {
-		zeroed = _lhs.str();
+		zeroed = "(" + _lhs.str() + ")";
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		zeroed = _lhs.zero_induction(ivar) + _op + _rhs.str();
+		zeroed = "(" + _lhs.zero_induction(ivar) + _op + _rhs.str() + ")";
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		zeroed = _lhs.str() + _op + _rhs.zero_induction(ivar);
+		zeroed = "(" + _lhs.str() + _op + _rhs.zero_induction(ivar) + ")";
 	}
 	else {
 		throw ivar_not_found();

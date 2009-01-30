@@ -28,7 +28,7 @@ public:
 	paren_expr& operator+=(const string& s);
 
 	string str() const;
-	string next_iteration(const string& ivar) const;
+	string add_iteration(const string& ivar, const string& size) const;
 	add_expr eval() const;
 	string zero_induction(const string& ivar) const;
 
@@ -69,6 +69,7 @@ public:
 	paren_expr non_ihs(const string& ivar) const;
 
 	string str() const;
+	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
 	string zero_induction(const string& ivar) const;
 
@@ -101,6 +102,7 @@ public:
 	mult_expr non_ihs(const string& ivar) const;
 
 	string str() const;
+	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
 	string zero_induction(const string& ivar) const;
 
