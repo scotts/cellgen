@@ -153,13 +153,13 @@ ostream& operator<<(ostream& out, const operations& ops)
 	return out;
 }
 
-map<variable_type, map<op_type, int> > latency;
+map<variable_type, map<op_type, int> > latency __attribute__((init_priority(101)));
 
 /* Until I can pass native lists to a constructor as promised 
  * in C++0x, this is the best way I can come up with to 
  * initialize the cost table.
  */
-__attribute__((constructor)) void construct_latency()
+__attribute__((constructor(102))) void construct_latency()
 {
 	// Assuming all integer types are the same.
 
