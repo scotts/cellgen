@@ -458,18 +458,20 @@ public:
 
 template <class Xrow, class Xcolumn>
 struct make_choice: public unary_function<shared_variable*, xformer*>  {
-	const conditions& conds;
-	make_choice(const conditions& c): conds(c) {}
+	const conditions& conds_row;
+	const conditions& conds_column;
+	make_choice(const conditions& c): conds_row(c), conds_column(c) {}
+	make_choice(const conditions& c_row, const conditions& c_column): conds_row(c_row), conds_column(c_column) {}
 
 	xformer* operator()(shared_variable* v)
 	{
 		xformer* x = NULL;
 
 		if (v->is_row()) {
-			x = new Xrow(v, conds);
+			x = new Xrow(v, conds_row);
 		}
 		else if (v->is_column()) {
-			x = new Xcolumn(v, conds);
+			x = new Xcolumn(v, conds_column);
 		}
 		else {
 			throw unitialized_access_orientation();
@@ -783,16 +785,19 @@ public:
 
 	string final_size() const
 	{
-		return buffer_adaptor(v).size();
+		return "((" + conds.stop + "-" + conds.start + ")%" + buffer_adaptor(v).size() + ")";
 	}
 
 	string final_access() const
 	{
+		/*
 		buffer_adaptor buff(v);
 		const string dim1 = v->dimensions().front();
 		const string dim2 = v->dimensions().back();
 
 		return "((" + dim1 + "-(" + dim1 + "%" + buff.size() + "))*" + dim2 + ")+" + conds.induction;
+		*/
+		return "(" + v->math().replace_induction(conds.induction, "(" + conds.stop + "-" + final_size() + "))");
 	}
 
 	string dma_in(const string& address) const

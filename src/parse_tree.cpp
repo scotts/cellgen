@@ -858,7 +858,7 @@ struct for_compound_op {
 
 			conditions bridge_out = inner;
 			bridge_out.induction = outer.induction;
-			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out), seen_outs));
+			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out, inner), seen_outs));
 
 			for_all(set_union_all(seen_ins, seen_outs), mem_fn(&shared_variable::generated));
 		}

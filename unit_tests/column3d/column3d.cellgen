@@ -86,7 +86,7 @@ void inout(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 int main()
 {
 	in_and_out(a, b);
-	//inout(a, b);
+	inout(a, b);
 
 	return 0;
 }

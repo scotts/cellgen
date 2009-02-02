@@ -1,5 +1,7 @@
 #include "math_exprs.h"
 
+class ivar_not_found: public exception {};
+
 /* class paren_expr
  */
 paren_expr::paren_expr(const paren_expr& o): terminal(o.terminal)
@@ -90,15 +92,28 @@ paren_expr::~paren_expr()
 	delete recurse;
 }
 
-class cant_zero_string {};
-
-string paren_expr::zero_induction(const string& ivar) const
+string paren_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	if (terminal.find(ivar) != string::npos) {
-		throw cant_zero_string();
+	string s;
+	if (terminal == ivar) {
+		s = rep;
+	}
+	else if (recurse && recurse->str().find(ivar) != string::npos) {
+		s = recurse->replace_induction(ivar, rep);
+	}
+	else {
+		cout << "paren_expr::replace_induction(" << ivar << ", " << rep << ")" << endl;
+		if (recurse) {
+			cout << "recurse: " << recurse->str() << endl;
+		}
+		else {
+			cout << "terminal: " << terminal << endl;
+		}
+
+		throw ivar_not_found();
 	}
 
-	return recurse->zero_induction(ivar);
+	return s;
 }
 
 operations paren_expr::cost() const
@@ -147,8 +162,6 @@ string mult_expr::next_iteration(const string& ivar) const
 	return add_iteration(ivar, "1");
 }
 
-class ivar_not_found: public exception {};
-
 paren_expr mult_expr::side(const string& ivar, const paren_expr* left_result, const paren_expr* right_result) const
 {
 	const paren_expr* p = NULL;
@@ -175,24 +188,32 @@ paren_expr mult_expr::non_ihs(const string& ivar) const
 	return side(ivar, &_rhs, &_lhs);
 }
 
-string mult_expr::zero_induction(const string& ivar) const
+string mult_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	string zeroed;
+	string s;
 
-	if (_lhs.str() == ivar || _rhs.str() == ivar) {
-		zeroed = "0";
+	if (_lhs.str() == ivar) {
+		s = "(" + rep + _op + "(" + _rhs.str() + ")" + ")";	
+	}
+	else if (_rhs.str() == ivar) {
+		s = "((" + _lhs.str() + ")" + _op + rep + ")";
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		zeroed = "(" + _lhs.zero_induction(ivar) + _op + _rhs.str() + ")";
+		s = "(" + _lhs.replace_induction(ivar, rep) + _op + "(" + _rhs.str() + "))";
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		zeroed = "(" + _lhs.str() + _op + _lhs.zero_induction(ivar) + ")";
+		s = "((" + _lhs.str() + ")" + _op + _lhs.replace_induction(ivar, rep) + ")";
 	}
 	else {
 		throw ivar_not_found();
 	}
 
-	return zeroed;
+	return s;
+}
+
+string mult_expr::zero_induction(const string& ivar) const
+{
+	return replace_induction(ivar, "0");
 }
 
 operations mult_expr::cost() const
@@ -221,7 +242,11 @@ string add_expr::str() const
 	if (_lhs.str() == "" && _op == "" && _rhs.str() == "") {
 		return "";
 	}
-	return _lhs.str() + _op + _rhs.str();
+	if (_rhs.str() == "" && _op == "") {
+		return _lhs.str();
+	}
+
+	return "((" + _lhs.str() + ")" + _op + "(" + _rhs.str() + "))";
 }
 
 string add_expr::add_iteration(const string& ivar, const string& size) const
@@ -268,27 +293,32 @@ mult_expr add_expr::non_ihs(const string& ivar) const
 	return side(ivar, &_rhs, &_lhs);
 }
 
-string add_expr::zero_induction(const string& ivar) const
+string add_expr::replace_induction(const string& ivar, const string& rep) const
 {
 	string zeroed;
 
 	if (_lhs.str() == ivar) {
-		zeroed = "(" + _rhs.str() + ")";
+		zeroed = "(" + rep + _op + "(" + _rhs.str() + "))";
 	}
 	else if (_rhs.str() == ivar) {
-		zeroed = "(" + _lhs.str() + ")";
+		zeroed = "((" + _lhs.str() + ")" + _op + rep + ")";
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		zeroed = "(" + _lhs.zero_induction(ivar) + _op + _rhs.str() + ")";
+		zeroed = "(" + _lhs.replace_induction(ivar, rep) + _op + "(" + _rhs.str() + "))";
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		zeroed = "(" + _lhs.str() + _op + _rhs.zero_induction(ivar) + ")";
+		zeroed = "((" + _lhs.str() + ")" + _op + _rhs.replace_induction(ivar, rep) + ")";
 	}
 	else {
 		throw ivar_not_found();
 	}
 
 	return zeroed; 
+}
+
+string add_expr::zero_induction(const string& ivar) const
+{
+	return replace_induction(ivar, "0");
 }
 
 operations add_expr::cost() const
