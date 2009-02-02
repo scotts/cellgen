@@ -153,6 +153,12 @@ ostream& operator<<(ostream& out, const operations& ops)
 	return out;
 }
 
+/* Need to make sure that latency gets initialized before construct_latency gets 
+ * called. Using a lower priority ensures that. For details, see:
+ *    http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html
+ * And:
+ *    http://gcc.gnu.org/onlinedocs/gcc/C_002b_002b-Attributes.html
+ */
 map<variable_type, map<op_type, int> > latency __attribute__((init_priority(101)));
 
 /* Until I can pass native lists to a constructor as promised 
