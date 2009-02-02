@@ -117,17 +117,18 @@ void add_to_dma_list(spe_dma_list_t* list, uint32_t len, uint64_t ea, \
 {
     uint32_t j=0, n=len;
     
-    if (list->length / num_dma_cmds_per_element < n) {
+    if (list->alloclength / num_dma_cmds_per_element >= n) {
+        list->length = n*num_dma_cmds_per_element;
         #ifdef DEBUG
         fprintf(stderr, "dma list length is too short! (%u/%u < %u) So, reallocated\n", list->length , num_dma_cmds_per_element, n);
         #endif
-        if (list->alloclength / num_dma_cmds_per_element >= n) {
-            list->length = n*num_dma_cmds_per_element;
-        } else {
-            free_dma_list(list);
-            allocate_dma_list(list, len, num_dma_cmds_per_element);
-        }
     }
+    else {
+        free_dma_list(list);
+        allocate_dma_list(list, len, num_dma_cmds_per_element);
+        list->length = n*num_dma_cmds_per_element;
+    }
+
     // FIXME: there is no guarantee that ea_base is same for all if mem size > 4GB
 
     if (num_dma_cmds_per_element == 1)
