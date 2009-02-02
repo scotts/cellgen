@@ -1,0 +1,92 @@
+#include <stdio.h>
+#include <assert.h>
+
+#define __N1 8
+#define __N2 256
+#define __N3 4096
+const int N1 = __N1;
+const int N2 = __N2;
+const int N3 = __N3;
+
+int16b_t a[__N1][__N2][__N3] __attribute((aligned(128)));
+int16b_t b[__N1][__N2][__N3] __attribute((aligned(128)));
+
+void in_and_out(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
+{
+	int i, j, k;
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N2; ++k) {
+				in[i][k][j].num = (i+1)*(j+1)*(k+1);
+				out[i][k][j].num = 0;
+			}
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	{
+		int i, j, k;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < N3; ++j) {
+				for (k = 0; k < N2; ++k) {
+					out[i][k][j].num = in[i][k][j].num;
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N2; ++k) {
+				if (in[i][k][j].num != out[i][k][j].num) {
+					printf("in and out failure at (%d,%d,%d), in %d, out %d\n", i, k, j, in[i][k][j].num, out[i][k][j].num);
+					return;
+				}
+			}
+		}
+	}
+}
+
+void inout(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
+{
+	int i, j, k;
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N2; ++k) {
+				test[i][k][j].num = (i+1)*(j+1)*(k+1);
+				ref[i][k][j].num = 2 * (i+1)*(j+1)*(k+1);
+			}
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* test = test[N1][N2][N3])
+	{
+		int i, j, k;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < N3; ++j) {
+				for (k = 0; k < N2; ++k) {
+					test[i][k][j].num = 2 * test[i][k][j].num;
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < N1; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N2; ++k) {
+				if (ref[i][k][j].num != test[i][k][j].num) {
+					printf("inout failure at (%d,%d,%d), ref %d, test %d\n", i, k, j, ref[i][k][j].num, test[i][k][j].num);
+					return;
+				}
+			}
+		}
+	}
+}
+
+int main()
+{
+	in_and_out(a, b);
+	//inout(a, b);
+
+	return 0;
+}
