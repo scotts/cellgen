@@ -153,19 +153,7 @@ ostream& operator<<(ostream& out, const operations& ops)
 	return out;
 }
 
-/* Need to make sure that latency gets initialized before construct_latency gets 
- * called. Using a lower priority ensures that. For details, see:
- *    http://gcc.gnu.org/onlinedocs/gcc/Function-Attributes.html
- * And:
- *    http://gcc.gnu.org/onlinedocs/gcc/C_002b_002b-Attributes.html
- */
-map<variable_type, map<op_type, int> > latency __attribute__((init_priority(101)));
-
-/* Until I can pass native lists to a constructor as promised 
- * in C++0x, this is the best way I can come up with to 
- * initialize the cost table.
- */
-__attribute__((constructor(102))) void construct_latency()
+latency_estimator::latency_estimator()
 {
 	// Assuming all integer types are the same.
 
@@ -200,12 +188,12 @@ __attribute__((constructor(102))) void construct_latency()
 	latency[DOUBLE][MOD] = 7; // complete guess
 }
 
-int counts_to_cycles(const int n, const op_type op, const variable_type var)
+int latency_estimator::cycles(const int n, const op_type op, const variable_type var) const
 {
-	return n * latency[var][op];
+	return n * latency.find(var)->second.find(op)->second;
 }
 
-int estimate_buffer_size(const int iteration, const int startup)
+int latency_estimator::buffer_size(const int iteration, const int startup) const
 {
 	return static_cast<int>((iteration - (dma_startup_cost + startup)) / dma_bandwidth_cycles);
 }

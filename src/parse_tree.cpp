@@ -483,7 +483,11 @@ variable_type type_promotion(const variable_type l, const variable_type r)
 	return UNKNOWN_VAR;
 }
 
-class local_variable_not_found {};
+struct local_variable_not_found {
+	string name;
+
+	local_variable_not_found(const string& n): name(n) {}
+};
 
 variable_type ident_or_constant_type(ast_node& node, const var_symtbl& locals)
 {
@@ -505,7 +509,7 @@ variable_type ident_or_constant_type(ast_node& node, const var_symtbl& locals)
 			type = construct_variable_type(l->second->type());
 		}
 		else {
-			throw local_variable_not_found();
+			throw local_variable_not_found(name);
 		}
 	}
 
@@ -650,6 +654,9 @@ struct assignment_search {
 				throw user_error("Shared variables can only be accessed in row major or column "
 						"major format, not both. Make your own alias to get around this "
 						"limitation.");
+			}
+			catch (local_variable_not_found e) {
+				cerr << "local variable not found: " << e.name << endl;
 			}
 		}
 		else {
@@ -1625,7 +1632,7 @@ struct cell_region {
 				<< startup 
 				<< "cycles: " << startup.cycles() << endl
 				<< endl
-				<< "buffer size : " << estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
+				<< "buffer size : " << estimator.buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
 				<< endl;
 			*/
 

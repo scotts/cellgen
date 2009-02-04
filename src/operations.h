@@ -24,6 +24,17 @@ enum op_type {ADD, SUB, MUL, DIV, MOD, UNKNOWN_OP};
 op_type construct_op_type(const string& op);
 variable_type construct_variable_type(const string& op);
 
+class latency_estimator {
+	map<variable_type, map<op_type, int> > latency;
+
+public:
+	latency_estimator();
+	int cycles(const int n, const op_type op, const variable_type var) const;
+	int buffer_size(const int iteration, const int startup) const;
+};
+
+const latency_estimator estimator;
+
 template <variable_type type>
 struct operation_counts {
 	int add;
@@ -112,19 +123,16 @@ operation_counts<type> operator+(const operation_counts<type>& a, const operatio
 	return o;
 }
 
-int counts_to_cycles(const int n, const op_type op, const variable_type var);
-int estimate_buffer_size(const int iteration, const int startup);
-
 template <variable_type type>
 int operation_counts<type>::cycles()
 {
 	int count = 0;
 
-	count += counts_to_cycles(add, ADD, type);
-	count += counts_to_cycles(sub, SUB, type);
-	count += counts_to_cycles(mul, MUL, type);
-	count += counts_to_cycles(div, DIV, type);
-	count += counts_to_cycles(mod, MOD, type);
+	count += estimator.cycles(add, ADD, type);
+	count += estimator.cycles(sub, SUB, type);
+	count += estimator.cycles(mul, MUL, type);
+	count += estimator.cycles(div, DIV, type);
+	count += estimator.cycles(mod, MOD, type);
 
 	return count;
 }
