@@ -10,9 +10,6 @@ typedef list<spe_region*> spelist;
 class spe_region {
 	privset _priv;
 	sharedset _shared;
-	sharedset _in;		// _in + _out + _inout = _shared
-	sharedset _out;
-	sharedset _inout;
 	reduceset _reductions;
 	string _reduction_op;
 	shared_symtbl _shared_symbols;
@@ -36,9 +33,6 @@ public:
 
 	privset& priv()			{ return _priv; }
 	sharedset& shared()		{ return _shared; }
-	sharedset& in()			{ return _in; }
-	sharedset& out()		{ return _out; }
-	sharedset& inout()		{ return _inout; }
 	reduceset& reductions()		{ return _reductions; }
 	shared_symtbl& shared_symbols()	{ return _shared_symbols; }
 	priv_symtbl& priv_symbols()	{ return _priv_symbols; }

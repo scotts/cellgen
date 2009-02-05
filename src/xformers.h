@@ -549,17 +549,17 @@ struct define_const: public xformer {
 	string class_name() const { return "define_const"; }
 };
 
-class reduction_declare: public xformer {
+class define_reduction: public xformer {
 	const reduction_variable* v;
 public:
-	reduction_declare(const reduction_variable* v): v(v) {}
+	define_reduction(const reduction_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
 		return old + orig_adaptor(v).declare() + "= *" + v->name() + "; \n";
 	}
 
-	xformer* clone() const { return new reduction_declare(*this); }
-	string class_name() const { return "reduction_declare"; }
+	xformer* clone() const { return new define_reduction(*this); }
+	string class_name() const { return "define_reduction"; }
 };
 
 class base_access {
@@ -664,7 +664,7 @@ public:
 	{
 		string a;
 		if (v->is_flat()) {
-			a = v->math().next_iteration(conds.induction);
+			a = v->math().ihs(conds.induction).next_iteration(conds.induction);
 		}
 		else {
 			a = v->math().str() + "+1";

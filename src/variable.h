@@ -129,14 +129,15 @@ class shared_variable: public region_variable {
 	add_expr _math;
 	list<string> _dimensions; // Dimensions for multidimensional array
 	orientation_t _orientation;
-	bool _generated;
+	bool _in_generated;
+	bool _out_generated;
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _generated(false)
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false)
 		{}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _generated(false)
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false)
 		{}
 
 	add_expr math() const { return _math; }
@@ -154,8 +155,11 @@ public:
 	list<string> dimensions() const { return _dimensions; }
 	bool is_flat() const { return _dimensions.size() == 0; }
 	bool seen() const { return _orientation != UNINITIALIZED; }
-	bool is_not_generated() const { return !_generated; }
-	void generated() { _generated = true; }
+
+	bool in_not_generated() const { return !_in_generated; }
+	bool out_not_generated() const { return !_out_generated; }
+	void in_generated() { _in_generated = true; }
+	void out_generated() { _out_generated = true; }
 };
 
 class reduction_variable: public region_variable {
