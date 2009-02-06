@@ -209,6 +209,24 @@ Container set_union_all(const Container& c1, const Container& c2, const Containe
 	return u;
 }
 
+template <class Key, class Val, class Set>
+struct assign_set {
+	Val val;
+	Set& set;
+	assign_set(Val v, Set& s): val(v), set(s) {}
+
+	void operator()(const Key k)
+	{
+		set[k] = val;
+	}
+};
+
+template <class Key, class Val, class Set>
+assign_set<Key, Val, Set> make_assign_set(Val v, Set& s)
+{
+	return assign_set<Key, Val, Set>(v, s);
+}
+
 template <class T>
 struct erase_from_set: unary_function<T, void> {
 	set<T>& container;

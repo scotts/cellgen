@@ -81,17 +81,19 @@ public:
 	shared_variable* v;
 protected:
 	conditions conds;
+	int depth;
 public:
-	conditions_xformer(shared_variable* _v, const conditions& c): v(_v), conds(c) {}
+	conditions_xformer(shared_variable* _v, const conditions& c, const int d): v(_v), conds(c), depth(d) {}
 };
 
 template <class X>
 struct make_conditions: public unary_function<shared_variable*, xformer*> {
 	const conditions& conds;
-	make_conditions(const conditions& c): conds(c) {}
+	const int depth;
+	make_conditions(const conditions& c, const int d): conds(c), depth(d) {}
 	xformer* operator()(shared_variable* v)
 	{
-		return new X(v, conds);
+		return new X(v, conds, depth);
 	}
 };
 
@@ -101,9 +103,9 @@ class unrollable_xformer: public conditions_xformer {
 protected:
 	int unroll;
 public:
-	unrollable_xformer(shared_variable* v, const conditions& c): conditions_xformer(v, c), unroll(NO_UNROLL) {}
-	unrollable_xformer(shared_variable* v, const conditions& c, const int u): conditions_xformer(v, c), unroll(u) {}
-	unrollable_xformer(shared_variable* v, const int u): conditions_xformer(v, conditions()), unroll(u) {}
+	unrollable_xformer(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), unroll(NO_UNROLL) {}
+	unrollable_xformer(shared_variable* v, const conditions& c, const int d, const int u): conditions_xformer(v, c, d), unroll(u) {}
+	unrollable_xformer(shared_variable* v, const int d, const int u): conditions_xformer(v, conditions(), d), unroll(u) {}
 	virtual void unroll_me(int u)
 	{
 		// TODO: Do I need to know induction information to determine if 
@@ -263,11 +265,11 @@ class shared_buffer_size: public unrollable_xformer {
 	const int buffer;
 
 public:
-	shared_buffer_size(shared_variable* v, const int b, const int u): unrollable_xformer(v, u), buffer(b) {}
+	shared_buffer_size(shared_variable* v, const int d, const int b, const int u): unrollable_xformer(v, d, u), buffer(b) {}
 	string operator()(const string& old)
 	{
 		string declaration;
-		if (v->depth() > 0 ) {
+		if (depth > 0) {
 			string def;
 
 			// User specified buffer overrides fitting buffer to unrolling
@@ -284,9 +286,6 @@ public:
 				else {
 					throw unitialized_access_orientation();
 				}
-
-				// What's the right thing to do with the factors?
-				//def = "(" + to_string(unroll) + v->math().factor(induction) + ")";
 			}
 			else {
 				def = default_buff_size;
@@ -362,7 +361,6 @@ public:
 		string allocation;
 
 		if (v->is_column()) {
-			// FIXME: this is not the correct way to define and allocate a DMA list.
 			dma_list_adaptor list(v);
 			buffer_adaptor buff(v);
 			allocation = list.declare() + "; \n";
@@ -790,13 +788,6 @@ public:
 
 	string final_access() const
 	{
-		/*
-		buffer_adaptor buff(v);
-		const string dim1 = v->dimensions().front();
-		const string dim2 = v->dimensions().back();
-
-		return "((" + dim1 + "-(" + dim1 + "%" + buff.size() + "))*" + dim2 + ")+" + conds.induction;
-		*/
 		return "(" + v->math().replace_induction(conds.induction, "(" + conds.stop + "-" + final_size() + "))");
 	}
 
@@ -859,10 +850,6 @@ public:
 	gen_in_first(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
 	string operator()(const string& old)
 	{
-		next_adaptor next(v);
-		buffer_adaptor buff(v);
-		orig_adaptor orig(v);
-
 		return old + 
 			"cellgen_dma_prep_start();" + 
 			dma_in("(unsigned long)(" + v->name() + " + (" + Access::first_access() + "))") + 
@@ -875,7 +862,7 @@ public:
 
 template <class Access>
 struct gen_in: public unrollable_xformer, public epilogue_xformer, public Access {
-	gen_in(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
+	gen_in(shared_variable* v, const conditions& c, const int d): unrollable_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);

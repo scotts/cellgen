@@ -107,8 +107,8 @@ public:
 
 	virtual string actual() const { return pass_var + "." + unique_name(); }
 
-	int depth() const { return _depth; }
-	void depth(int d) { _depth = d; }
+	//int depth() const { return _depth; }
+	//void depth(int d) { _depth = d; }
 };
 
 class private_variable: public region_variable {
@@ -179,15 +179,13 @@ private:
 	const region_variable* v;
 
 public:
-	buffer_adaptor(const region_variable* _v): v(_v)
+	buffer_adaptor(const region_variable* _v, const int d): v(_v)
 	{
 		assert(v);
-		assert(v->depth() > 0);	
 	}
 
 	string name() const { return v->region_variable::name() + "_buf"; }
 	string declare() const { return type() + "* " + name(); }
-	string depth() const { return to_string(v->depth()); }
 	string size() const { return name() + "_sz"; }
 
 	string type() const
@@ -210,18 +208,16 @@ private:
 	const shared_variable* v;
 
 public:
-	dma_list_adaptor(const shared_variable* _v): v(_v)
+	dma_list_adaptor(const shared_variable* _v, const int d): v(_v)
 	{
 		assert(v);
-		assert(v->depth() > 0);
 	}
 
 	string name() const { return v->region_variable::name() + "_lst"; }
 	string name(const int i) const { return v->region_variable::name() + "_lst[" + to_string(i) + "]"; }
 	string name(const string s) const { return v->region_variable::name() + "_lst[" + s + "]"; }
 	string type() const { return "spe_dma_list_t"; }
-	string declare() const { return type() +  " " + name() + "[" + depth() + "]"; }
-	string depth() const { return to_string(v->depth()); }
+	string declare(const int depth) const { return type() +  " " + name() + "[" + to_string(depth) + "]"; }
 };
 
 class next_adaptor {
@@ -252,6 +248,7 @@ typedef map<string, private_variable*>	priv_symtbl;
 typedef map<string, reduction_variable*>	reduc_symtbl;
 typedef set<string>			symset;
 typedef list<string>			symlist;
+typedef map<shared_variable*, int>	depths;
 
 #endif // VARIABLE_H
 

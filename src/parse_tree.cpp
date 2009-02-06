@@ -689,7 +689,7 @@ struct serial_for_op {
 	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, operations& o, condslist& c, bind_xformer& n, const int u):
 		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
 		{}
-	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
+	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout, depths& local_depths)
 	{
 		// g_inout += inout + intersection(in + g_in, out + g_out)
 		g_in.insert(in.begin(), in.end());
@@ -702,6 +702,10 @@ struct serial_for_op {
 
 		// g_out -= g_inout
 		for_all(g_inout, erase_from_set<shared_variable*>(g_out));
+
+		for_all(g_in, make_assign_set<shared_variable*>(2, local_depths));
+		for_all(g_out, make_assign_set<shared_variable*>(2, local_depths));
+		for_all(g_inout, make_assign_set<shared_variable*>(3, local_depths));
 	}
 
 	void operator()(ast_node& node);
@@ -779,11 +783,6 @@ struct lift_out_gen_in_rows {
 
 typedef map<conditions_xformer*, ast_node*> bind_cond;
 
-void print_shared(const shared_variable* v)
-{
-	cout << v->name() << " ";
-}
-
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
@@ -856,9 +855,10 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
+			depths local_depths;
 			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes, unroll);
 			for_all(node.children, &o);
-			o.merge_inout(in, out, inout);
+			o.merge_inout(in, out, inout, local_depths);
 
 			xformerlist& nested = node.value.xformations;
 			const conditions& inner = conds.back();
@@ -883,28 +883,6 @@ struct for_compound_op {
 
 			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
 			for_all(seen_outs, mem_fn(&shared_variable::out_generated));
-
-			cout << "in: ";
-			for_all(in, print_shared);
-			cout << endl;
-
-			cout << "out: ";
-			for_all(out, print_shared);
-			cout << endl;
-
-			cout << "inout: ";
-			for_all(inout, print_shared);
-			cout << endl;
-
-			cout << "seen ins: ";
-			for_all(seen_ins, print_shared);
-			cout << endl;
-
-			cout << "seen outs: ";
-			for_all(seen_outs, print_shared);
-			cout << endl;
-
-			cout << endl;
 		}
 		else {
 			for_all(node.children, this);
@@ -1091,10 +1069,11 @@ struct parallel_for_op {
 			}
 		}
 		else if (node.value.id() == ids::compound) {
+			depths local_depths;
 			bind_xformer condnodes_col;
 			serial_for_op o(shared_symbols, priv_symbols, ops, conds, condnodes_col, unroll);
 			o(node);
-			o.merge_inout(in, out, inout);
+			o.merge_inout(in, out, inout, local_depths);
 
 			const bool column = accumulate_all(set_union_all(in, out, inout), false, make_acc_or(&shared_variable::is_column));
 			if (unroll && column) {
