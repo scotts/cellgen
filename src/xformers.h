@@ -87,12 +87,12 @@ public:
 
 template <class X, class V>
 struct make_depth_xformer: public unary_function<const V*, xformer*> {
-	const depths& local_depths;
-	make_depth_xformer(const depths& d): local_depths(d) {}
+	const depths& scope_depths;
+	make_depth_xformer(const depths& d): scope_depths(d) {}
 
 	xformer* operator()(const V* v)
 	{
-		return new X(v, local_depths.find(v)->second);
+		return new X(v, scope_depths.find(v)->second);
 	}
 };
 

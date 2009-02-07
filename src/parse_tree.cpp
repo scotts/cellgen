@@ -673,6 +673,9 @@ struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	var_symtbl locals;
+	sharedset& global_in;
+	sharedset& global_out;
+	sharedset& global_inout;
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
@@ -683,13 +686,16 @@ struct serial_for_op {
 	conditions sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, condslist& c, bind_xformer& n, const int u):
-		shared_symbols(s), priv_symbols(p), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gi, sharedset& go, sharedset& gio,
+			operations& o, condslist& c, bind_xformer& n, const int u):
+		shared_symbols(s), priv_symbols(p), global_in(gi), global_out(go), global_inout(gio), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
 		{}
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, operations& o, condslist& c, bind_xformer& n, const int u):
-		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, sharedset& gi, sharedset& go, sharedset& gio,
+			operations& o, condslist& c, bind_xformer& n, const int u):
+		shared_symbols(s), priv_symbols(p), locals(l), global_in(gi), global_out(go), global_inout(gio), 
+		ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
 		{}
-	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout, depths& local_depths)
+	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
 		// g_inout += inout + intersection(in + g_in, out + g_out)
 		g_in.insert(in.begin(), in.end());
@@ -702,10 +708,6 @@ struct serial_for_op {
 
 		// g_out -= g_inout
 		for_all(g_inout, erase_from_set<shared_variable*>(g_out));
-
-		for_all(g_in, make_assign_set<shared_variable*>(2, local_depths));
-		for_all(g_out, make_assign_set<shared_variable*>(2, local_depths));
-		for_all(g_inout, make_assign_set<shared_variable*>(3, local_depths));
 	}
 
 	void operator()(ast_node& node);
@@ -785,6 +787,9 @@ struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
 	var_symtbl locals;
+	sharedset& global_in;
+	sharedset& global_out;
+	sharedset& global_inout;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
@@ -796,9 +801,12 @@ struct for_compound_op {
 	sharedset seen;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
-			sharedset& i, sharedset& o, sharedset& io, operations& op, condslist& c, bind_xformer& n, const int u): 
-		shared_symbols(s), priv_symbols(p), locals(l), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), 
-		unroll(u), par_induction(c.front().induction)
+			sharedset& gi, sharedset& go, sharedset& gio,	
+			sharedset& i, sharedset& o, sharedset& io, 
+			operations& op, condslist& c, bind_xformer& n, const int u): 
+		shared_symbols(s), priv_symbols(p), locals(l), 
+		global_in(gi), global_out(go), global_inout(gio), in(i), out(o), inout(io), 
+		ops(op), conds(c), condnodes(n), unroll(u), par_induction(c.front().induction)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -806,47 +814,39 @@ struct for_compound_op {
 			declaration_op o(shared_symbols, priv_symbols, locals, ops, conds);
 			for_all(node.children, &o);
 
-			// FIXME: this is no longer necessary. Initialize in elsewhere.
-			// We need the indirection of o.in because in might already have variables,
-			// and we don't want to generate gen_in xformations for them.
-			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
-				if (seen.find(*i) == seen.end()) {
-					in.insert(*i);
-					seen.insert(*i);
-				}
-			}
+			in.insert(o.in.begin(), o.in.end());
 		}
 		else if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
 			assignment_search o(shared_symbols, priv_symbols, ops, conds, out, locals);
 			for_all(node.children, &o);
 
-			// FIXME: this is no longer necessary. Initialize in elsewhere.
-			// Store the function object somewhere, and call it later once I know 
-			// which variables are in, which are out, and which are inout
-			for (sharedset::iterator i = o.in.begin(); i != o.in.end(); ++i) {
-				if (seen.find(*i) == seen.end()) {
-					in.insert(*i);
-					seen.insert(*i);
-				}
-			}
+			in.insert(o.in.begin(), o.in.end());
 		}
 
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, locals, global_in, global_out, global_inout, ops, conds, condnodes, unroll);
 			for_all(node.children, &o);
 
+			o.merge_inout(in, out, inout);
+
 			depths local_depths;
-			o.merge_inout(in, out, inout, local_depths);
+			for_all(in, make_assign_set<shared_variable*>(2, local_depths));
+			for_all(out, make_assign_set<shared_variable*>(2, local_depths));
+			for_all(inout, make_assign_set<shared_variable*>(3, local_depths));
+
+			global_in.insert(in.begin(), in.end());
+			global_out.insert(out.begin(), out.end());
+			global_inout.insert(inout.begin(), inout.end());
 
 			xformerlist& nested = node.value.xformations;
 			const conditions& inner = conds.back();
 			const conditions& outer = *previous(previous(conds.end(), conds), conds);
-			const fn_and<shared_variable> seen_but_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
-			const fn_and<shared_variable> seen_but_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
-			const sharedset& seen_ins = filter(seen_but_not_in, set_union_all(in, inout));
-			const sharedset& seen_outs = filter(seen_but_not_out, set_union_all(out, inout));
+			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
+			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
+			const sharedset& seen_ins = filter(seen_not_in, set_union_all(in, inout));
+			const sharedset& seen_outs = filter(seen_not_out, set_union_all(out, inout));
 
 			conditions bridge_in = outer;
 			bridge_in.induction = inner.induction;
@@ -954,7 +954,9 @@ void serial_for_op::operator()(ast_node& node)
 		}
 	}
 	else if (node.value.id() == ids::compound) {
-		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, ops, conds, condnodes, unroll);
+		for_compound_op o(shared_symbols, priv_symbols, locals, 
+				global_in, global_out, global_inout, in, out, inout, 
+				ops, conds, condnodes, unroll);
 		for_all(node.children, &o);
 	}
 	else {
@@ -971,9 +973,9 @@ struct multiple_parallel_induction_variables {
 struct parallel_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
-	sharedset& in;
-	sharedset& out;
-	sharedset& inout;
+	sharedset& global_in;
+	sharedset& global_out;
+	sharedset& global_inout;
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
@@ -981,13 +983,13 @@ struct parallel_for_op {
 	conditions parconds;
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, 
 			sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
-		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), unroll(u)
+		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), ops(op), conds(c), condnodes(n), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
 		// if unroll, need to change iteration parameters
 		if (node.value.id() == ids::identifier) {
-			string ident(node.value.begin(), node.value.end());
+			const string ident(node.value.begin(), node.value.end());
 			if (ident != "SPE_start" && ident != "SPE_stop") {
 				if (parconds.induction != "" && parconds.induction != ident) {
 					throw multiple_parallel_induction_variables(parconds.induction, ident);
@@ -1011,22 +1013,30 @@ struct parallel_for_op {
 			}
 		}
 		else if (node.value.id() == ids::compound) {
-			depths local_depths;
 			bind_xformer condnodes_col;
-			serial_for_op o(shared_symbols, priv_symbols, ops, conds, condnodes_col, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds, condnodes_col, unroll);
 			o(node);
-			o.merge_inout(in, out, inout, local_depths);
+
+			o.merge_inout(global_in, global_out, global_inout);
+
+			sharedset& in = o.in;
+			sharedset& out = o.out;
+			sharedset& inout = o.inout;
+
+			depths local_depths;
+			for_all(in, make_assign_set<shared_variable*>(2, local_depths));
+			for_all(out, make_assign_set<shared_variable*>(2, local_depths));
+			for_all(inout, make_assign_set<shared_variable*>(3, local_depths));
 
 			const bool column = accumulate_all(set_union_all(in, out, inout), false, make_acc_or(&shared_variable::is_column));
 			if (unroll && column) {
 				for_all(condnodes_col, add_xformer_to_node);
 			}
 
-			const fn_and<shared_variable> row_and_flat(&shared_variable::is_row, &shared_variable::is_flat);
-
 			// Hi, I'm an inelegant special case.
 			xformerlist& lbrace = node.children.front().value.xformations;
 			xformerlist& rbrace = node.children.back().value.xformations;
+			const fn_and<shared_variable> row_and_flat(&shared_variable::is_row, &shared_variable::is_flat);
 			const sharedset& flat_ins = filter(row_and_flat, set_union_all(in, inout));
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
 			const make_conditions<gen_in<row_access> > make_gen_in_row(parconds, local_depths);
@@ -1036,6 +1046,8 @@ struct parallel_for_op {
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
 			append(rbrace, fmap(make_gen_out_final_row, flat_outs));
+
+			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
 			for_all(flat_outs, mem_fn(&shared_variable::out_generated));
 
 			rbrace.push_back(new total_timer_stop());
@@ -1521,6 +1533,13 @@ struct accumulate_cost {
 	}
 };
 
+/* Reasoning about the call sequence for nested for-loops can be confusing. Excluding 
+ * all of the function objects that look through declarations and assignment 
+ * statements, the sequence is:
+ *
+ * cell_region -> compound -> parallel_for_op -> serial_for_op -> for_compound_op |
+ *                                               ^---------------------------------
+ */
 struct cell_region {
 	spelist::iterator region;
 
@@ -1543,7 +1562,6 @@ struct cell_region {
 			sharedset in;
 			sharedset out;
 			sharedset inout;
-			depths max_depths;
 			condslist conds;
 			bind_xformer condnodes_row;
 			operations iteration;
@@ -1551,6 +1569,7 @@ struct cell_region {
 			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, conds, condnodes_row, unroll);
 			for_all(node.children, &o);
 
+			depths max_depths;
 			for_all(in, make_assign_set<shared_variable*>(2, max_depths));
 			for_all(out, make_assign_set<shared_variable*>(2, max_depths));
 			for_all(inout, make_assign_set<shared_variable*>(3, max_depths));
