@@ -94,21 +94,19 @@ const string default_buff_size("64");
 
 class region_variable: public variable {
 	int region_num;
-	int _depth; // What type of buffering? Zero means scalar; support single, double and triple.
 
 public:
 	region_variable(const string& t, const string& l, const string& a):
-		variable(t, l, a), region_num(0), _depth(0) {}
+		variable(t, l, a), region_num(0)
+		{}
 	region_variable(const string& t, const string& l, const string& a, int r):
-		variable(t, l, a), region_num(r), _depth(0) {}
+		variable(t, l, a), region_num(r)
+		{}
 
 	string unique_name() const { return name() + to_string<int>(region_num); }
 	string unique_declare() const { return type() + " " + unique_name(); }
 
 	virtual string actual() const { return pass_var + "." + unique_name(); }
-
-	//int depth() const { return _depth; }
-	//void depth(int d) { _depth = d; }
 };
 
 class private_variable: public region_variable {
@@ -179,7 +177,7 @@ private:
 	const region_variable* v;
 
 public:
-	buffer_adaptor(const region_variable* _v, const int d): v(_v)
+	buffer_adaptor(const region_variable* _v): v(_v)
 	{
 		assert(v);
 	}
@@ -208,7 +206,7 @@ private:
 	const shared_variable* v;
 
 public:
-	dma_list_adaptor(const shared_variable* _v, const int d): v(_v)
+	dma_list_adaptor(const shared_variable* _v): v(_v)
 	{
 		assert(v);
 	}
@@ -248,7 +246,7 @@ typedef map<string, private_variable*>	priv_symtbl;
 typedef map<string, reduction_variable*>	reduc_symtbl;
 typedef set<string>			symset;
 typedef list<string>			symlist;
-typedef map<shared_variable*, int>	depths;
+typedef map<const region_variable*, int>	depths;
 
 #endif // VARIABLE_H
 

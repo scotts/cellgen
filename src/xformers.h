@@ -75,25 +75,45 @@ struct conditions {
 };
 typedef list<conditions> condslist;
 
-class conditions_xformer: virtual public xformer {
+class depth_xformer: virtual public xformer {
+protected:
+	const int depth;
+public:
+	depth_xformer(int d): depth(d)
+	{
+		assert(depth > 0);	
+	}
+};
+
+template <class X, class V>
+struct make_depth_xformer: public unary_function<const V*, xformer*> {
+	const depths& local_depths;
+	make_depth_xformer(const depths& d): local_depths(d) {}
+
+	xformer* operator()(const V* v)
+	{
+		return new X(v, local_depths.find(v)->second);
+	}
+};
+
+class conditions_xformer: virtual public xformer, public depth_xformer {
 public:
 	// FIXME: this should not be public
 	shared_variable* v;
 protected:
 	conditions conds;
-	int depth;
 public:
-	conditions_xformer(shared_variable* _v, const conditions& c, const int d): v(_v), conds(c), depth(d) {}
+	conditions_xformer(shared_variable* _v, const conditions& c, const int d): depth_xformer(d), v(_v), conds(c) {}
 };
 
 template <class X>
 struct make_conditions: public unary_function<shared_variable*, xformer*> {
 	const conditions& conds;
-	const int depth;
-	make_conditions(const conditions& c, const int d): conds(c), depth(d) {}
+	const depths& local_depths;
+	make_conditions(const conditions& c, const depths& l): conds(c), local_depths(l) {}
 	xformer* operator()(shared_variable* v)
 	{
-		return new X(v, conds, depth);
+		return new X(v, conds, local_depths.find(v)->second);
 	}
 };
 
@@ -108,8 +128,6 @@ public:
 	unrollable_xformer(shared_variable* v, const int d, const int u): conditions_xformer(v, conditions(), d), unroll(u) {}
 	virtual void unroll_me(int u)
 	{
-		// TODO: Do I need to know induction information to determine if 
-		// unrolling needs to happen? I used to think so. Now I'm not sure.
 		unroll = u;
 	}
 };
@@ -303,11 +321,12 @@ public:
 struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*> {
 	const int buffer;
 	const int unroll;
-	make_shared_buffer_size(const int b, const int u): buffer(b), unroll(u) {}
+	const depths& local_depths;
+	make_shared_buffer_size(const int b, const int u, const depths& l): buffer(b), unroll(u), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new shared_buffer_size(v, buffer, unroll);
+		return new shared_buffer_size(v, local_depths.find(v)->second, buffer, unroll);
 	}
 };
 
@@ -318,44 +337,43 @@ public:
 	private_buffer_size(const private_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
-		string declaration;
-		if (v->depth() > 0 ) {
-			declaration = "const int " + buffer_adaptor(v).size() + "=" + default_buff_size + "; \n";
+		string dec;
+		if (v->is_non_scalar()) {
+			dec = "const int " + buffer_adaptor(v).size() + "=" + default_buff_size + "; \n";
 		}
 
-		return old + declaration;
+		return old + dec;
 	}
 
 	xformer* clone() const { return new private_buffer_size(*this); }
 	string class_name() const { return "private_buffer_size"; }
 };
 
-class buffer_allocation: public xformer {
+class buffer_allocation: public depth_xformer {
 	const region_variable* v;
 
 public:
-	buffer_allocation(const region_variable* v): v(v) {}
+	buffer_allocation(const region_variable* v, const int d): depth_xformer(d), v(v) {}
 	string operator()(const string& old)
 	{
-		string allocation;
-
-		if (v->depth() > 0) {
+		string alloc;
+		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
-			allocation = buff.declare() + "= _malloc_align(sizeof(" + buff.type() + ")*" + buff.depth() + "*" + buff.size() + ",7);";
+			alloc = buff.declare() + "= _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + "*" + buff.size() + ",7);";
 		}
 
-		return old + allocation;
+		return old + alloc;
 	}
 
 	xformer* clone() const { return new buffer_allocation(*this); }
 	string class_name() const { return "buffer_allocation"; }
 };
 
-class dma_list_allocation: public xformer {
+class dma_list_allocation: public depth_xformer {
 	const shared_variable* v;
 
 public:
-	dma_list_allocation(const shared_variable* v): v(v) {}
+	dma_list_allocation(const shared_variable* v, const int d): depth_xformer(d), v(v) {}
 	string operator()(const string& old)
 	{
 		string allocation;
@@ -363,9 +381,9 @@ public:
 		if (v->is_column()) {
 			dma_list_adaptor list(v);
 			buffer_adaptor buff(v);
-			allocation = list.declare() + "; \n";
+			allocation = list.declare(depth) + "; \n";
 
-			for (int i = 0; i < v->depth(); ++i) {
+			for (int i = 0; i < depth; ++i) {
 				allocation += "allocate_dma_list(&" + list.name(i) + "," + buff.size() + ",1);\n";
 			}
 		}
@@ -384,24 +402,23 @@ public:
 	buffer_deallocation(const region_variable* v): v(v) {}
 	string operator()(const string& old)
 	{
-		string deallocation;
-
-		if (v->depth() > 0) {
-			deallocation = "_free_align(" + buffer_adaptor(v).name() + ");";
+		string free;
+		if (v->is_non_scalar()) {
+			free = "_free_align(" + buffer_adaptor(v).name() + ");";
 		}
 
-		return deallocation + old;
+		return free + old;
 	}
 
 	xformer* clone() const { return new buffer_deallocation(*this); }
 	string class_name() const { return "buffer_deallocation"; }
 };
 
-class dma_list_deallocation: public xformer {
+class dma_list_deallocation: public depth_xformer {
 	const shared_variable* v;
 
 public:
-	dma_list_deallocation(const shared_variable* v): v(v) {}
+	dma_list_deallocation(const shared_variable* v, const int d): depth_xformer(d), v(v) {}
 	string operator()(const string& old)
 	{
 		string deallocation;
@@ -409,7 +426,7 @@ public:
 		if (v->is_column()) {
 			dma_list_adaptor list(v);
 
-			for (int i = 0; i < v->depth(); ++i) {
+			for (int i = 0; i < depth; ++i) {
 				deallocation += "free_dma_list(&" + list.name(i) + "); \n";
 			}
 		}
@@ -458,18 +475,21 @@ template <class Xrow, class Xcolumn>
 struct make_choice: public unary_function<shared_variable*, xformer*>  {
 	const conditions& conds_row;
 	const conditions& conds_column;
-	make_choice(const conditions& c): conds_row(c), conds_column(c) {}
-	make_choice(const conditions& c_row, const conditions& c_column): conds_row(c_row), conds_column(c_column) {}
+	const depths& local_depths;
+	make_choice(const conditions& c, const depths& l):
+		conds_row(c), conds_column(c), local_depths(l) {}
+	make_choice(const conditions& c_row, const conditions& c_column, const depths& l):
+		conds_row(c_row), conds_column(c_column), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
 		xformer* x = NULL;
 
 		if (v->is_row()) {
-			x = new Xrow(v, conds_row);
+			x = new Xrow(v, conds_row, local_depths.find(v)->second);
 		}
 		else if (v->is_column()) {
-			x = new Xcolumn(v, conds_column);
+			x = new Xcolumn(v, conds_column, local_depths.find(v)->second);
 		}
 		else {
 			throw unitialized_access_orientation();
@@ -583,8 +603,8 @@ public:
 	virtual string final_size() const = 0;
 	virtual string final_access() const = 0;
 	virtual string dma_in(const string& address) const = 0;
-	virtual string dma_out(const string& address) const = 0;
-	virtual string dma_out(const string& address, const string& tsize) const = 0;
+	virtual string dma_out(const string& address, const int depth) const = 0;
+	virtual string dma_out(const string& address, const int depth, const string& tsize) const = 0;
 };
 
 class row_access: public base_access {
@@ -719,12 +739,12 @@ public:
 				next.name() + ");";
 	}
 
-	string dma_out(const string& address) const
+	string dma_out(const string& address, const int depth) const
 	{
-		return dma_out(address, buffer_adaptor(v).size());
+		return dma_out(address, depth, buffer_adaptor(v).size());
 	}
 
-	string dma_out(const string& address, const string& tsize) const
+	string dma_out(const string& address, const int depth, const string& tsize) const
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
@@ -811,22 +831,22 @@ public:
 				"sizeof(" + buff.type() + "));";
 	}
 
-	string dma_out(const string& address) const
+	string dma_out(const string& address, const int depth) const
 	{
-		return dma_out(address, buffer_adaptor(v).size());
+		return dma_out(address, depth, buffer_adaptor(v).size());
 	}
 
-	string dma_out(const string& address, const string& tsize) const
+	string dma_out(const string& address, const int depth, const string& tsize) const
 	{
 		dma_list_adaptor list(v);
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 		orig_adaptor orig(v);
 		string make_list;
-		const string depth = to_string(v->depth());
+		const string& depth_s = to_string(depth);
 
-		if (v->depth() < 3) {
-			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + depth + "-1))%" + depth) + "," + 
+		if (depth < 3) {
+			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
 					tsize + "," +
 					address + ","
 					"sizeof(" + buff.type() + "), " + 
@@ -837,8 +857,8 @@ public:
 		return 	make_list + 
 			"DMA_putl(" + orig.name() + "," +
 				address + "," +
-				"&" + list.name("(" + next.name() + "+(" + depth + "-1))%" + depth) + "," + 
-				"(" + next.name() + "+(" + depth + "-1))%" + depth + ","
+				"&" + list.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
+				"(" + next.name() + "+(" + depth_s + "-1))%" + depth_s + ","
 				"1," +
 				"sizeof(" + buff.type() + "));";
 	}
@@ -847,7 +867,7 @@ public:
 template <class Access>
 class gen_in_first: public unrollable_xformer, public epilogue_xformer, public Access {
 public:
-	gen_in_first(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
+	gen_in_first(shared_variable* v, const conditions& c, const int d): unrollable_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
 		return old + 
@@ -871,11 +891,11 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer, public Access
 
 		const string wait_next = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		const string wait_prev = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id);";
-		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + buff.depth() + ";";
+		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + to_string(depth) + ";";
 		const string outer_if = "if (!((" + Access::iteration() + ")%" + buff.size() + "))";
 		const string inner_if = "if (" + Access::bounds_check() + "<" + conds.stop + ")";
 
-		return old + 
+		return old +
 			"cellgen_dma_prep_start();" + 
 			outer_if + "{ \n" +
 				prev.name() + "=" + next.name() + ";" +
@@ -896,7 +916,7 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer, public Access
 
 template <class Access>
 struct gen_out: public unrollable_xformer, public epilogue_xformer, public Access {
-	gen_out(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
+	gen_out(shared_variable* v, const conditions& c, const int d): unrollable_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -909,15 +929,15 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer, public Acces
 			if_statement = "if (!((" + Access::next_iteration() + ")%" + buff.size() + "))";
 		}
 
-		if (v->depth() < 3) {
-			var_switch =	next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; \n" +
+		if (depth < 3) {
+			var_switch =	next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; \n" +
 					orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + "; \n" +
 					"MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 		}
 
 		return "cellgen_dma_prep_start();" +
 			if_statement + "{ \n" +
-					dma_out("(unsigned long)(" + v->name() + "+" + Access::previous_access() + ")") +
+					dma_out("(unsigned long)(" + v->name() + "+" + Access::previous_access() + ")", depth) +
 					var_switch +
 			"}" 
 			"cellgen_dma_prep_stop();" +
@@ -930,7 +950,7 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer, public Acces
 
 template <class Access>
 struct gen_out_final: public unrollable_xformer, public epilogue_xformer, public Access {
-	gen_out_final(shared_variable* v, const conditions& c): unrollable_xformer(v, c), Access(v, c) {}
+	gen_out_final(shared_variable* v, const conditions& c, const int d): unrollable_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
 		string ret;
@@ -944,12 +964,12 @@ struct gen_out_final: public unrollable_xformer, public epilogue_xformer, public
 			ret =	"cellgen_dma_prep_start(); " +
 				if_statement + "{ " +
 					prev.name() + "=" + next.name() + ";" +
-					next.name() + "=(" + next.name() + "+1)%" + buff.depth() + "; " +
-					dma_out("(unsigned long)(" + v->name() + "+" + Access::final_access() + ")", Access::final_size()) +
+					next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; " +
+					dma_out("(unsigned long)(" + v->name() + "+" + Access::final_access() + ")", depth, Access::final_size()) +
 				"} \n"
 				"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); " +
 				"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); " 
-				"MMGP_SPE_dma_wait((" + next.name() + "+(" + to_string(v->depth()) + "-1))%" + to_string(v->depth()) + ", fn_id); "
+				"MMGP_SPE_dma_wait((" + next.name() + "+(" + to_string(depth) + "-1))%" + to_string(depth) + ", fn_id); "
 				"cellgen_dma_prep_stop(); ";
 		}
 
