@@ -673,9 +673,6 @@ struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	var_symtbl locals;
-	sharedset& global_in;
-	sharedset& global_out;
-	sharedset& global_inout;
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
@@ -686,14 +683,11 @@ struct serial_for_op {
 	conditions sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gi, sharedset& go, sharedset& gio,
-			operations& o, condslist& c, bind_xformer& n, const int u):
-		shared_symbols(s), priv_symbols(p), global_in(gi), global_out(go), global_inout(gio), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, condslist& c, bind_xformer& n, const int u):
+		shared_symbols(s), priv_symbols(p), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
 		{}
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, sharedset& gi, sharedset& go, sharedset& gio,
-			operations& o, condslist& c, bind_xformer& n, const int u):
-		shared_symbols(s), priv_symbols(p), locals(l), global_in(gi), global_out(go), global_inout(gio), 
-		ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, operations& o, condslist& c, bind_xformer& n, const int u):
+		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
@@ -787,9 +781,6 @@ struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
 	var_symtbl locals;
-	sharedset& global_in;
-	sharedset& global_out;
-	sharedset& global_inout;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
@@ -801,11 +792,10 @@ struct for_compound_op {
 	sharedset seen;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
-			sharedset& gi, sharedset& go, sharedset& gio,	
 			sharedset& i, sharedset& o, sharedset& io, 
 			operations& op, condslist& c, bind_xformer& n, const int u): 
 		shared_symbols(s), priv_symbols(p), locals(l), 
-		global_in(gi), global_out(go), global_inout(gio), in(i), out(o), inout(io), 
+		in(i), out(o), inout(io), 
 		ops(op), conds(c), condnodes(n), unroll(u), par_induction(c.front().induction)
 		{}
 	void operator()(ast_node& node)
@@ -826,19 +816,19 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(shared_symbols, priv_symbols, locals, global_in, global_out, global_inout, ops, conds, condnodes, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes, unroll);
 			for_all(node.children, &o);
 
 			o.merge_inout(in, out, inout);
 
-			depths local_depths;
-			for_all(in, make_assign_set<shared_variable*>(2, local_depths));
-			for_all(out, make_assign_set<shared_variable*>(2, local_depths));
-			for_all(inout, make_assign_set<shared_variable*>(3, local_depths));
+			sharedset& local_in = o.in;
+			sharedset& local_out = o.out;
+			sharedset& local_inout = o.inout;
 
-			global_in.insert(in.begin(), in.end());
-			global_out.insert(out.begin(), out.end());
-			global_inout.insert(inout.begin(), inout.end());
+			depths local_depths;
+			for_all(local_in, make_assign_set<shared_variable*>(2, local_depths));
+			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
+			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
 			xformerlist& nested = node.value.xformations;
 			const conditions& inner = conds.back();
@@ -954,9 +944,7 @@ void serial_for_op::operator()(ast_node& node)
 		}
 	}
 	else if (node.value.id() == ids::compound) {
-		for_compound_op o(shared_symbols, priv_symbols, locals, 
-				global_in, global_out, global_inout, in, out, inout, 
-				ops, conds, condnodes, unroll);
+		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, ops, conds, condnodes, unroll);
 		for_all(node.children, &o);
 	}
 	else {
@@ -1014,7 +1002,7 @@ struct parallel_for_op {
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds, condnodes_col, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, ops, conds, condnodes_col, unroll);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);

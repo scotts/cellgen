@@ -1,0 +1,985 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <math.h>
+
+/* Matrix dimensions */
+#define __NROWS	700
+#define __NCOLS	1000
+#define __NSPEC	8
+const int NROWS = __NROWS;
+const int NCOLS = __NCOLS;
+const int NSPEC = __NSPEC;
+
+/* Cell dimensions */
+#define DX          250.0
+#define DY          250.0
+
+/* Emission source point coordinates */
+#define SOURCE_X	500
+#define SOURCE_Y	350
+
+/* Emission source emission rate (mol/m^2/s) */
+#define SOURCE_RATE	4.67E+23
+
+double16b_t conc_spe[__NROWS][__NCOLS][__NSPEC] __attribute__((aligned(128)));
+double16b_t wind_u_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
+double16b_t wind_v_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
+double16b_t diff_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
+
+double conc_ppe[__NROWS][__NCOLS][__NSPEC];
+double wind_u_ppe[__NROWS][__NCOLS];
+double wind_v_ppe[__NROWS][__NCOLS];
+double diff_ppe[__NROWS][__NCOLS];
+
+int double_eq(double a, double b)
+{
+	return fabs(a - b) < 0.00001;
+}
+
+void discretize_all_rows_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t wind_u[NROWS][NCOLS], double16b_t diff[NROWS][NCOLS])
+{
+	// NROWS = 12, NCOLS = 40, NSPEC = 79
+	#pragma cell SPE_start(0) SPE_stop(NROWS) shared(double16b_t* wind_u = wind_u[NROWS][NCOLS], double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* diff = diff[NROWS][NCOLS]) private(double dt = dt, int NROWS = NROWS, int NCOLS = NCOLS, int NSPEC = NSPEC)
+	{
+	int i, s;
+	for (i = SPE_start; i < SPE_stop; i++) {
+		for (s = 0; s < NSPEC; s++) {
+
+			double wind;
+			double diff_term;
+			double advec_term;
+			double advec_termL;
+			double advec_termR;
+			int __i;
+			double c[NCOLS];
+			double dcdx[NCOLS];
+
+			double crow1[NCOLS];
+			double crow2[NCOLS];
+			double wrow[NCOLS];
+			double drow[NCOLS];
+
+			double cbound[4];
+			double wbound[4];
+			double dbound[4];
+
+			int k;
+			for (k = 0; k < NCOLS; ++k) {
+				crow1[k] = conc[i][k][s].num;
+			}
+			for (k = 0; k < NCOLS; ++k) {
+				wrow[k] = wind_u[i][k].num;
+			}
+			for (k = 0; k < NCOLS; ++k) {
+				drow[k] = diff[i][k].num;
+			}
+				
+			cbound[0] = crow1[NCOLS - 2];
+			cbound[1] = crow1[NCOLS - 1];
+			cbound[2] = crow1[0];
+			cbound[3] = crow1[1];
+			wbound[0] = wrow[NCOLS - 2];
+			wbound[1] = wrow[NCOLS - 1];
+			wbound[2] = wrow[0];
+			wbound[3] = wrow[1];
+			dbound[0] = drow[NCOLS - 2];
+			dbound[1] = drow[NCOLS - 1];
+			dbound[2] = drow[0];
+			dbound[3] = drow[1];
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				c[__i] = crow2[__i] = crow1[__i];
+			}
+
+			wind = (wbound[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[0] + 5.0 * cbound[1] + 2.0 * crow1[0]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[1] + 5.0 * crow1[0] - crow1[1]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[1] + 5.0 * crow1[0] + 2.0 * crow1[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[0] + 5.0 * crow1[1] - crow1[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[1] + drow[0]) / 2) * (cbound[1] - crow1[0]) -
+				 ((drow[0] + drow[1]) / 2) * (crow1[0] - crow1[1])) / (1000.0 * 1000.0);
+			dcdx[0] = advec_term + diff_term;
+
+			wind = (wbound[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[1] + 5.0 * cbound[2] + 2.0 * crow1[1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[2] + 5.0 * crow1[1] - crow1[2]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[2] + 5.0 * crow1[1] + 2.0 * crow1[2]);
+			}				
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[1] + 5.0 * crow1[2] - crow1[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[2] + drow[1]) / 2) * (cbound[2] - crow1[1]) -
+				 ((drow[1] + drow[2]) / 2) * (crow1[1] - crow1[2])) / (1000.0 * 1000.0);
+			dcdx[1] = advec_term + diff_term;
+
+			for (__i = 2; __i < NCOLS - 2; __i++) {
+				wind = (wrow[__i - 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termL = (1.0 / 6.0) * (-crow1[__i - 2] + 5.0 * crow1[__i - 1] + 2.0 * crow1[__i]);
+				}
+				else {
+					advec_termL = (1.0 / 6.0) * (2.0 * crow1[__i - 1] + 5.0 * crow1[__i] - crow1[__i + 1]);
+				}
+				advec_termL *= wind;
+				wind = (wrow[__i + 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termR = (1.0 / 6.0) * (-crow1[__i - 1] + 5.0 * crow1[__i] + 2.0 * crow1[__i + 1]);
+				}
+				else {
+					advec_termR = (1.0 / 6.0) * (2.0 * crow1[__i] + 5.0 * crow1[__i + 1] - crow1[__i + 2]);
+				}
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term = (((drow[__i - 1] + drow[__i]) / 2) * (crow1[__i - 1] - crow1[__i]) -
+					 ((drow[__i] + drow[__i + 1]) / 2) * (crow1[__i] - crow1[__i + 1])) / (1000.0 * 1000.0);
+				dcdx[__i] = advec_term + diff_term;
+			}
+
+			wind = (wrow[NCOLS - 3] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-crow1[NCOLS - 4] + 5.0 * crow1[NCOLS - 3] + 2.0 * crow1[NCOLS - 2]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 3] + 5.0 * crow1[NCOLS - 2] - cbound[1]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[1] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-crow1[NCOLS - 3] + 5.0 * crow1[NCOLS - 2] + 2.0 * cbound[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 2] + 5.0 * cbound[1] - cbound[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 3] + drow[NCOLS - 2]) / 2) * (crow1[NCOLS - 3] - crow1[NCOLS - 2]) -
+				 ((drow[NCOLS - 2] + dbound[1]) / 2) * (crow1[NCOLS - 2] - cbound[1])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 2] = advec_term + diff_term;
+
+			wind = (wrow[NCOLS - 2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-crow1[NCOLS - 3] + 5.0 * crow1[NCOLS - 2] + 2.0 * crow1[NCOLS - 1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 2] + 5.0 * crow1[NCOLS - 1] - cbound[2]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-crow1[NCOLS - 2] + 5.0 * crow1[NCOLS - 1] + 2.0 * cbound[2]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 1] + 5.0 * cbound[2] - cbound[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 2] + drow[NCOLS - 1]) / 2) * (crow1[NCOLS - 2] - crow1[NCOLS - 1]) -
+				 ((drow[NCOLS - 1] + dbound[2]) / 2) * (crow1[NCOLS - 1] - cbound[2])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 1] = advec_term + diff_term;
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				c[__i] += dt * dcdx[__i];
+			}
+
+			wind = (wbound[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[0] + 5.0 * cbound[1] + 2.0 * c[0]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[1] + 5.0 * c[0] - c[1]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[1] + 5.0 * c[0] + 2.0 * c[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[0] + 5.0 * c[1] - c[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[1] + drow[0]) / 2) * (cbound[1] - c[0]) -
+				 ((drow[0] + drow[1]) / 2) * (c[0] - c[1])) / (1000.0 * 1000.0);
+			dcdx[0] = advec_term + diff_term;
+
+			wind = (wbound[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[1] + 5.0 * cbound[2] + 2.0 * c[1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[2] + 5.0 * c[1] - c[2]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[2] + 5.0 * c[1] + 2.0 * c[2]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[1] + 5.0 * c[2] - c[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[2] + drow[1]) / 2) * (cbound[2] - c[1]) -
+				 ((drow[1] + drow[2]) / 2) * (c[1] - c[2])) / (1000.0 * 1000.0);
+			dcdx[1] = advec_term + diff_term;
+
+			for (__i= 2; __i < NCOLS - 2; __i++) {
+				wind = (wrow[__i - 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termL = (1.0 / 6.0) * (-c[__i - 2] + 5.0 * c[__i - 1] + 2.0 * c[__i]);
+				}
+				else {
+					advec_termL = (1.0 / 6.0) * (2.0 * c[__i - 1] + 5.0 * c[__i] - c[__i + 1]);
+				}
+				advec_termL *= wind;
+				wind = (wrow[__i + 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termR = (1.0 / 6.0) * (-c[__i - 1] + 5.0 * c[__i] + 2.0 * c[__i + 1]);
+				}
+				else {
+					advec_termR = (1.0 / 6.0) * (2.0 * c[__i] + 5.0 * c[__i + 1] - c[__i + 2]);
+				}
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term = (((drow[__i - 1] + drow[__i]) / 2) * (c[__i - 1] - c[__i]) -
+					 ((drow[__i] + drow[__i + 1]) / 2) * (c[__i] - c[__i + 1])) / (1000.0 * 1000.0);
+				dcdx[__i] = advec_term + diff_term;
+			}
+
+			wind = (wrow[NCOLS - 3] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-c[NCOLS - 4] + 5.0 * c[NCOLS - 3] + 2.0 * c[NCOLS - 2]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * c[NCOLS - 3] + 5.0 * c[NCOLS - 2] - cbound[1]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[1] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-c[NCOLS - 3] + 5.0 * c[NCOLS - 2] + 2.0 * cbound[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[NCOLS - 2] + 5.0 * cbound[1] - cbound[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 3] + drow[NCOLS - 2]) / 2) * (c[NCOLS - 3] - c[NCOLS - 2]) -
+				 ((drow[NCOLS - 2] + dbound[1]) / 2) * (c[NCOLS - 2] - cbound[1])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 2] = advec_term + diff_term;
+
+			wind = (wrow[NCOLS - 2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-c[NCOLS - 3] + 5.0 * c[NCOLS - 2] + 2.0 * c[NCOLS - 1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * c[NCOLS - 2] + 5.0 * c[NCOLS - 1] - cbound[2]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-c[NCOLS - 2] + 5.0 * c[NCOLS - 1] + 2.0 * cbound[2]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[NCOLS - 1] + 5.0 * cbound[2] - cbound[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 2] + drow[NCOLS - 1]) / 2) * (c[NCOLS - 2] - c[NCOLS - 1]) -
+				 ((drow[NCOLS - 1] + dbound[2]) / 2) * (c[NCOLS - 1] - cbound[2])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 1] = advec_term + diff_term;
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				c[__i] += dt * dcdx[__i];
+			}
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				crow2[__i] = 0.5 * (crow2[__i] + c[__i]);
+				if (crow2[__i] < 0.0) {
+					crow2[__i] = 0.0;
+				}
+			}
+
+			for (k = 0; k < NCOLS; k++) {
+				conc[i][k][s].num = crow2[k];
+			}
+		}
+	}
+	}
+}
+
+void discretize_all_rows_ppe(double dt, double conc[NROWS][NCOLS][NSPEC], double wind_u[NROWS][NCOLS], double diff[NROWS][NCOLS])
+{
+	int i, s;
+	for (i = 0; i < NROWS; i++) {
+		for (s = 0; s < NSPEC; s++) {
+
+			double wind;
+			double diff_term;
+			double advec_term;
+			double advec_termL;
+			double advec_termR;
+			int __i;
+			double c[NCOLS];
+			double dcdx[NCOLS];
+
+			double crow1[NCOLS];
+			double crow2[NCOLS];
+			double wrow[NCOLS];
+			double drow[NCOLS];
+
+			double cbound[4];
+			double wbound[4];
+			double dbound[4];
+
+			int k;
+			for (k = 0; k < NCOLS; ++k) {
+				crow1[k] = conc[i][k][s];
+			}
+			for (k = 0; k < NCOLS; ++k) {
+				wrow[k] = wind_u[i][k];
+			}
+			for (k = 0; k < NCOLS; ++k) {
+				drow[k] = diff[i][k];
+			}
+				
+			cbound[0] = crow1[NCOLS - 2];
+			cbound[1] = crow1[NCOLS - 1];
+			cbound[2] = crow1[0];
+			cbound[3] = crow1[1];
+			wbound[0] = wrow[NCOLS - 2];
+			wbound[1] = wrow[NCOLS - 1];
+			wbound[2] = wrow[0];
+			wbound[3] = wrow[1];
+			dbound[0] = drow[NCOLS - 2];
+			dbound[1] = drow[NCOLS - 1];
+			dbound[2] = drow[0];
+			dbound[3] = drow[1];
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				c[__i] = crow2[__i] = crow1[__i];
+			}
+
+			wind = (wbound[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[0] + 5.0 * cbound[1] + 2.0 * crow1[0]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[1] + 5.0 * crow1[0] - crow1[1]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[1] + 5.0 * crow1[0] + 2.0 * crow1[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[0] + 5.0 * crow1[1] - crow1[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[1] + drow[0]) / 2) * (cbound[1] - crow1[0]) -
+				 ((drow[0] + drow[1]) / 2) * (crow1[0] - crow1[1])) / (1000.0 * 1000.0);
+			dcdx[0] = advec_term + diff_term;
+
+			wind = (wbound[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[1] + 5.0 * cbound[2] + 2.0 * crow1[1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[2] + 5.0 * crow1[1] - crow1[2]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[2] + 5.0 * crow1[1] + 2.0 * crow1[2]);
+			}				
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[1] + 5.0 * crow1[2] - crow1[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[2] + drow[1]) / 2) * (cbound[2] - crow1[1]) -
+				 ((drow[1] + drow[2]) / 2) * (crow1[1] - crow1[2])) / (1000.0 * 1000.0);
+			dcdx[1] = advec_term + diff_term;
+
+			for (__i = 2; __i < NCOLS - 2; __i++) {
+				wind = (wrow[__i - 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termL = (1.0 / 6.0) * (-crow1[__i - 2] + 5.0 * crow1[__i - 1] + 2.0 * crow1[__i]);
+				}
+				else {
+					advec_termL = (1.0 / 6.0) * (2.0 * crow1[__i - 1] + 5.0 * crow1[__i] - crow1[__i + 1]);
+				}
+				advec_termL *= wind;
+				wind = (wrow[__i + 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termR = (1.0 / 6.0) * (-crow1[__i - 1] + 5.0 * crow1[__i] + 2.0 * crow1[__i + 1]);
+				}
+				else {
+					advec_termR = (1.0 / 6.0) * (2.0 * crow1[__i] + 5.0 * crow1[__i + 1] - crow1[__i + 2]);
+				}
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term = (((drow[__i - 1] + drow[__i]) / 2) * (crow1[__i - 1] - crow1[__i]) -
+					 ((drow[__i] + drow[__i + 1]) / 2) * (crow1[__i] - crow1[__i + 1])) / (1000.0 * 1000.0);
+				dcdx[__i] = advec_term + diff_term;
+			}
+
+			wind = (wrow[NCOLS - 3] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-crow1[NCOLS - 4] + 5.0 * crow1[NCOLS - 3] + 2.0 * crow1[NCOLS - 2]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 3] + 5.0 * crow1[NCOLS - 2] - cbound[1]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[1] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-crow1[NCOLS - 3] + 5.0 * crow1[NCOLS - 2] + 2.0 * cbound[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 2] + 5.0 * cbound[1] - cbound[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 3] + drow[NCOLS - 2]) / 2) * (crow1[NCOLS - 3] - crow1[NCOLS - 2]) -
+				 ((drow[NCOLS - 2] + dbound[1]) / 2) * (crow1[NCOLS - 2] - cbound[1])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 2] = advec_term + diff_term;
+
+			wind = (wrow[NCOLS - 2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-crow1[NCOLS - 3] + 5.0 * crow1[NCOLS - 2] + 2.0 * crow1[NCOLS - 1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 2] + 5.0 * crow1[NCOLS - 1] - cbound[2]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-crow1[NCOLS - 2] + 5.0 * crow1[NCOLS - 1] + 2.0 * cbound[2]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * crow1[NCOLS - 1] + 5.0 * cbound[2] - cbound[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 2] + drow[NCOLS - 1]) / 2) * (crow1[NCOLS - 2] - crow1[NCOLS - 1]) -
+				 ((drow[NCOLS - 1] + dbound[2]) / 2) * (crow1[NCOLS - 1] - cbound[2])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 1] = advec_term + diff_term;
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				c[__i] += dt * dcdx[__i];
+			}
+
+			wind = (wbound[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[0] + 5.0 * cbound[1] + 2.0 * c[0]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[1] + 5.0 * c[0] - c[1]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[1] + wrow[0]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[1] + 5.0 * c[0] + 2.0 * c[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[0] + 5.0 * c[1] - c[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[1] + drow[0]) / 2) * (cbound[1] - c[0]) -
+				 ((drow[0] + drow[1]) / 2) * (c[0] - c[1])) / (1000.0 * 1000.0);
+			dcdx[0] = advec_term + diff_term;
+
+			wind = (wbound[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-cbound[1] + 5.0 * cbound[2] + 2.0 * c[1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * cbound[2] + 5.0 * c[1] - c[2]);
+			}
+			advec_termL *= wind;
+			wind = (wrow[2] + wrow[1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-cbound[2] + 5.0 * c[1] + 2.0 * c[2]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[1] + 5.0 * c[2] - c[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((dbound[2] + drow[1]) / 2) * (cbound[2] - c[1]) -
+				 ((drow[1] + drow[2]) / 2) * (c[1] - c[2])) / (1000.0 * 1000.0);
+			dcdx[1] = advec_term + diff_term;
+
+			for (__i= 2; __i < NCOLS - 2; __i++) {
+				wind = (wrow[__i - 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termL = (1.0 / 6.0) * (-c[__i - 2] + 5.0 * c[__i - 1] + 2.0 * c[__i]);
+				}
+				else {
+					advec_termL = (1.0 / 6.0) * (2.0 * c[__i - 1] + 5.0 * c[__i] - c[__i + 1]);
+				}
+				advec_termL *= wind;
+				wind = (wrow[__i + 1] + wrow[__i]) / 2.0;
+				if (wind >= 0.0) {
+					advec_termR = (1.0 / 6.0) * (-c[__i - 1] + 5.0 * c[__i] + 2.0 * c[__i + 1]);
+				}
+				else {
+					advec_termR = (1.0 / 6.0) * (2.0 * c[__i] + 5.0 * c[__i + 1] - c[__i + 2]);
+				}
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term = (((drow[__i - 1] + drow[__i]) / 2) * (c[__i - 1] - c[__i]) -
+					 ((drow[__i] + drow[__i + 1]) / 2) * (c[__i] - c[__i + 1])) / (1000.0 * 1000.0);
+				dcdx[__i] = advec_term + diff_term;
+			}
+
+			wind = (wrow[NCOLS - 3] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-c[NCOLS - 4] + 5.0 * c[NCOLS - 3] + 2.0 * c[NCOLS - 2]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * c[NCOLS - 3] + 5.0 * c[NCOLS - 2] - cbound[1]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[1] + wrow[NCOLS - 2]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-c[NCOLS - 3] + 5.0 * c[NCOLS - 2] + 2.0 * cbound[1]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[NCOLS - 2] + 5.0 * cbound[1] - cbound[2]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 3] + drow[NCOLS - 2]) / 2) * (c[NCOLS - 3] - c[NCOLS - 2]) -
+				 ((drow[NCOLS - 2] + dbound[1]) / 2) * (c[NCOLS - 2] - cbound[1])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 2] = advec_term + diff_term;
+
+			wind = (wrow[NCOLS - 2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termL = (1.0 / 6.0) * (-c[NCOLS - 3] + 5.0 * c[NCOLS - 2] + 2.0 * c[NCOLS - 1]);
+			}
+			else {
+				advec_termL = (1.0 / 6.0) * (2.0 * c[NCOLS - 2] + 5.0 * c[NCOLS - 1] - cbound[2]);
+			}
+			advec_termL *= wind;
+			wind = (wbound[2] + wrow[NCOLS - 1]) / 2.0;
+			if (wind >= 0.0) {
+				advec_termR = (1.0 / 6.0) * (-c[NCOLS - 2] + 5.0 * c[NCOLS - 1] + 2.0 * cbound[2]);
+			}
+			else {
+				advec_termR = (1.0 / 6.0) * (2.0 * c[NCOLS - 1] + 5.0 * cbound[2] - cbound[3]);
+			}
+			advec_termR *= wind;
+			advec_term = (advec_termL - advec_termR) / 1000.0;
+			diff_term = (((drow[NCOLS - 2] + drow[NCOLS - 1]) / 2) * (c[NCOLS - 2] - c[NCOLS - 1]) -
+				 ((drow[NCOLS - 1] + dbound[2]) / 2) * (c[NCOLS - 1] - cbound[2])) / (1000.0 * 1000.0);
+			dcdx[NCOLS - 1] = advec_term + diff_term;
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				c[__i] += dt * dcdx[__i];
+			}
+
+			for (__i = 0; __i < NCOLS; __i++) {
+				crow2[__i] = 0.5 * (crow2[__i] + c[__i]);
+				if (crow2[__i] < 0.0) {
+					crow2[__i] = 0.0;
+				}
+			}
+
+			for (k = 0; k < NCOLS; k++) {
+				conc[i][k][s] = crow2[k];
+			}
+		}
+	}
+}
+
+/*
+void discretize_all_cols(double dt)
+{
+	int j, k, s;
+
+	double ccol1[NROWS];
+	double ccol2[NROWS];
+	double wcol[NROWS];
+	double dcol[NROWS];
+
+	double cbound[4];
+	double wbound[4];
+	double dbound[4];
+
+	//omp for private(j, k, s, ccol1, ccol2, wcol, dcol, cbound, wbound, dbound)
+	for (j = 0; j < NCOLS; j++) {
+		for (s = 0; s < NSPEC; s++) {
+			for (k = 0; k < NROWS; k++) {
+				ccol1[k] = conc[k][j][s].num;
+				wcol[k] = wind_v[k][j].num;
+				dcol[k] = diff[k][j].num;
+			}
+
+			cbound[0] = ccol1[NROWS - 2];
+			cbound[1] = ccol1[NROWS - 1];
+			cbound[2] = ccol1[0];
+			cbound[3] = ccol1[1];
+			wbound[0] = wcol[NROWS - 2];
+			wbound[1] = wcol[NROWS - 1];
+			wbound[2] = wcol[0];
+			wbound[3] = wcol[1];
+			dbound[0] = dcol[NROWS - 2];
+			dbound[1] = dcol[NROWS - 1];
+			dbound[2] = dcol[0];
+			dbound[3] = dcol[1];
+
+			int i;
+			double c[NROWS];
+			double dcdx[NROWS];
+
+			for (i = 0; i < NROWS; i++) {
+				c[i] = ccol2[i] = ccol1[i];
+			}
+
+			int i;
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wbound[1] + wcol[0]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-cbound[0] + 5.0 * cbound[1] + 2.0 * ccol1[0]);
+				else
+					advec_termL = (1.0 / 6.0) * (2.0 * cbound[1] + 5.0 * ccol1[0] - ccol1[1]);
+				advec_termL *= wind;
+				wind = (wcol[1] + wcol[0]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-cbound[1] + 5.0 * ccol1[0] + 2.0 * ccol1[1]);
+				else
+					advec_termR = (1.0 / 6.0) * (2.0 * ccol1[0] + 5.0 * ccol1[1] - ccol1[2]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dbound[1] + dcol[0]) / 2) * (cbound[1] - ccol1[0]) -
+					 ((dcol[0] + dcol[1]) / 2) * (ccol1[0] - ccol1[1])) / (1000.0 * 1000.0);
+				dcdx[0] = advec_term + diff_term;
+			};
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wbound[2] + wcol[1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-cbound[1] + 5.0 * cbound[2] + 2.0 * ccol1[1]);
+				else
+					advec_termL = (1.0 / 6.0) * (2.0 * cbound[2] + 5.0 * ccol1[1] - ccol1[2]);
+				advec_termL *= wind;
+				wind = (wcol[2] + wcol[1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-cbound[2] + 5.0 * ccol1[1] + 2.0 * ccol1[2]);
+				else
+					advec_termR = (1.0 / 6.0) * (2.0 * ccol1[1] + 5.0 * ccol1[2] - ccol1[3]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dbound[2] + dcol[1]) / 2) * (cbound[2] - ccol1[1]) -
+					 ((dcol[1] + dcol[2]) / 2) * (ccol1[1] - ccol1[2])) / (1000.0 * 1000.0);
+				dcdx[1] = advec_term + diff_term;
+			};
+
+			for (i = 2; i < NROWS - 2; i++) {
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wcol[i - 1] + wcol[i]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-ccol1[i - 2] + 5.0 * ccol1[i - 1] +
+							       2.0 * ccol1[i]);
+				else
+					advec_termL =
+						(1.0 / 6.0) * (2.0 * ccol1[i - 1] + 5.0 * ccol1[i] -
+							       ccol1[i + 1]);
+				advec_termL *= wind;
+				wind = (wcol[i + 1] + wcol[i]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-ccol1[i - 1] + 5.0 * ccol1[i] +
+							       2.0 * ccol1[i + 1]);
+				else
+					advec_termR =
+						(1.0 / 6.0) * (2.0 * ccol1[i] + 5.0 * ccol1[i + 1] -
+							       ccol1[i + 2]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dcol[i - 1] + dcol[i]) / 2) * (ccol1[i - 1] - ccol1[i]) -
+					 ((dcol[i] + dcol[i + 1]) / 2) * (ccol1[i] -
+									  ccol1[i +
+										1])) / (1000.0 * 1000.0);
+				dcdx[i] = advec_term + diff_term;
+			}
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wcol[NROWS - 3] + wcol[NROWS - 2]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-ccol1[NROWS - 4] + 5.0 * ccol1[NROWS - 3] +
+							       2.0 * ccol1[NROWS - 2]);
+				else
+					advec_termL =
+						(1.0 / 6.0) * (2.0 * ccol1[NROWS - 3] + 5.0 * ccol1[NROWS - 2] -
+							       cbound[1]);
+				advec_termL *= wind;
+				wind = (wbound[1] + wcol[NROWS - 2]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-ccol1[NROWS - 3] + 5.0 * ccol1[NROWS - 2] +
+							       2.0 * cbound[1]);
+				else
+					advec_termR =
+						(1.0 / 6.0) * (2.0 * ccol1[NROWS - 2] + 5.0 * cbound[1] - cbound[2]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dcol[NROWS - 3] + dcol[NROWS - 2]) / 2) * (ccol1[NROWS - 3] - ccol1[NROWS - 2]) -
+					 ((dcol[NROWS - 2] + dbound[1]) / 2) * (ccol1[NROWS - 2] -
+									     cbound[1])) / (1000.0 * 1000.0);
+				dcdx[NROWS - 2] = advec_term + diff_term;
+			};
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wcol[NROWS - 2] + wcol[NROWS - 1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-ccol1[NROWS - 3] + 5.0 * ccol1[NROWS - 2] +
+							       2.0 * ccol1[NROWS - 1]);
+				else
+					advec_termL =
+						(1.0 / 6.0) * (2.0 * ccol1[NROWS - 2] + 5.0 * ccol1[NROWS - 1] -
+							       cbound[2]);
+				advec_termL *= wind;
+				wind = (wbound[2] + wcol[NROWS - 1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-ccol1[NROWS - 2] + 5.0 * ccol1[NROWS - 1] +
+							       2.0 * cbound[2]);
+				else
+					advec_termR =
+						(1.0 / 6.0) * (2.0 * ccol1[NROWS - 1] + 5.0 * cbound[2] - cbound[3]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dcol[NROWS - 2] + dcol[NROWS - 1]) / 2) * (ccol1[NROWS - 2] - ccol1[NROWS - 1]) -
+					 ((dcol[NROWS - 1] + dbound[2]) / 2) * (ccol1[NROWS - 1] -
+									     cbound[2])) / (1000.0 * 1000.0);
+				dcdx[NROWS - 1] = advec_term + diff_term;
+			};
+
+			for (i = 0; i < NROWS; i++)
+				c[i] += dt * dcdx[i];
+
+			int i;
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wbound[1] + wcol[0]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL = (1.0 / 6.0) * (-cbound[0] + 5.0 * cbound[1] + 2.0 * c[0]);
+				else
+					advec_termL = (1.0 / 6.0) * (2.0 * cbound[1] + 5.0 * c[0] - c[1]);
+				advec_termL *= wind;
+				wind = (wcol[1] + wcol[0]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR = (1.0 / 6.0) * (-cbound[1] + 5.0 * c[0] + 2.0 * c[1]);
+				else
+					advec_termR = (1.0 / 6.0) * (2.0 * c[0] + 5.0 * c[1] - c[2]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dbound[1] + dcol[0]) / 2) * (cbound[1] - c[0]) -
+					 ((dcol[0] + dcol[1]) / 2) * (c[0] - c[1])) / (1000.0 * 1000.0);
+				dcdx[0] = advec_term + diff_term;
+			};
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wbound[2] + wcol[1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL = (1.0 / 6.0) * (-cbound[1] + 5.0 * cbound[2] + 2.0 * c[1]);
+				else
+					advec_termL = (1.0 / 6.0) * (2.0 * cbound[2] + 5.0 * c[1] - c[2]);
+				advec_termL *= wind;
+				wind = (wcol[2] + wcol[1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR = (1.0 / 6.0) * (-cbound[2] + 5.0 * c[1] + 2.0 * c[2]);
+				else
+					advec_termR = (1.0 / 6.0) * (2.0 * c[1] + 5.0 * c[2] - c[3]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dbound[2] + dcol[1]) / 2) * (cbound[2] - c[1]) -
+					 ((dcol[1] + dcol[2]) / 2) * (c[1] - c[2])) / (1000.0 * 1000.0);
+				dcdx[1] = advec_term + diff_term;
+			};
+
+			for (i = 2; i < NROWS - 2; i++) {
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wcol[i - 1] + wcol[i]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-c[i - 2] + 5.0 * c[i - 1] + 2.0 * c[i]);
+				else
+					advec_termL =
+						(1.0 / 6.0) * (2.0 * c[i - 1] + 5.0 * c[i] - c[i + 1]);
+				advec_termL *= wind;
+				wind = (wcol[i + 1] + wcol[i]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-c[i - 1] + 5.0 * c[i] + 2.0 * c[i + 1]);
+				else
+					advec_termR =
+						(1.0 / 6.0) * (2.0 * c[i] + 5.0 * c[i + 1] - c[i + 2]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dcol[i - 1] + dcol[i]) / 2) * (c[i - 1] - c[i]) -
+					 ((dcol[i] + dcol[i + 1]) / 2) * (c[i] -
+									  c[i + 1])) / (1000.0 * 1000.0);
+				dcdx[i] = advec_term + diff_term;
+			}
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wcol[NROWS - 3] + wcol[NROWS - 2]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-c[NROWS - 4] + 5.0 * c[NROWS - 3] + 2.0 * c[NROWS - 2]);
+				else
+					advec_termL =
+						(1.0 / 6.0) * (2.0 * c[NROWS - 3] + 5.0 * c[NROWS - 2] - cbound[1]);
+				advec_termL *= wind;
+				wind = (wbound[1] + wcol[NROWS - 2]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-c[NROWS - 3] + 5.0 * c[NROWS - 2] + 2.0 * cbound[1]);
+				else
+					advec_termR =
+						(1.0 / 6.0) * (2.0 * c[NROWS - 2] + 5.0 * cbound[1] - cbound[2]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dcol[NROWS - 3] + dcol[NROWS - 2]) / 2) * (c[NROWS - 3] - c[NROWS - 2]) -
+					 ((dcol[NROWS - 2] + dbound[1]) / 2) * (c[NROWS - 2] -
+									     cbound[1])) / (1000.0 * 1000.0);
+				dcdx[NROWS - 2] = advec_term + diff_term;
+			};
+
+			{
+				double wind, diff_term, advec_term, advec_termL, advec_termR;
+				wind = (wcol[NROWS - 2] + wcol[NROWS - 1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termL =
+						(1.0 / 6.0) * (-c[NROWS - 3] + 5.0 * c[NROWS - 2] + 2.0 * c[NROWS - 1]);
+				else
+					advec_termL =
+						(1.0 / 6.0) * (2.0 * c[NROWS - 2] + 5.0 * c[NROWS - 1] - cbound[2]);
+				advec_termL *= wind;
+				wind = (wbound[2] + wcol[NROWS - 1]) / 2.0;
+				if (wind >= 0.0)
+					advec_termR =
+						(1.0 / 6.0) * (-c[NROWS - 2] + 5.0 * c[NROWS - 1] + 2.0 * cbound[2]);
+				else
+					advec_termR =
+						(1.0 / 6.0) * (2.0 * c[NROWS - 1] + 5.0 * cbound[2] - cbound[3]);
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term =
+					(((dcol[NROWS - 2] + dcol[NROWS - 1]) / 2) * (c[NROWS - 2] - c[NROWS - 1]) -
+					 ((dcol[NROWS - 1] + dbound[2]) / 2) * (c[NROWS - 1] -
+									     cbound[2])) / (1000.0 * 1000.0);
+				dcdx[NROWS - 1] = advec_term + diff_term;
+			};
+
+			for (i = 0; i < NROWS; i++)
+				c[i] += dt * dcdx[i];
+
+			for (i = 0; i < NROWS; i++) {
+				ccol2[i] = 0.5 * (ccol2[i] + c[i]);
+				if (ccol2[i] < 0.0)
+					ccol2[i] = 0.0;
+			}
+
+			for (k = 0; k < NROWS; k++)
+				conc[k][j][s].num = ccol2[k];
+		}
+	}
+}
+*/
+
+void assert_rows(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROWS][NCOLS][NSPEC])
+{
+	int i, j, k;
+
+	for (i = 0; i < NROWS; ++i) {
+		for (j = 0; j < NSPEC; ++j) {
+			for (k = 0; k < NCOLS; ++k) {
+				if (!double_eq(conc_spe[i][k][j].num, conc_ppe[i][k][j])) {
+					printf("conc failed at (%d,%d,%d): spe %f, ppe %f\n",
+					       i, k, j, conc_spe[i][k][j].num, conc_ppe[i][k][j]);
+					return;
+				}
+			}
+		}
+
+	}
+}
+
+int main()
+{
+	int i, j, k;
+	for (i = 0; i < NROWS; i++) {
+		for (j = 0; j < NCOLS; j++) {
+			wind_u_spe[i][j].num = wind_u_ppe[i][j] = (i+1) * (j+1);
+			wind_v_spe[i][j].num = wind_v_ppe[i][j] = (i+1) * (j+1);
+			diff_spe[i][j].num = diff_ppe[i][j] = (i+1) * (j+1);
+
+			for (k = 0; k < NSPEC; ++k) {
+				conc_spe[i][j][k].num = conc_ppe[i][j][k] = (i+1) * (j+1) * (k+1);
+			}
+		}
+	}
+
+	conc_spe[SOURCE_Y][SOURCE_X][0].num += (SOURCE_RATE) / (DX * DY * 1000.0);
+	conc_ppe[SOURCE_Y][SOURCE_X][0] += (SOURCE_RATE) / (DX * DY * 1000.0);
+
+	discretize_all_rows_spe(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
+	discretize_all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
+	assert_rows(conc_spe, conc_ppe);
+
+	//discretize_all_cols(1.0);
+
+	return 0;
+}
