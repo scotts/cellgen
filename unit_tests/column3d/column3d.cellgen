@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define __N1 8
-#define __N2 256
-#define __N3 4096
+#define __N1 64
+#define __N2 (64)
+#define __N3 256
 const int N1 = __N1;
 const int N2 = __N2;
 const int N3 = __N3;
@@ -11,7 +11,79 @@ const int N3 = __N3;
 int16b_t a[__N1][__N2][__N3] __attribute((aligned(128)));
 int16b_t b[__N1][__N2][__N3] __attribute((aligned(128)));
 
-void in_and_out(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
+void in_and_out1(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
+{
+	int i, j, k;
+	for (i = 0; i < N2; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N1; ++k) {
+				in[k][i][j].num = (i+1)*(j+1)*(k+1);
+				out[k][i][j].num = 0;
+			}
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(N2) buffer(8) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	{
+		int i, j, k;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < N3; ++j) {
+				for (k = 0; k < N1; ++k) {
+					out[k][i][j].num = in[k][i][j].num;
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < N2; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N1; ++k) {
+				if (in[k][i][j].num != out[k][i][j].num) {
+					printf("in and out 1 failure at (%d,%d,%d), in %d, out %d\n", k, i, j, in[k][i][j].num, out[k][i][j].num);
+					return;
+				}
+			}
+		}
+	}
+}
+
+void inout1(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
+{
+	int i, j, k;
+	for (i = 0; i < N2; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N1; ++k) {
+				test[k][i][j].num = (i+1)*(j+1)*(k+1);
+				ref[k][i][j].num = 2 * (i+1)*(j+1)*(k+1);
+			}
+		}
+	}
+
+	#pragma cell SPE_start(0) SPE_stop(N2) buffer(8) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* test = test[N1][N2][N3])
+	{
+		int i, j, k;
+		for (i = SPE_start; i < SPE_stop; ++i) {
+			for (j = 0; j < N3; ++j) {
+				for (k = 0; k < N1; ++k) {
+					test[k][i][j].num = 2 * test[k][i][j].num;
+				}
+			}
+		}
+	}
+
+	for (i = 0; i < N2; ++i) {
+		for (j = 0; j < N3; ++j) {
+			for (k = 0; k < N1; ++k) {
+				if (ref[k][i][j].num != test[k][i][j].num) {
+					printf("inout 1 failure at (%d,%d,%d), ref %d, test %d\n", k, i, j, ref[k][i][j].num, test[k][i][j].num);
+					return;
+				}
+			}
+		}
+	}
+}
+
+void in_and_out2(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 {
 	int i, j, k;
 	for (i = 0; i < N1; ++i) {
@@ -23,7 +95,7 @@ void in_and_out(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(8) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -39,7 +111,7 @@ void in_and_out(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 		for (j = 0; j < N3; ++j) {
 			for (k = 0; k < N2; ++k) {
 				if (in[i][k][j].num != out[i][k][j].num) {
-					printf("in and out failure at (%d,%d,%d), in %d, out %d\n", i, k, j, in[i][k][j].num, out[i][k][j].num);
+					printf("in and out 2 failure at (%d,%d,%d), in %d, out %d\n", i, k, j, in[i][k][j].num, out[i][k][j].num);
 					return;
 				}
 			}
@@ -47,7 +119,7 @@ void in_and_out(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 	}
 }
 
-void inout(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
+void inout2(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 {
 	int i, j, k;
 	for (i = 0; i < N1; ++i) {
@@ -59,7 +131,7 @@ void inout(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* test = test[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(8) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* test = test[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -75,7 +147,7 @@ void inout(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 		for (j = 0; j < N3; ++j) {
 			for (k = 0; k < N2; ++k) {
 				if (ref[i][k][j].num != test[i][k][j].num) {
-					printf("inout failure at (%d,%d,%d), ref %d, test %d\n", i, k, j, ref[i][k][j].num, test[i][k][j].num);
+					printf("inout 2 failure at (%d,%d,%d), ref %d, test %d\n", i, k, j, ref[i][k][j].num, test[i][k][j].num);
 					return;
 				}
 			}
@@ -85,8 +157,11 @@ void inout(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 
 int main()
 {
-	in_and_out(a, b);
-	inout(a, b);
+	in_and_out1(a, b);
+	inout1(a, b);
+
+	in_and_out2(a, b);
+	inout2(a, b);
 
 	return 0;
 }
