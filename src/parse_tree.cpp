@@ -162,12 +162,16 @@ add_expr construct_access_formula(const list<string>& dimensions, const list<add
 		// product goes from 0 to dimensions.size()-1.
 		list<string>::const_iterator n = dimensions.begin();
 		list<add_expr>::const_iterator i = indices.begin();
+		list<string> str_indices;
 
 		add_expr staq(indices.front());
+		str_indices.push_back(indices.front().str());
 		for (++n, ++i; n != dimensions.end() && i != indices.end(); ++n, ++i) {
 			staq = add_expr(mult_expr(paren_expr(new add_expr(staq)), "*", *n), "+", mult_expr(i->str()));
+			str_indices.push_back(i->str());
 		}
 
+		staq.indices(str_indices);
 		return staq;
 	}
 	else {
@@ -777,6 +781,16 @@ struct lift_out_gen_in_rows {
 	}
 };
 
+struct print_conditions {
+	const add_expr& add;
+	print_conditions(const add_expr& a): add(a) {}
+
+	void operator()(const conditions& c)
+	{
+		cout << "(" << c.start << ", " << c.induction << "[" << add.index(c.induction) << "], " << c.stop << ") ";
+	}
+};
+
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
@@ -788,15 +802,13 @@ struct for_compound_op {
 	condslist& conds;
 	bind_xformer& condnodes;
 	const int unroll;
-	const string par_induction;
-	sharedset seen;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
 			sharedset& i, sharedset& o, sharedset& io, 
 			operations& op, condslist& c, bind_xformer& n, const int u): 
 		shared_symbols(s), priv_symbols(p), locals(l), 
 		in(i), out(o), inout(io), 
-		ops(op), conds(c), condnodes(n), unroll(u), par_induction(c.front().induction)
+		ops(op), conds(c), condnodes(n), unroll(u)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -841,6 +853,13 @@ struct for_compound_op {
 			conditions bridge_in = outer;
 			bridge_in.induction = inner.induction;
 			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
+
+			/*
+			if (seen_ins.size() > 0) {
+				for_all(conds, print_conditions((*seen_ins.begin())->math()));
+				cout << endl;
+			}
+			*/
 
 			// TODO: optimization if buffer is same as last dimension?
 

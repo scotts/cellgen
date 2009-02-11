@@ -8,6 +8,7 @@
 using namespace std;
 
 #include "operations.h"
+#include "utility.h"
 
 class add_expr;
 
@@ -82,12 +83,13 @@ class add_expr {
 	mult_expr _lhs;
 	string _op;
 	mult_expr _rhs;
+	list<string> _indices;
 
 	mult_expr side(const string& ivar, const mult_expr* l, const mult_expr* r) const;
 	
 public:
 	add_expr() {}
-	add_expr(const add_expr& o): _lhs(o._lhs), _op(o._op), _rhs(o._rhs) {}
+	add_expr(const add_expr& o): _lhs(o._lhs), _op(o._op), _rhs(o._rhs), _indices(o._indices) {}
 	add_expr(const mult_expr& m): _lhs(m) {}
 	add_expr(const mult_expr& l, const string& o, const mult_expr& r):
 		_lhs(l), _op(o), _rhs(r) {}
@@ -95,6 +97,7 @@ public:
 	void lhs(const mult_expr& e)	{ _lhs = e; }
 	void op(const string& o)	{ _op = o; }
 	void rhs(const mult_expr& e)	{ _rhs = e; }
+	void indices(const list<string>& i) { _indices = i;  }
 
 	mult_expr lhs() const	{ return _lhs; }
 	string op() const	{ return _op; }
@@ -108,6 +111,7 @@ public:
 	string next_iteration(const string& ivar) const;
 	string replace_induction(const string& ivar, const string& rep) const;
 	string zero_induction(const string& ivar) const;
+	unsigned int index(const string& ivar) const;
 
 	operations cost() const;
 };

@@ -379,12 +379,12 @@ public:
 		string allocation;
 
 		if (v->is_column()) {
-			dma_list_adaptor list(v);
+			dma_list_adaptor lst(v);
 			buffer_adaptor buff(v);
-			allocation = list.declare(depth) + "; \n";
+			allocation = lst.declare(depth) + "; \n";
 
 			for (int i = 0; i < depth; ++i) {
-				allocation += "allocate_dma_list(&" + list.name(i) + "," + buff.size() + ",1);\n";
+				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + ",1);\n";
 			}
 		}
 
@@ -424,10 +424,10 @@ public:
 		string deallocation;
 
 		if (v->is_column()) {
-			dma_list_adaptor list(v);
+			dma_list_adaptor lst(v);
 
 			for (int i = 0; i < depth; ++i) {
-				deallocation += "free_dma_list(&" + list.name(i) + "); \n";
+				deallocation += "free_dma_list(&" + lst.name(i) + "); \n";
 			}
 		}
 
@@ -811,21 +811,34 @@ public:
 		return "(" + v->math().replace_induction(conds.induction, "(" + conds.stop + "-" + final_size() + "))");
 	}
 
+	string stride() const
+	{
+		string s;
+		const int total = v->dimensions().size() - v->math().index(conds.induction);
+		list<string>::const_reverse_iterator d = v->dimensions().rbegin();
+		for (int i = 0; i < total; ++i, ++d) {
+			s += *d + "*";
+		}
+
+		return s;
+	}
+
 	string dma_in(const string& address) const
 	{
-		dma_list_adaptor list(v);
+		dma_list_adaptor lst(v);
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		return	"add_to_dma_list(&" + list.name(next.name()) + "," + 
+
+		return	"add_to_dma_list(&" + lst.name(next.name()) + "," + 
 				buff.size() + "," +
 				address + ","
 				"sizeof(" + buff.type() + "), " + 
-				v->dimensions().back() + "* sizeof(" + buff.type() + "),"
+				stride() + "sizeof(" + buff.type() + "),"
 				"1);" +
 			"DMA_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
 				address + "," +
-				"&" + list.name(next.name()) + "," + 
+				"&" + lst.name(next.name()) + "," + 
 				next.name() + ","
 				"1," +
 				"sizeof(" + buff.type() + "));";
@@ -838,7 +851,7 @@ public:
 
 	string dma_out(const string& address, const int depth, const string& tsize) const
 	{
-		dma_list_adaptor list(v);
+		dma_list_adaptor lst(v);
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 		orig_adaptor orig(v);
@@ -846,18 +859,18 @@ public:
 		const string& depth_s = to_string(depth);
 
 		if (depth < 3) {
-			make_list = "add_to_dma_list(&" + list.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
+			make_list = "add_to_dma_list(&" + lst.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
 					tsize + "," +
 					address + ","
 					"sizeof(" + buff.type() + "), " + 
-					v->dimensions().back() + "* sizeof(" + buff.type() + "),"
+					stride() + "sizeof(" + buff.type() + "),"
 					"1);";
 		}
 
 		return 	make_list + 
 			"DMA_putl(" + orig.name() + "," +
 				address + "," +
-				"&" + list.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
+				"&" + lst.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
 				"(" + next.name() + "+(" + depth_s + "-1))%" + depth_s + ","
 				"1," +
 				"sizeof(" + buff.type() + "));";

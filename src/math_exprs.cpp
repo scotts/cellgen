@@ -102,14 +102,6 @@ string paren_expr::replace_induction(const string& ivar, const string& rep) cons
 		s = recurse->replace_induction(ivar, rep);
 	}
 	else {
-		cout << "paren_expr::replace_induction(" << ivar << ", " << rep << ")" << endl;
-		if (recurse) {
-			cout << "recurse: " << recurse->str() << endl;
-		}
-		else {
-			cout << "terminal: " << terminal << endl;
-		}
-
 		throw ivar_not_found();
 	}
 
@@ -322,6 +314,25 @@ string add_expr::replace_induction(const string& ivar, const string& rep) const
 string add_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
+}
+
+unsigned int add_expr::index(const string& ivar) const
+{
+	unsigned int i = 1;
+	for (list<string>::const_iterator it = _indices.begin(); it != _indices.end(); ++it) {
+		if (*it == ivar) {
+			break;
+		}
+		else {
+			++i;
+		}
+	}
+
+	if (i > _indices.size()) {
+		throw ivar_not_found();
+	}
+
+	return i;
 }
 
 operations add_expr::cost() const
