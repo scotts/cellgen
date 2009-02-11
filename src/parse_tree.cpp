@@ -678,7 +678,7 @@ struct serial_for_op {
 	const priv_symtbl& priv_symbols;
 	var_symtbl locals;
 	operations& ops;
-	condslist& conds;
+	condslist conds;
 	bind_xformer& condnodes;
 	const int unroll;
 	sharedset in;
@@ -695,6 +695,15 @@ struct serial_for_op {
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
+		// inout = intersection(in + out)
+		set_intersection_all(in, out, inserter(inout, inout.begin()));
+
+		// in -= inout
+		for_all(inout, erase_from_set<shared_variable*>(in));	
+
+		// out -= inout
+		for_all(inout, erase_from_set<shared_variable*>(out));	
+
 		// g_inout += inout + intersection(in + g_in, out + g_out)
 		g_in.insert(in.begin(), in.end());
 		g_out.insert(out.begin(), out.end());
@@ -781,15 +790,15 @@ struct lift_out_gen_in_rows {
 	}
 };
 
-struct print_conditions {
-	const add_expr& add;
-	print_conditions(const add_expr& a): add(a) {}
+void print_name(const variable* v)
+{
+	cout << v->name() << " ";
+}
 
-	void operator()(const conditions& c)
-	{
-		cout << "(" << c.start << ", " << c.induction << "[" << add.index(c.induction) << "], " << c.stop << ") ";
-	}
-};
+void print_inductions(const conditions& c)
+{
+	cout << c.induction << " ";
+}
 
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
@@ -830,7 +839,6 @@ struct for_compound_op {
 		else if (node.value.id() == ids::for_loop) {
 			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes, unroll);
 			for_all(node.children, &o);
-
 			o.merge_inout(in, out, inout);
 
 			sharedset& local_in = o.in;
@@ -843,25 +851,20 @@ struct for_compound_op {
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
 			xformerlist& nested = node.value.xformations;
-			const conditions& inner = conds.back();
-			const conditions& outer = *previous(previous(conds.end(), conds), conds);
+			const conditions& outer = conds.back();
+			const conditions& inner = o.conds.back();
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
-			const sharedset& seen_ins = filter(seen_not_in, set_union_all(in, inout));
-			const sharedset& seen_outs = filter(seen_not_out, set_union_all(out, inout));
+			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, inout));
+			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, inout));
 
 			conditions bridge_in = outer;
 			bridge_in.induction = inner.induction;
 			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
 
-			/*
-			if (seen_ins.size() > 0) {
-				for_all(conds, print_conditions((*seen_ins.begin())->math()));
-				cout << endl;
-			}
-			*/
-
-			// TODO: optimization if buffer is same as last dimension?
+			// TODO:
+			// 	- Optimization if buffer is same size as (stop - start)?
+			// 	- Combine multiple in/out calls? 
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
 			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(inner, local_depths), seen_ins));
@@ -1007,7 +1010,9 @@ struct parallel_for_op {
 				parconds.start = "SPE_start";
 				parconds.stop = "SPE_stop";
 
-				conds.push_back(parconds);
+				if (!exists_in(conds, parconds)) {
+					conds.push_back(parconds);
+				}
 			}
 
 			if (unroll) {
@@ -1554,6 +1559,7 @@ struct cell_region {
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::compound) {
+			cout << "cell region" << endl;
 
 			// Trust me, this enchances readability.
 			sharedset& shared = (*region)->shared();

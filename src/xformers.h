@@ -72,6 +72,11 @@ struct conditions {
 	conditions(const string& _start, const string& _induction, const string& _stop):
 		start(_start), induction(_induction), stop(_stop)
 		{}
+
+	bool operator==(const conditions& o) const
+	{
+		return start == o.start && induction == o.induction && stop == o.stop;
+	}
 };
 typedef list<conditions> condslist;
 
@@ -941,6 +946,8 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer, public Acces
 		if (!unroll) {
 			if_statement = "if (!((" + Access::next_iteration() + ")%" + buff.size() + "))";
 		}
+
+		cout << "gen_out of " << v->name() << " has depth: " << depth << endl;
 
 		if (depth < 3) {
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; \n" +
