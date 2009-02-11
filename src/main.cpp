@@ -294,7 +294,7 @@ cmdline_options parse_command_line(int argc, char* argv[])
 		("help,h", "print usage message")
 		("infile,i", value<string>(&options.src_name), "input filename")
 		("astout,a", value<bool>(&options.print_ast)->zero_tokens()->default_value(false), "print the ast")
-		("speinclude,s", value<string>(&options.inc_name), "filename to include in spe source")
+		("Include,I", value<string>(&options.inc_name), "filename to include in ppe and spe source")
 		("num_threads,n", value<int>(&options.num_threads)->default_value(6), "set number of SPE threads");
 
 		positional_options_description p;

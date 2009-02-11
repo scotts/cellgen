@@ -855,8 +855,8 @@ struct for_compound_op {
 			const conditions& inner = o.conds.back();
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
-			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, inout));
-			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, inout));
+			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
+			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, local_inout));
 
 			conditions bridge_in = outer;
 			bridge_in.induction = inner.induction;
@@ -1559,8 +1559,6 @@ struct cell_region {
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::compound) {
-			cout << "cell region" << endl;
-
 			// Trust me, this enchances readability.
 			sharedset& shared = (*region)->shared();
 			const privset& priv = (*region)->priv();

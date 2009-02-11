@@ -947,8 +947,6 @@ struct gen_out: public unrollable_xformer, public epilogue_xformer, public Acces
 			if_statement = "if (!((" + Access::next_iteration() + ")%" + buff.size() + "))";
 		}
 
-		cout << "gen_out of " << v->name() << " has depth: " << depth << endl;
-
 		if (depth < 3) {
 			var_switch =	next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; \n" +
 					orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + "; \n" +
