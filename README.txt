@@ -1,6 +1,6 @@
 Cellgen: OpenMP-like support for the Cell processor
 Scott Schneider, scschnei@cs.vt.edu
-
+http://www.cs.vt.edu/~scschnei/cellgen
 
 Compiling
 ---------
@@ -20,7 +20,7 @@ Other than that, a simple "make" should do.
 Usage
 -----
 
-cellgen foo.cellgen [-n <# SPEs>]
+cellgen foo.cellgen [-n <# SPEs>] [-I <include file for PPE/SPE]
 
 Accepts only a single input file at a time, and it must end with
 .cellgen. For the file "foo.cellgen", the files "foo.c" and "spu/foo_spe.c"
@@ -60,14 +60,4 @@ main memory), or inout (data needs to go from both main memory to the
 SPE and the SPE to main memory). In and out variables use double
 buffering, while inout variables use triple buffering.
 
-Loop unrolling is specified with the command:
-
-	#pragma cell ... unroll(<# of unrolls>)
-
-The number of unrolls includes the original code, so unroll(10) means
-"generate 10 iterations in the loop body." The command unroll(0) is
-synonymous with not specifying an unroll factor, and unroll(1) is
-undefined. Note that currently, no bus error protection (called SIGBUS,
-usually implemented as signal number 7) is provided. Some unroll factors
-will result in code that cause bus errors.
-
+For examples, check the unit_test directory.
