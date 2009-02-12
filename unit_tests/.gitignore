@@ -9,4 +9,7 @@ sum
 *.d
 *.o
 *.S
+*.a
 pass_struct.h
+cellgen_timer.h
+cellstrider_dma.h
