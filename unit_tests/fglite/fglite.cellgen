@@ -3,7 +3,6 @@
 #include <assert.h>
 #include <math.h>
 
-/* Matrix dimensions */
 #define __NROWS	700
 #define __NCOLS	1000
 #define __NSPEC	8
@@ -11,15 +10,12 @@ const int NROWS = __NROWS;
 const int NCOLS = __NCOLS;
 const int NSPEC = __NSPEC;
 
-/* Cell dimensions */
 #define DX          250.0
 #define DY          250.0
 
-/* Emission source point coordinates */
 #define SOURCE_X	500
 #define SOURCE_Y	350
 
-/* Emission source emission rate (mol/m^2/s) */
 #define SOURCE_RATE	4.67E+23
 
 double16b_t conc_spe[__NROWS][__NCOLS][__NSPEC] __attribute__((aligned(128)));
@@ -37,9 +33,8 @@ int double_eq(double a, double b)
 	return fabs(a - b) < 0.00001;
 }
 
-void discretize_all_rows_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t wind_u[NROWS][NCOLS], double16b_t diff[NROWS][NCOLS])
+void all_rows_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t wind_u[NROWS][NCOLS], double16b_t diff[NROWS][NCOLS])
 {
-	// NROWS = 12, NCOLS = 40, NSPEC = 79
 	#pragma cell SPE_start(0) SPE_stop(NROWS) shared(double16b_t* wind_u = wind_u[NROWS][NCOLS], double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* diff = diff[NROWS][NCOLS]) private(double dt = dt, int NROWS = NROWS, int NCOLS = NCOLS, int NSPEC = NSPEC)
 	{
 	int i, s;
@@ -329,7 +324,7 @@ void discretize_all_rows_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], d
 	}
 }
 
-void discretize_all_rows_ppe(double dt, double conc[NROWS][NCOLS][NSPEC], double wind_u[NROWS][NCOLS], double diff[NROWS][NCOLS])
+void all_rows_ppe(double dt, double conc[NROWS][NCOLS][NSPEC], double wind_u[NROWS][NCOLS], double diff[NROWS][NCOLS])
 {
 	int i, s;
 	for (i = 0; i < NROWS; i++) {
@@ -618,7 +613,7 @@ void discretize_all_rows_ppe(double dt, double conc[NROWS][NCOLS][NSPEC], double
 }
 
 /*
-void discretize_all_cols(double dt)
+void all_cols(double dt)
 {
 	int j, k, s;
 
@@ -975,11 +970,11 @@ int main()
 	conc_spe[SOURCE_Y][SOURCE_X][0].num += (SOURCE_RATE) / (DX * DY * 1000.0);
 	conc_ppe[SOURCE_Y][SOURCE_X][0] += (SOURCE_RATE) / (DX * DY * 1000.0);
 
-	discretize_all_rows_spe(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
-	discretize_all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
+	all_rows_spe(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
+	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
 	assert_rows(conc_spe, conc_ppe);
 
-	//discretize_all_cols(1.0);
+	//all_cols(1.0);
 
 	return 0;
 }
