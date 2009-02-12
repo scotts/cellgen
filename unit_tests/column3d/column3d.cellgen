@@ -11,8 +11,6 @@ const int N3 = __N3;
 int16b_t a[__N1][__N2][__N3] __attribute((aligned(128)));
 int16b_t b[__N1][__N2][__N3] __attribute((aligned(128)));
 
-// Test.
-//
 void in_and_out1(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 {
 	int i, j, k;
