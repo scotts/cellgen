@@ -2,6 +2,9 @@
  * Scott Schneider
  *
  * Cellgen: pseudo-openmp support for the Cell.
+ * http://www.cs.vt.edu/~scschnei/cellgen
+ *
+ * This code is under GPL 2.0. See the file COPYING.
  */
 
 #include <cassert>
