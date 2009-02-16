@@ -35,7 +35,10 @@ void assert_equal()
 {
 	int i;
 	for (i = 0; i < N; ++i) {
-		assert(root[i] == root_ref[i]);
+		if (root[i] != root_ref[i]) {
+			printf("failure at %d, ppe %f, spe %f\n", i, root[i], root_ref[i]);
+			return;
+		}
 	}
 }
 
@@ -80,7 +83,7 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2;
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N/4) private(double* tl = tl, double* tr = tr) shared(double* pn = root, double* pl = l, double* pr = r)
+	#pragma cell SPE_start(0) SPE_stop(N/4) buffer(2048) private(double* tl = tl, double* tr = tr) shared(double* pn = root, double* pl = l, double* pr = r)
 	{
 		int i;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -133,7 +136,7 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2 * t3;
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N/4) private(double* tl = tl, double* tr = tr, double* tp = tp) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
+	#pragma cell SPE_start(0) SPE_stop(N/4) buffer(2048) private(double* tl = tl, double* tr = tr, double* tp = tp) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
 	{
 		int i;
 		for (i = SPE_start; i < SPE_stop; i++) {
@@ -176,7 +179,7 @@ int main()
 		lnL_ref +=  weight[i] * temp;
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N/4) reduction(+: double l = lnL) private(double* freq = freq) shared(double* sroot = root, int* weight = weight)
+	#pragma cell SPE_start(0) SPE_stop(N/4) buffer(2048) reduction(+: double l = lnL) private(double* freq = freq) shared(double* sroot = root, int* weight = weight)
 	{
 		int i;
 		for (i = SPE_start; i < SPE_stop; i++) {

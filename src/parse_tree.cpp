@@ -1590,21 +1590,19 @@ struct cell_region {
 			(*region)->induction(par_induction);
 
 			// Deliberately do this AFTER compund and depth assignments, but before unrolling
+			/*
 			operations overhead;
 			operations startup;
 			try {
 				make_descend(accumulate_cost(overhead, startup))(node);	
 			}
-			catch (failure_to_parse_xformer e)
-			{
+			catch (failure_to_parse_xformer e) {
 				cerr	<< "Failed to parse " << e.name << ":" << endl
 					<< "---" << endl
 					<< e.code << endl
 					<< "---" << endl;
 			}
 
-
-			/*
 			cout	<< "iteration: " << endl
 				<< iteration 
 				<< "cycles: " << iteration.cycles() << endl 

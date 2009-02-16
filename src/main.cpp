@@ -369,8 +369,7 @@ int main(int argc, char* argv[])
 		system(string("indent " + ppe_oname + " " + spe_oname).c_str());
 		system("rm *~ spu/*~");
 	}
-	catch (user_error e)
-	{
+	catch (user_error e) {
 		cerr << "error: " << e.err << endl;
 		exit(1);
 	}
