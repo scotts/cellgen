@@ -872,6 +872,11 @@ struct for_compound_op {
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
+			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
+				lbrace.push_back(new buffer_loop_start(buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size()));
+				rbrace.push_back(new buffer_loop_stop());
+			}
+
 			conditions bridge_out = inner;
 			bridge_out.induction = outer.induction;
 			//append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out, inner, local_depths), seen_outs));
@@ -1037,6 +1042,11 @@ struct parallel_for_op {
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
 			//append(rbrace, fmap(make_gen_out_final_row, flat_outs));
+			
+			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
+				lbrace.push_back(new buffer_loop_start(buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size()));
+				rbrace.push_back(new buffer_loop_stop());
+			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
 			for_all(flat_outs, mem_fn(&shared_variable::out_generated));

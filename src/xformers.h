@@ -216,6 +216,33 @@ public:
 	string class_name() const { return "total_timer_start"; }
 };
 
+class buffer_loop_start: public xformer {
+	string buffer_size;
+public:
+	buffer_loop_start(const string& b): buffer_size(b) {}
+	string operator()(const string& old)
+	{
+		return old + 
+			"int __i;"
+			"for (__i = 0; __i <" + buffer_size + "; ++__i;) {"; 
+	}
+
+	xformer* clone() const { return new buffer_loop_start(buffer_size); }
+	string class_name() const { return "buffer_loop_start"; }
+};
+
+class buffer_loop_stop: public xformer {
+public:
+	buffer_loop_stop() {}
+	string operator()(const string& old)
+	{
+		return "}" + old;
+	}
+
+	xformer* clone() const { return new buffer_loop_stop(); }
+	string class_name() const { return "buffer_loop_stop"; }
+};
+
 class total_timer_stop: public xformer {
 public:
 	string operator()(const string& old)
@@ -835,7 +862,6 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-
 		return	"add_to_dma_list(&" + lst.name(next.name()) + "," + 
 				buff.size() + "," +
 				address + ","
@@ -918,7 +944,7 @@ struct gen_in: public unrollable_xformer, public epilogue_xformer, public Access
 			rotate_next + 
 			wait_next +
 			dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer() + ")", 
-					"(" + Access::bounds_check() + "<" + full.name() + "?" + buff.size() + ":" + leftover.name() + ")," ) + 
+					"(" + Access::bounds_check() + "<" + full.name() + "?" + buff.size() + ":" + leftover.name() + ")" ) + 
 			orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
 			wait_prev +
 			"cellgen_dma_prep_stop();";
