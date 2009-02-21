@@ -874,7 +874,7 @@ struct for_compound_op {
 
 			conditions bridge_out = inner;
 			bridge_out.induction = outer.induction;
-			append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out, inner, local_depths), seen_outs));
+			//append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out, inner, local_depths), seen_outs));
 
 			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
 			for_all(seen_outs, mem_fn(&shared_variable::out_generated));
@@ -948,17 +948,10 @@ void serial_for_op::operator()(ast_node& node)
 			if (expressions_seen == 1) {
 				sercond.induction = string(conditional.lhs->value.begin(), conditional.lhs->value.end());
 				sercond.start = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
-				if (unroll) {
-					condnodes.insert(bind_xformer::value_type(new variable_name(unrolled), conditional.rhs));
-				}
 			}
 			else if (expressions_seen == 2) {
 				sercond.stop = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
 				conds.push_back(sercond);
-
-				if (unroll) {
-					condnodes.insert(bind_xformer::value_type(new variable_name(epilogue), conditional.rhs));
-				}
 			}
 			else {
 				throw user_error("number of expressions seen in serial_for_op.");
@@ -1014,15 +1007,6 @@ struct parallel_for_op {
 					conds.push_back(parconds);
 				}
 			}
-
-			if (unroll) {
-				if (ident == "SPE_start") {
-					condnodes.insert(bind_xformer::value_type(new variable_name(unrolled), &node));
-				}
-				else if (ident == "SPE_stop") {
-					condnodes.insert(bind_xformer::value_type(new variable_name(epilogue), &node));
-				}
-			}
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
@@ -1040,11 +1024,6 @@ struct parallel_for_op {
 			for_all(out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			const bool column = accumulate_all(set_union_all(in, out, inout), false, make_acc_or(&shared_variable::is_column));
-			if (unroll && column) {
-				for_all(condnodes_col, add_xformer_to_node);
-			}
-
 			// Hi, I'm an inelegant special case.
 			xformerlist& lbrace = node.children.front().value.xformations;
 			xformerlist& rbrace = node.children.back().value.xformations;
@@ -1057,7 +1036,7 @@ struct parallel_for_op {
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
-			append(rbrace, fmap(make_gen_out_final_row, flat_outs));
+			//append(rbrace, fmap(make_gen_out_final_row, flat_outs));
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
 			for_all(flat_outs, mem_fn(&shared_variable::out_generated));
@@ -1254,6 +1233,7 @@ struct unroll_for_op {
 	{
 		if (node.value.id() == ids::expression_statement) {
 			descend< remove_xforms<variable_name> >()(node);
+			/*
 			if (is_row) {
 				// Yeah, kinda odd. We changed the original for_loop in place when we knew 
 				// we were unrolling, so we're going to remove those, then add the new ones.
@@ -1262,6 +1242,7 @@ struct unroll_for_op {
 			else {
 				for_all(node.children, match_identifier(stop, new variable_name(unrolled)));
 			}
+			*/
 		}
 		else if (node.value.id() == ids::compound) {
 
@@ -1364,6 +1345,11 @@ struct compound {
 bool is_for_loop(ast_node& node)
 {
 	return node.value.id() == ids::for_loop;
+}
+
+bool is_compound_expression(ast_node& node)
+{
+	return node.value.id() == ids::compound;
 }
 
 string remove_multop(const string& str)
@@ -1567,7 +1553,6 @@ struct cell_region {
 			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
 			const int unroll = (*region)->unroll();
 			const int buffer = (*region)->buffer();
-			const bool dma_unroll = (*region)->dma_unroll();
 
 			// Assumption: one parallel induction variable.
 			sharedset in;
@@ -1619,46 +1604,15 @@ struct cell_region {
 				<< endl;
 			*/
 
-			const bool column = accumulate_all(shared, false, make_acc_or(&shared_variable::is_column));
-			const bool row = accumulate_all(shared, false, make_acc_or(&shared_variable::is_row));
-			if (unroll) {
-				const string& serial_induction = conds.back().induction;
-				const string& serial_start = conds.back().start;
-				const string& serial_stop = conds.back().stop;
-				string unroll_induction;
+			pair<ast_node*, ast_node::tree_iterator> pos = find_and_duplicate_deep(node, is_compound_expression);
+			assert(pos.second != node.children.end());
 
-				pair<ast_node*, ast_node::tree_iterator> pos;
-				if (column && row) {
-					throw user_error("unroll requested when shared variables have both row and column access.");
-				}
-				else if (row) {
-					pos = find_and_duplicate_shallow(node, is_for_loop);
-					for_all(condnodes_row, add_xformer_to_node);
-					unroll_induction = par_induction;
-				}
-				else if (column) {
-					pos = find_and_duplicate_deep(node, is_for_loop);
-					pos.first->children.front().value.xformations.push_back(new define_unroll_boundaries(serial_start, serial_stop, unroll));
-					unroll_induction = serial_induction;
-				}
-				else {
-					throw user_error("no row or column access found for shared variables during loop unrolling.");
-				}
-
-				assert(pos.second != node.children.end());
-
-				ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
-				unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
-				descend<epilogue_all>()(*(next(dup, pos.first->children)));
-			}
+			ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
+			//unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
+			//descend<epilogue_all>()(*(next(dup, pos.first->children)));
 
 			xformerlist& front = node.children.front().value.xformations;
 			front.push_back(new define_prev());
-
-			if (unroll) {
-				const const_variable unroll_factor("int", "unroll_factor", to_string(unroll));
-				front.push_back(new define_const(unroll_factor));
-			}
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
 			append(front, fmap(make_shared_buffer_size(buffer, unroll, max_depths), shared));
@@ -1667,14 +1621,9 @@ struct cell_region {
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
 
-			front.push_back(new compute_bounds((for_all(shared, max_buffer(par_induction)).max)));
-
-			if (unroll && row) {
-				const string& par_start = conds.front().start;
-				const string& par_stop = conds.front().stop;
-
-				front.push_back(new define_unroll_boundaries(par_start, par_stop, unroll));
-			}
+			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
+			front.push_back(new compute_bounds(buffer_size));
+			front.push_back(new define_leftover_full(conds.front().start, conds.front().stop, buffer_size));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));

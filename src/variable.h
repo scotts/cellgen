@@ -80,8 +80,8 @@ public:
 const const_variable buff_size("int", "buff_size", "16");
 */
 
-const const_variable unrolled("int", "unrolled");
-const const_variable epilogue("int", "epilogue"); 
+const const_variable leftover("int", "leftover");
+const const_variable full("int", "full"); 
 
 class pound_define: public variable {
 public:
