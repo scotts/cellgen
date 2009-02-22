@@ -66,6 +66,7 @@ public:
 };
 
 const variable prev("int", "prev", "0");
+const variable buffer_index("int", "__i__", "0");
 
 class const_variable: public variable {
 public:

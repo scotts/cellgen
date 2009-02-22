@@ -158,51 +158,17 @@ struct nop: public xformer {
 };
 
 class to_buffer_space: virtual public xformer {
-protected:
 	const shared_variable* v;
-
+	const variable index;
 public:
-	to_buffer_space(const shared_variable* _v): v(_v) {}
-};
-
-class flat_buffer_space: virtual public to_buffer_space, public epilogue_xformer {
-	const add_expr math;
-public:
-	flat_buffer_space(const shared_variable* v, const add_expr& m): to_buffer_space(v), math(m) {}
+	to_buffer_space(const shared_variable* _v, const variable& i): v(_v), index(i) {}
 	string operator()(const string& old)
 	{
-		buffer_adaptor buff(v);
-		orig_adaptor orig(v);
-		string buff_size;
-
-		if (epilogue) {
-			buff_size = "(" + buff.size() + "/" + "unroll_factor)";
-		}
-		else {
-			buff_size = buff.size();
-		}
-
-		return old + orig.name() + "[(" + math.str() + ")%" + buff_size + "]";
+		return old + orig_adaptor(v).name() + "[" + index.name() + "]";
 	}
 
-	xformer* clone() const { return new flat_buffer_space(*this); }
-	string class_name() const { return "flat_buffer_space"; }
-};
-
-class multi_buffer_space: public to_buffer_space {
-	const string induction;
-public:
-	multi_buffer_space(const shared_variable* v, const string& i): to_buffer_space(v), induction(i) {}
-	string operator()(const string& old)
-	{
-		buffer_adaptor buff(v);
-		orig_adaptor orig(v);
-
-		return old + orig.name() + "[(" + induction + ")%" + buff.size() + "]";
-	}
-
-	xformer* clone() const { return new multi_buffer_space(*this); }
-	string class_name() const { return "multi_buffer_space"; }
+	xformer* clone() const { return new to_buffer_space(v, index); }
+	string class_name() const { return "to_buffer_space"; }
 };
 
 class total_timer_start: public xformer {
@@ -217,17 +183,17 @@ public:
 };
 
 class buffer_loop_start: public xformer {
-	string buffer_size;
+	const variable index;
+	const string buffer_size;
 public:
-	buffer_loop_start(const string& b): buffer_size(b) {}
+	buffer_loop_start(const variable& i, const string& b): index(i), buffer_size(b) {}
 	string operator()(const string& old)
 	{
 		return old + 
-			"int __i;"
-			"for (__i = 0; __i <" + buffer_size + "; ++__i;) {"; 
+			"for (" + index.name() + "= 0;" + index.name() + "<" + buffer_size + "; ++" + index.name() + ") {"; 
 	}
 
-	xformer* clone() const { return new buffer_loop_start(buffer_size); }
+	xformer* clone() const { return new buffer_loop_start(index, buffer_size); }
 	string class_name() const { return "buffer_loop_start"; }
 };
 
@@ -243,11 +209,25 @@ public:
 	string class_name() const { return "buffer_loop_stop"; }
 };
 
+class buffer_loop_increment: public xformer {
+	const string induction;
+	const string size;
+public:
+	buffer_loop_increment(const string& i, const string& s): induction(i), size(s) {}
+	string operator()(const string& old)
+	{
+		return induction + "+=" + size;
+	}
+
+	xformer* clone() const { return new buffer_loop_increment(induction, size); }
+	string class_name() const { return "buffer_loop_increment"; }
+};
+
 class total_timer_stop: public xformer {
 public:
 	string operator()(const string& old)
 	{
-		return old + "\n cellgen_total_stop(); \n";
+		return "cellgen_total_stop();" + old;
 	}
 
 	xformer* clone() const { return new total_timer_stop(*this); }
@@ -569,27 +549,17 @@ public:
 	string class_name() const { return "define_leftover_full"; }
 };
 
-struct define_prev: public xformer {
-	string operator()(const string& old)
-	{
-		return old + prev.define() + ";";
-	}
-
-	xformer* clone() const { return new define_prev(*this); }
-	string class_name() const { return "define_prev"; }
-};
-
-struct define_const: public xformer {
-	const const_variable unroll_factor;
-	define_const(const const_variable uf): unroll_factor(uf) {}
+struct define_variable: public xformer {
+	const variable var;
+	define_variable(const variable& v): var(v) {}
 
 	string operator()(const string& old)
 	{
-		return old + unroll_factor.define() + ";";
+		return old + var.define() + ";";
 	}
 
-	xformer* clone() const { return new define_const(*this); }
-	string class_name() const { return "define_const"; }
+	xformer* clone() const { return new define_variable(var); }
+	string class_name() const { return "define_variable(" + var.name() + ")"; }
 };
 
 class define_reduction: public xformer {

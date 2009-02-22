@@ -153,6 +153,18 @@ bool is_statement(const Node& node)
 		node.value.id() == ids::selection_statement;
 }
 
+bool is_expression(const ast_node& node)
+{
+	return node.value.id() == ids::expression ||
+		node.value.id() == ids::unary_expression ||
+		node.value.id() == ids::relational_expression ||
+		node.value.id() == ids::assignment_expression ||
+		node.value.id() == ids::postfix_expression ||
+		node.value.id() == ids::expression_statement ||
+		node.value.id() == ids::multiplicative_expression ||
+		node.value.id() == ids::additive_expression;
+}
+
 add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices)
 {
 	if (indices.size() > 1) {
@@ -437,14 +449,9 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			o.shared_var->column();
 		}
 		
-		if (o.shared_var->is_flat()) {
-			node.value.xformations.push_back(new flat_buffer_space(o.shared_var, add));
-		}
-		else {
-			node.value.xformations.push_back(new multi_buffer_space(o.shared_var, conds.back().induction));
-		}
+		node.value.xformations.push_back(new to_buffer_space(o.shared_var, buffer_index));
 
-		// The *_buffer_space xformer subsumes the code inside the original array access. But, 
+		// The to_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
 		struct_access_search search;
 		for_all(node.children, &search);
@@ -790,16 +797,6 @@ struct lift_out_gen_in_rows {
 	}
 };
 
-void print_name(const variable* v)
-{
-	cout << v->name() << " ";
-}
-
-void print_inductions(const conditions& c)
-{
-	cout << c.induction << " ";
-}
-
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
@@ -873,7 +870,8 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				lbrace.push_back(new buffer_loop_start(buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size()));
+				const string& buffer_size = buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size();
+				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size));
 				rbrace.push_back(new buffer_loop_stop());
 			}
 
@@ -1044,14 +1042,13 @@ struct parallel_for_op {
 			//append(rbrace, fmap(make_gen_out_final_row, flat_outs));
 			
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
-				lbrace.push_back(new buffer_loop_start(buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size()));
+				const string& buffer_size = buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size();
+				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size));
 				rbrace.push_back(new buffer_loop_stop());
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
 			for_all(flat_outs, mem_fn(&shared_variable::out_generated));
-
-			rbrace.push_back(new total_timer_stop());
 		}
 		else {
 			for_all(node.children, this);
@@ -1222,6 +1219,32 @@ struct wipeout_const_and_pure_declarations {
 
 		}
 		else if (node.value.id() != ids::compound) { // new scopes can keep their declarations
+			for_all(node.children, this);
+		}
+	}
+};
+
+class too_many_expression_statements {};
+
+struct modify_for_loop_conditions {
+	const conditions& conds;
+	const string buffer_size;
+	int seen;
+	modify_for_loop_conditions(const conditions& c, const string& b): conds(c), buffer_size(b), seen(0) {}
+	void operator()(ast_node& node)
+	{
+		if (is_expression(node)) {
+			++seen;
+
+			switch (seen) {
+				case 2:	for_all(node.children, match_identifier("SPE_stop", new variable_name(full)));
+					break;
+				case 3: node.value.xformations.push_back(new buffer_loop_increment(conds.induction, buffer_size));
+					node.children.clear();
+					break;
+			}
+		}
+		else {
 			for_all(node.children, this);
 		}
 	}
@@ -1614,15 +1637,19 @@ struct cell_region {
 				<< endl;
 			*/
 
-			pair<ast_node*, ast_node::tree_iterator> pos = find_and_duplicate_deep(node, is_compound_expression);
-			assert(pos.second != node.children.end());
-
+			ast_node::tree_iterator for_loop = find_and_duplicate_deep(node, is_for_loop).second;
+			pair<ast_node*, ast_node::tree_iterator> pos = find_and_duplicate_deep(*for_loop, is_compound_expression);
+			assert(pos.second != (*for_loop).children.end());
 			ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
+
+			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
+			modify_for_loop_conditions(conds.front(), buffer_size)(*for_loop);
 			//unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
 			//descend<epilogue_all>()(*(next(dup, pos.first->children)));
 
 			xformerlist& front = node.children.front().value.xformations;
-			front.push_back(new define_prev());
+			front.push_back(new define_variable(prev));
+			front.push_back(new define_variable(buffer_index));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
 			append(front, fmap(make_shared_buffer_size(buffer, unroll, max_depths), shared));
@@ -1631,7 +1658,6 @@ struct cell_region {
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
 
-			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
 			front.push_back(new compute_bounds(buffer_size));
 			front.push_back(new define_leftover_full(conds.front().start, conds.front().stop, buffer_size));
 
@@ -1652,6 +1678,7 @@ struct cell_region {
 			append(back, fmap(make_xformer<buffer_deallocation, shared_variable>(), shared));
 			append(back, fmap(make_xformer<buffer_deallocation, private_variable>(), priv));
 			append(back, fmap(make_depth_xformer<dma_list_deallocation, shared_variable>(max_depths), shared));
+			back.push_back(new total_timer_stop());
 
 			++region;
 		}
