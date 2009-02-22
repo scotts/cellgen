@@ -203,10 +203,26 @@ struct descend {
 	}
 };
 
-template <class F>
-descend<F> make_descend(F f)
+template <class F, class T>
+void call_descend(F f, T& t)
 {
-	return descend<F>(f);
+	return descend<F>(f)(t);
+}
+
+template <class F>
+struct for_all_xformations {
+	F f;
+	for_all_xformations(F _f): f(_f) {}
+	void operator()(ast_node& node)
+	{
+		for_all(node.value.xformations, f);
+	}
+};
+
+template <class F>
+for_all_xformations<F> make_for_all_xformations(F f)
+{
+	return for_all_xformations<F>(f);
 }
 
 bool induction_equal(const string& induction, const conditions& c)
@@ -687,18 +703,17 @@ struct serial_for_op {
 	operations& ops;
 	condslist conds;
 	bind_xformer& condnodes;
-	const int unroll;
 	sharedset in;
 	sharedset out;
 	sharedset inout;
 	conditions sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, condslist& c, bind_xformer& n, const int u):
-		shared_symbols(s), priv_symbols(p), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, condslist& c, bind_xformer& n):
+		shared_symbols(s), priv_symbols(p), ops(o), conds(c), condnodes(n), expressions_seen(0)
 		{}
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, operations& o, condslist& c, bind_xformer& n, const int u):
-		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c), condnodes(n), unroll(u), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, operations& o, condslist& c, bind_xformer& n):
+		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c), condnodes(n), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
@@ -807,14 +822,13 @@ struct for_compound_op {
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
-	const int unroll;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
 			sharedset& i, sharedset& o, sharedset& io, 
-			operations& op, condslist& c, bind_xformer& n, const int u): 
+			operations& op, condslist& c, bind_xformer& n): 
 		shared_symbols(s), priv_symbols(p), locals(l), 
 		in(i), out(o), inout(io), 
-		ops(op), conds(c), condnodes(n), unroll(u)
+		ops(op), conds(c), condnodes(n)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -834,7 +848,7 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes);
 			for_all(node.children, &o);
 			o.merge_inout(in, out, inout);
 
@@ -871,7 +885,7 @@ struct for_compound_op {
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
 				const string& buffer_size = buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size();
-				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size));
+				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
 				rbrace.push_back(new buffer_loop_stop());
 			}
 
@@ -962,7 +976,7 @@ void serial_for_op::operator()(ast_node& node)
 		}
 	}
 	else if (node.value.id() == ids::compound) {
-		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, ops, conds, condnodes, unroll);
+		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, ops, conds, condnodes);
 		for_all(node.children, &o);
 	}
 	else {
@@ -985,15 +999,13 @@ struct parallel_for_op {
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
-	int unroll;
 	conditions parconds;
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, 
-			sharedset& io, operations& op, condslist& c, bind_xformer& n, int u): 
-		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), ops(op), conds(c), condnodes(n), unroll(u)
+			sharedset& io, operations& op, condslist& c, bind_xformer& n): 
+		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), ops(op), conds(c), condnodes(n)
 		{}
 	void operator()(ast_node& node)
 	{
-		// if unroll, need to change iteration parameters
 		if (node.value.id() == ids::identifier) {
 			const string ident(node.value.begin(), node.value.end());
 			if (ident != "SPE_start" && ident != "SPE_stop") {
@@ -1013,7 +1025,7 @@ struct parallel_for_op {
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
-			serial_for_op o(shared_symbols, priv_symbols, ops, conds, condnodes_col, unroll);
+			serial_for_op o(shared_symbols, priv_symbols, ops, conds, condnodes_col);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);
@@ -1043,7 +1055,7 @@ struct parallel_for_op {
 			
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
 				const string& buffer_size = buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size();
-				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size));
+				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
 				rbrace.push_back(new buffer_loop_stop());
 			}
 
@@ -1053,38 +1065,6 @@ struct parallel_for_op {
 		else {
 			for_all(node.children, this);
 		}
-	}
-};
-
-struct unroll_single {
-	const int unroll;
-	unroll_single(const int u): unroll(u) {}
-	void operator()(xformer* x)
-	{
-		x->unroll_me(unroll);
-	}
-};
-
-struct unroll_all {
-	const int unroll;
-	unroll_all(const int u): unroll(u) {}
-	void operator()(ast_node& node)
-	{
-		for_all(node.value.xformations, unroll_single(unroll));
-		for_all(node.children, this);
-	}
-};
-
-void epilogue_single(xformer* x)
-{
-	x->epilogue_me();
-}
-
-struct epilogue_all {
-	void operator()(ast_node& node)
-	{
-		for_all(node.value.xformations, epilogue_single);
-		for_all(node.children, this);
 	}
 };
 
@@ -1239,7 +1219,7 @@ struct modify_for_loop {
 			switch (seen) {
 				case 2:	for_all(node.children, match_identifier("SPE_stop", new variable_name(full)));
 					break;
-				case 3: node.value.xformations.push_back(new buffer_loop_increment(conds.induction, buffer_size));
+				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
 					node.children.clear();
 					break;
 			}
@@ -1332,11 +1312,11 @@ struct unroll_for_op {
 			cout << "unroll: " << no_start.induction << endl;
 
 			append(xforms, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(no_start), allins)); 
-			*/
 
 			ast_node& last = node.children.back();
 			descend<epilogue_all>()(last);
 			make_descend(unroll_all(unroll))(node);
+			*/
 		}
 		else {
 			for_all(node.children, this);
@@ -1353,15 +1333,14 @@ struct compound {
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
-	int unroll;
 	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, 
-			condslist& c, bind_xformer& n, int u): 
-		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n), unroll(u)
+			condslist& c, bind_xformer& n): 
+		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, conds, condnodes, unroll);
+			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, conds, condnodes);
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
@@ -1584,7 +1563,6 @@ struct cell_region {
 			const reduceset& reductions = (*region)->reductions();
 			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
 			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
-			const int unroll = (*region)->unroll();
 			const int buffer = (*region)->buffer();
 
 			// Assumption: one parallel induction variable.
@@ -1595,7 +1573,7 @@ struct cell_region {
 			bind_xformer condnodes_row;
 			operations iteration;
 
-			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, conds, condnodes_row, unroll);
+			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, conds, condnodes_row);
 			for_all(node.children, &o);
 
 			depths max_depths;
@@ -1607,12 +1585,12 @@ struct cell_region {
 			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
 
-			// Deliberately do this AFTER compund and depth assignments, but before unrolling
+			// Deliberately do this AFTER compund and depth assignments, but before leftover stuff.
 			/*
 			operations overhead;
 			operations startup;
 			try {
-				make_descend(accumulate_cost(overhead, startup))(node);	
+				call_descend(accumulate_cost(overhead, startup), node);	
 			}
 			catch (failure_to_parse_xformer e) {
 				cerr	<< "Failed to parse " << e.name << ":" << endl
@@ -1638,14 +1616,15 @@ struct cell_region {
 			*/
 
 			ast_node::tree_iterator for_loop = find_deep(node, is_for_loop).second;
-			pair<ast_node*, ast_node::tree_iterator> compound = find_deep(*for_loop, is_compound_expression);
+			pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(*for_loop, is_compound_expression);
 
-			(*compound.second).value.xformations.push_back(new if_clause(leftover));
-			ast_node::tree_iterator dup = compound.first->children.insert(compound.second, *compound.second);
+			(*left_cmpd.second).value.xformations.push_back(new if_clause(leftover));
+			ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 
 			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
 			modify_for_loop(conds.front(), buffer_size)(*for_loop);
-			descend< remove_xforms<if_clause> >()(*dup); // Hack! hack-hack-hack
+			descend< remove_xforms<if_clause> >()(*loop_cmpd); // Hack! hack-hack-hack
+			call_descend(make_for_all_xformations(mem_fn(&xformer::leftover_me)), *next(loop_cmpd, left_cmpd.first->children));
 
 			//unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
 			//descend<epilogue_all>()(*(next(dup, pos.first->children)));
@@ -1655,7 +1634,7 @@ struct cell_region {
 			front.push_back(new define_variable(buffer_index));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
-			append(front, fmap(make_shared_buffer_size(buffer, unroll, max_depths), shared));
+			append(front, fmap(make_shared_buffer_size(buffer, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
