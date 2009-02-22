@@ -223,6 +223,19 @@ public:
 	string class_name() const { return "buffer_loop_increment"; }
 };
 
+class if_clause: public xformer {
+	const variable var;
+public:
+	if_clause(const variable& v): var(v) {}
+	string operator()(const string& old)
+	{
+		return "if (" + var.name() + ")";
+	}
+
+	xformer* clone() const { return new if_clause(var); }
+	string class_name() const { return "if_clause"; }
+};
+
 class total_timer_stop: public xformer {
 public:
 	string operator()(const string& old)

@@ -1226,11 +1226,11 @@ struct wipeout_const_and_pure_declarations {
 
 class too_many_expression_statements {};
 
-struct modify_for_loop_conditions {
+struct modify_for_loop {
 	const conditions& conds;
 	const string buffer_size;
 	int seen;
-	modify_for_loop_conditions(const conditions& c, const string& b): conds(c), buffer_size(b), seen(0) {}
+	modify_for_loop(const conditions& c, const string& b): conds(c), buffer_size(b), seen(0) {}
 	void operator()(ast_node& node)
 	{
 		if (is_expression(node)) {
@@ -1414,7 +1414,7 @@ struct max_buffer: unary_function<const region_variable*, void> {
 };
 
 template <class Pred>
-pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_shallow(ast_node& node, Pred p)
+pair<ast_node*, ast_node::tree_iterator> find_shallow(ast_node& node, Pred p)
 {
 	ast_node::tree_iterator curr = find_if_all(node.children, p);
 
@@ -1423,7 +1423,7 @@ pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_shallow(ast_node& no
 	}
 	else {
 		for (ast_node::tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
-			pair<ast_node*, ast_node::tree_iterator> nested = find_and_duplicate_shallow(*i, p);
+			pair<ast_node*, ast_node::tree_iterator> nested = find_shallow(*i, p);
 			if (nested.second != i->children.end()) {
 				return nested;
 			}
@@ -1434,7 +1434,7 @@ pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_shallow(ast_node& no
 }
 
 template <class Pred>
-pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_deep(ast_node& node, Pred p)
+pair<ast_node*, ast_node::tree_iterator> find_deep(ast_node& node, Pred p)
 {
 	ast_node::tree_iterator curr = find_if_all(node.children, p);
 	pair<ast_node*, ast_node::tree_iterator> ret;
@@ -1447,7 +1447,7 @@ pair<ast_node*, ast_node::tree_iterator> find_and_duplicate_deep(ast_node& node,
 	}
 
 	for (ast_node::tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
-		pair<ast_node*, ast_node::tree_iterator> nested = find_and_duplicate_deep(*i, p);
+		pair<ast_node*, ast_node::tree_iterator> nested = find_deep(*i, p);
 		if (nested.second != i->children.end()) {
 			ret = nested;
 		}
@@ -1637,13 +1637,16 @@ struct cell_region {
 				<< endl;
 			*/
 
-			ast_node::tree_iterator for_loop = find_and_duplicate_deep(node, is_for_loop).second;
-			pair<ast_node*, ast_node::tree_iterator> pos = find_and_duplicate_deep(*for_loop, is_compound_expression);
-			assert(pos.second != (*for_loop).children.end());
-			ast_node::tree_iterator dup = pos.first->children.insert(pos.second, *(pos.second));
+			ast_node::tree_iterator for_loop = find_deep(node, is_for_loop).second;
+			pair<ast_node*, ast_node::tree_iterator> compound = find_deep(*for_loop, is_compound_expression);
+
+			(*compound.second).value.xformations.push_back(new if_clause(leftover));
+			ast_node::tree_iterator dup = compound.first->children.insert(compound.second, *compound.second);
 
 			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
-			modify_for_loop_conditions(conds.front(), buffer_size)(*for_loop);
+			modify_for_loop(conds.front(), buffer_size)(*for_loop);
+			descend< remove_xforms<if_clause> >()(*dup); // Hack! hack-hack-hack
+
 			//unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
 			//descend<epilogue_all>()(*(next(dup, pos.first->children)));
 
