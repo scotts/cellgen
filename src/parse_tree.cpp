@@ -165,6 +165,16 @@ bool is_expression(const ast_node& node)
 		node.value.id() == ids::additive_expression;
 }
 
+bool is_for_loop(ast_node& node)
+{
+	return node.value.id() == ids::for_loop;
+}
+
+bool is_compound_expression(ast_node& node)
+{
+	return node.value.id() == ids::compound;
+}
+
 add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices)
 {
 	if (indices.size() > 1) {
@@ -789,28 +799,96 @@ struct declaration_op {
 	}
 };
 
-struct extract_gen_in_rows {
-	xformerlist& lifted;
-	extract_gen_in_rows(xformerlist& l): lifted(l) {}
+template <class Pred>
+pair<ast_node*, ast_node::tree_iterator> find_deep(ast_node& node, Pred p)
+{
+	ast_node::tree_iterator curr = find_if_all(node.children, p);
+	pair<ast_node*, ast_node::tree_iterator> ret;
 
-	void operator()(xformer* x)
+	if (curr != node.children.end()) {
+		ret = make_pair(&node, curr);
+	}
+	else {
+		ret = make_pair(&node, node.children.end());
+	}
+
+	for (ast_node::tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
+		pair<ast_node*, ast_node::tree_iterator> nested = find_deep(*i, p);
+		if (nested.second != i->children.end()) {
+			ret = nested;
+		}
+	}
+
+	return ret;
+}
+
+struct match_identifier {
+	const string& to_replace;
+	xformer* x;
+	match_identifier(const string& t, xformer* x): 
+		to_replace(t), x(x)
 	{
-		if (is_type<gen_in<row_access> >(x)) {
-			lifted.push_back(x);
+		assert(x);	
+	}
+
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::identifier) {
+			if (to_replace == string(node.value.begin(), node.value.end())) {
+				node.value.xformations.push_back(x);
+			}
+		}
+		else {
+			for_all(node.children, this);
 		}
 	}
 };
 
-struct lift_out_gen_in_rows {
-	xformerlist& lifted;
-	lift_out_gen_in_rows(xformerlist& l): lifted(l) {}
+class too_many_expression_statements {};
 
+struct modify_for_loop {
+	const conditions& conds;
+	const string buffer_size;
+	int seen;
+	modify_for_loop(const conditions& c, const string& b): conds(c), buffer_size(b), seen(0) {}
 	void operator()(ast_node& node)
 	{
-		for_all(node.value.xformations, extract_gen_in_rows(lifted));
-		node.value.xformations.remove_if(is_type<gen_in<row_access>, xformer>);
+		if (is_expression(node)) {
+			++seen;
+
+			switch (seen) {
+				case 2:	for_all(node.children, match_identifier("SPE_stop", new variable_name(full)));
+					break;
+				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
+					node.children.clear();
+					break;
+			}
+		}
+		else {
+			for_all(node.children, this);
+		}
 	}
 };
+
+template <class X>
+struct remove_xforms {
+	void operator()(ast_node& node)
+	{
+		node.value.xformations.remove_if(is_type<X, xformer>);
+	}
+};
+
+void loop_mitosis(ast_node& for_loop, const conditions& conds, const string& buffer_size)
+{
+	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
+
+	(*left_cmpd.second).value.xformations.push_back(new if_clause(leftover));
+	ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
+
+	modify_for_loop(conds, buffer_size)(for_loop);
+	descend< remove_xforms<if_clause> >()(*loop_cmpd); // Hack! hack-hack-hack
+	call_descend(make_for_all_xformations(mem_fn(&xformer::leftover_me)), *(++loop_cmpd));
+}
 
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
@@ -887,6 +965,8 @@ struct for_compound_op {
 				const string& buffer_size = buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size();
 				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
 				rbrace.push_back(new buffer_loop_stop());
+				
+				loop_mitosis(node, inner, buffer_size);
 			}
 
 			conditions bridge_out = inner;
@@ -999,10 +1079,12 @@ struct parallel_for_op {
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
+	ast_node& parent;
 	conditions parconds;
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, 
-			sharedset& io, operations& op, condslist& c, bind_xformer& n): 
-		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), ops(op), conds(c), condnodes(n)
+			sharedset& io, operations& op, condslist& c, bind_xformer& n, ast_node& par): 
+		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), 
+		ops(op), conds(c), condnodes(n), parent(par)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -1057,6 +1139,8 @@ struct parallel_for_op {
 				const string& buffer_size = buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size();
 				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
 				rbrace.push_back(new buffer_loop_stop());
+
+				loop_mitosis(parent, parconds, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
@@ -1082,36 +1166,6 @@ bool has_declaration(const ast_node& node)
 		return false;
 	}
 }
-
-template <class X>
-struct remove_xforms {
-	void operator()(ast_node& node)
-	{
-		node.value.xformations.remove_if(is_type<X, xformer>);
-	}
-};
-
-struct match_identifier {
-	const string& to_replace;
-	xformer* x;
-	match_identifier(const string& t, xformer* x): 
-		to_replace(t), x(x)
-	{
-		assert(x);	
-	}
-
-	void operator()(ast_node& node)
-	{
-		if (node.value.id() == ids::identifier) {
-			if (to_replace == string(node.value.begin(), node.value.end())) {
-				node.value.xformations.push_back(x);
-			}
-		}
-		else {
-			for_all(node.children, this);
-		}
-	}
-};
 
 struct wipeout_identifier {
 	const string& ident;
@@ -1199,32 +1253,6 @@ struct wipeout_const_and_pure_declarations {
 
 		}
 		else if (node.value.id() != ids::compound) { // new scopes can keep their declarations
-			for_all(node.children, this);
-		}
-	}
-};
-
-class too_many_expression_statements {};
-
-struct modify_for_loop {
-	const conditions& conds;
-	const string buffer_size;
-	int seen;
-	modify_for_loop(const conditions& c, const string& b): conds(c), buffer_size(b), seen(0) {}
-	void operator()(ast_node& node)
-	{
-		if (is_expression(node)) {
-			++seen;
-
-			switch (seen) {
-				case 2:	for_all(node.children, match_identifier("SPE_stop", new variable_name(full)));
-					break;
-				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
-					node.children.clear();
-					break;
-			}
-		}
-		else {
 			for_all(node.children, this);
 		}
 	}
@@ -1340,7 +1368,7 @@ struct compound {
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::for_loop) {
-			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, conds, condnodes);
+			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, conds, condnodes, node);
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
@@ -1353,16 +1381,6 @@ struct compound {
 		}
 	}
 };
-
-bool is_for_loop(ast_node& node)
-{
-	return node.value.id() == ids::for_loop;
-}
-
-bool is_compound_expression(ast_node& node)
-{
-	return node.value.id() == ids::compound;
-}
 
 string remove_multop(const string& str)
 {
@@ -1410,29 +1428,6 @@ pair<ast_node*, ast_node::tree_iterator> find_shallow(ast_node& node, Pred p)
 	}
 
 	return make_pair(&node, node.children.end());
-}
-
-template <class Pred>
-pair<ast_node*, ast_node::tree_iterator> find_deep(ast_node& node, Pred p)
-{
-	ast_node::tree_iterator curr = find_if_all(node.children, p);
-	pair<ast_node*, ast_node::tree_iterator> ret;
-
-	if (curr != node.children.end()) {
-		ret = make_pair(&node, curr);
-	}
-	else {
-		ret = make_pair(&node, node.children.end());
-	}
-
-	for (ast_node::tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
-		pair<ast_node*, ast_node::tree_iterator> nested = find_deep(*i, p);
-		if (nested.second != i->children.end()) {
-			ret = nested;
-		}
-	}
-
-	return ret;
 }
 
 struct count_operations {
@@ -1615,20 +1610,6 @@ struct cell_region {
 				<< endl;
 			*/
 
-			ast_node::tree_iterator for_loop = find_deep(node, is_for_loop).second;
-			pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(*for_loop, is_compound_expression);
-
-			(*left_cmpd.second).value.xformations.push_back(new if_clause(leftover));
-			ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
-
-			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
-			modify_for_loop(conds.front(), buffer_size)(*for_loop);
-			descend< remove_xforms<if_clause> >()(*loop_cmpd); // Hack! hack-hack-hack
-			call_descend(make_for_all_xformations(mem_fn(&xformer::leftover_me)), *next(loop_cmpd, left_cmpd.first->children));
-
-			//unroll_for_op(in, inout, row, serial_stop, unroll_induction, unroll, dma_unroll)(*dup);
-			//descend<epilogue_all>()(*(next(dup, pos.first->children)));
-
 			xformerlist& front = node.children.front().value.xformations;
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
@@ -1640,6 +1621,7 @@ struct cell_region {
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
 
+			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
 			front.push_back(new compute_bounds(buffer_size));
 			front.push_back(new define_leftover_full(conds.front().start, conds.front().stop, buffer_size));
 

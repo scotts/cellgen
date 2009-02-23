@@ -128,7 +128,6 @@ public:
 	leftover_xformer(): is_leftover(false) {}
 	virtual void leftover_me()
 	{
-		cout << this->class_name() << endl;
 		is_leftover = true;
 	}
 };
