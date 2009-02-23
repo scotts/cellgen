@@ -143,12 +143,20 @@ struct nop: public xformer {
 
 class to_buffer_space: virtual public xformer {
 	const shared_variable* v;
+	const add_expr math;
+	const conditions conds;
 	const variable index;
 public:
-	to_buffer_space(const shared_variable* _v, const variable& i): v(_v), index(i) {}
+	to_buffer_space(const shared_variable* _v, const add_expr& m, const conditions& c, const variable& i): 
+		v(_v), math(m), conds(c), index(i) {}
 	string operator()(const string& old)
 	{
-		return old + orig_adaptor(v).name() + "[" + index.name() + "]";
+		string offset = math.non_ihs(conds.induction).str();
+		if (v->is_flat() && offset != "") {
+			offset = "+" + offset;
+		}
+
+		return old + orig_adaptor(v).name() + "[" + index.name() + offset + "]";
 	}
 
 	xformer* clone() const { return new to_buffer_space(*this); }
@@ -703,7 +711,8 @@ public:
 
 		string offset;
 		if (!v->is_flat()) {
-			offset = conds.induction + "*" + v->dimensions().back() + "+";
+			//offset = conds.induction + "*" + v->dimensions().back() + "+";
+			offset = v->math().non_ihs(conds.induction).str() + "+";
 		}
 
 		return offset + "(" + conds.stop + factor() + ")-" + final_size();
@@ -899,7 +908,7 @@ struct gen_in: virtual public conditions_xformer, virtual public leftover_xforme
 		string in;
 		if (is_leftover) {
 			in = old +
-				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
+				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + ";" +
 				wait_next;
 		}
 		else {
@@ -938,13 +947,15 @@ struct gen_out: virtual public conditions_xformer, virtual public leftover_xform
 		}
 
 		const string wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
-		const string dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::this_buffer() + ")", depth);
 
 		string out;
+		string dma;
 		if (is_leftover) {
-			out = var_switch + dma + wait + old;
+			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::final_size()); 
+			out = dma + wait + old;
 		}
 		else {
+			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::this_buffer() + ")", depth);
 			out = "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
 		}
 

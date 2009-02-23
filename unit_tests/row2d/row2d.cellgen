@@ -39,36 +39,6 @@ void in_and_out(int in[ROW][COL], int out[ROW][COL])
 	}
 }
 
-void in_and_out_unroll(int in[ROW][COL], int out[ROW][COL])
-{
-	int i, j;
-	for (i = 0; i < ROW; ++i) {
-		for (j = 0; j < COL; ++j) {
-			in[i][j] = i*j;
-			out[i][j] = 0;
-		}
-	}
-
-	#pragma cell SPE_start(0) SPE_stop(ROW) unroll(4) private(int ROW = ROW, int COL = COL) shared(int* in = in[ROW][COL], int* out = out[ROW][COL])
-	{
-		int i, j;
-		for (i = SPE_start; i < SPE_stop; ++i) {
-			for (j = 0; j < COL; ++j) {
-				out[i][j] = in[i][j];
-			}
-		}
-	}
-
-	for (i = 0; i < ROW; ++i) {
-		for (j = 0; j < COL; ++j) {
-			if (in[i][j] != out[i][j]) {
-				printf("in and out unroll failure at (%d,%d), in %d, out %d\n", i, j, in[i][j], out[i][j]);
-				return;
-			}
-		}
-	}
-}
-
 void inout(int ref[ROW][COL], int test[ROW][COL])
 {
 	int i, j;
@@ -101,44 +71,10 @@ void inout(int ref[ROW][COL], int test[ROW][COL])
 	}
 }
 
-void inout_unroll(int ref[ROW][COL], int test[ROW][COL])
-{
-	int i, j;
-	int count = 0;	
-	for (i = 0; i < ROW; ++i) {
-		for (j = 0; j < COL; ++j) {
-			test[i][j] = count;
-			ref[i][j] = 2 * count;
-			++count;
-		}
-	}
-
-	#pragma cell SPE_start(0) SPE_stop(ROW) unroll(4) private(int ROW = ROW, int COL = COL) shared(int* test = test[ROW][COL])
-	{
-		int i, j;
-		for (i = SPE_start; i < SPE_stop; ++i) {
-			for (j = 0; j < COL; ++j) {
-				test[i][j] = 2 * test[i][j];
-			}
-		}
-	}
-
-	for (i = 0; i < ROW; ++i) {
-		for (j = 0; j < COL; ++j) {
-			if (test[i][j] != ref[i][j]) {
-				printf("inout unroll failure at (%d,%d), test %d, ref %d\n", i, j, test[i][j], ref[i][j]);
-				return;
-			}
-		}
-	}
-}
-
 int main()
 {
 	in_and_out(first, second);
-	//in_and_out_unroll(first, second);
 	inout(first, second);
-	//inout_unroll(first, second);
 
 	return 0;
 }

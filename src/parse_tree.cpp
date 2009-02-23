@@ -475,7 +475,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			o.shared_var->column();
 		}
 		
-		node.value.xformations.push_back(new to_buffer_space(o.shared_var, buffer_index));
+		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, conds.back(), buffer_index));
 
 		// The to_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
@@ -857,7 +857,7 @@ struct modify_for_loop {
 			++seen;
 
 			switch (seen) {
-				case 2:	for_all(node.children, match_identifier("SPE_stop", new variable_name(full)));
+				case 2:	for_all(node.children, match_identifier(conds.stop, new variable_name(full)));
 					break;
 				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
 					node.children.clear();
@@ -878,11 +878,15 @@ struct remove_xforms {
 	}
 };
 
-void loop_mitosis(ast_node& for_loop, const conditions& conds, const string& buffer_size)
+void loop_mitosis(ast_node& for_loop, xformerlist& lbrace, xformerlist& rbrace, const conditions& conds, const string& buffer_size)
 {
-	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
+	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
+	rbrace.push_back(new buffer_loop_stop());
+	for_loop.value.xformations.push_back(new define_leftover_full(conds.start, conds.stop, buffer_size));
 
+	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(leftover));
+
 	ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 
 	modify_for_loop(conds, buffer_size)(for_loop);
@@ -963,15 +967,11 @@ struct for_compound_op {
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
 				const string& buffer_size = buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size();
-				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
-				rbrace.push_back(new buffer_loop_stop());
-				
-				loop_mitosis(node, inner, buffer_size);
+				loop_mitosis(node, lbrace, rbrace, inner, buffer_size);
 			}
 
 			conditions bridge_out = inner;
 			bridge_out.induction = outer.induction;
-			//append(rbrace, fmap(make_choice<gen_out_final<row_access>, gen_out_final<column_access> >(bridge_out, inner, local_depths), seen_outs));
 
 			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
 			for_all(seen_outs, mem_fn(&shared_variable::out_generated));
@@ -1129,18 +1129,13 @@ struct parallel_for_op {
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
 			const make_conditions<gen_in<row_access> > make_gen_in_row(parconds, local_depths);
 			const make_conditions<gen_out<row_access> > make_gen_out_row(parconds, local_depths);
-			const make_conditions<gen_out_final<row_access> > make_gen_out_final_row(parconds, local_depths);
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
-			//append(rbrace, fmap(make_gen_out_final_row, flat_outs));
 			
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
 				const string& buffer_size = buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size();
-				lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
-				rbrace.push_back(new buffer_loop_stop());
-
-				loop_mitosis(parent, parconds, buffer_size);
+				loop_mitosis(parent, lbrace, rbrace, parconds, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
@@ -1611,6 +1606,7 @@ struct cell_region {
 			*/
 
 			xformerlist& front = node.children.front().value.xformations;
+
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
 
@@ -1623,7 +1619,6 @@ struct cell_region {
 
 			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
 			front.push_back(new compute_bounds(buffer_size));
-			front.push_back(new define_leftover_full(conds.front().start, conds.front().stop, buffer_size));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));

@@ -97,7 +97,7 @@ public:
 	void lhs(const mult_expr& e)	{ _lhs = e; }
 	void op(const string& o)	{ _op = o; }
 	void rhs(const mult_expr& e)	{ _rhs = e; }
-	void indices(const list<string>& i) { _indices = i;  }
+	void indices(const list<string>& i) { _indices = i; }
 
 	mult_expr lhs() const	{ return _lhs; }
 	string op() const	{ return _op; }
