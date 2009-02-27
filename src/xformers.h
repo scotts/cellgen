@@ -151,12 +151,20 @@ public:
 		v(_v), math(m), conds(c), index(i) {}
 	string operator()(const string& old)
 	{
-		string offset = math.non_ihs(conds.induction).str();
-		if (v->is_flat() && offset != "") {
-			offset = "+" + offset;
+		string offset;
+		string factor;
+		if (v->is_flat()) {
+			string offset = math.non_ihs(conds.induction).str();
+			string factor = math.ihs(conds.induction).non_ihs(conds.induction).str();
+			if (offset != "") {
+				offset = "+" + offset;
+			}
+			if (factor != "") {
+				factor = "*" + factor;
+			}
 		}
 
-		return old + orig_adaptor(v).name() + "[" + index.name() + offset + "]";
+		return old + orig_adaptor(v).name() + "[" + index.name() + factor + offset + "]";
 	}
 
 	xformer* clone() const { return new to_buffer_space(*this); }
@@ -636,7 +644,17 @@ public:
 
 	string bounds_check() const
 	{
-		return conds.induction + "+" + buffer_adaptor(v).size();
+		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+
+		string buffer_size;
+		if (factor != "") {
+			buffer_size = buffer_adaptor(v).size() + "/" + factor;
+		}
+		else {
+			buffer_size = buffer_adaptor(v).size();
+		}
+
+		return conds.induction + "+" + buffer_size;
 	}
 
 	string factor() const
@@ -905,6 +923,15 @@ struct gen_in: virtual public conditions_xformer, virtual public leftover_xforme
 		const string wait_prev = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id);";
 		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + to_string(depth) + ";";
 
+		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+		string leftover_size;
+		if (v->is_flat() && factor != "") {
+			leftover_size = leftover.name() + "*" + factor;
+		}
+		else {
+			leftover_size = leftover.name();
+		}
+
 		string in;
 		if (is_leftover) {
 			in = old +
@@ -918,7 +945,7 @@ struct gen_in: virtual public conditions_xformer, virtual public leftover_xforme
 				rotate_next + 
 				wait_next +
 				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer() + ")", 
-						"(" + Access::bounds_check() + "<" + full.name() + "?" + buff.size() + ":" + leftover.name() + ")" ) + 
+						"(" + Access::bounds_check() + "<" + full.name() + "?" + buff.size() + ":" + leftover_size + ")" ) + 
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";

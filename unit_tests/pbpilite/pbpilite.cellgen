@@ -63,6 +63,10 @@ int main()
 	}
 
 	for (i = 0; i < N/4; ++i) {
+		weight[i] = i;
+	}
+
+	for (i = 0; i < N/4; ++i) {
 		double t1;
 		double t2;
 

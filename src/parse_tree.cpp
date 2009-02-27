@@ -1134,7 +1134,14 @@ struct parallel_for_op {
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
 			
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
-				const string& buffer_size = buffer_adaptor(*set_union_all(flat_ins, flat_outs).begin()).size();
+				const shared_variable* first = *set_union_all(flat_ins, flat_outs).begin();
+				const string& factor = first->math().ihs(parconds.induction).non_ihs(parconds.induction).str();
+				string buffer_size = buffer_adaptor(first).size();
+			
+				if (factor != "") {
+					buffer_size = "(" + buffer_size + "/" + factor + ")";
+				}
+
 				loop_mitosis(parent, lbrace, rbrace, parconds, buffer_size);
 			}
 
