@@ -806,7 +806,8 @@ public:
 
 	string this_buffer() const
 	{
-		return "(" + v->math().add_iteration(conds.induction, "(1-" + buffer_adaptor(v).size() + ")") + ")";
+		//return "(" + v->math().add_iteration(conds.induction, "(1-" + buffer_adaptor(v).size() + ")") + ")";
+		return v->math().str();
 	}
 
 	string first_buffer() const
@@ -838,7 +839,7 @@ public:
 
 	string dma_in(const string& address) const
 	{
-		return dma_in(address, stride());
+		return dma_in(address, buffer_adaptor(v).size());
 	}
 
 	string dma_in(const string& address, const string& tsize) const
@@ -848,10 +849,10 @@ public:
 		next_adaptor next(v);
 
 		return	"add_to_dma_list(&" + lst.name(next.name()) + "," + 
-				buff.size() + "," +
+				tsize + "," +
 				address + ","
 				"sizeof(" + buff.type() + "), " + 
-				tsize + "sizeof(" + buff.type() + "),"
+				stride() + "sizeof(" + buff.type() + "),"
 				"1);" +
 			"DMA_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
 				address + "," +
