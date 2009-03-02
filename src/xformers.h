@@ -510,6 +510,17 @@ public:
 	string class_name() const { return "define_rem"; }
 };
 
+struct make_define_rem: public unary_function<shared_variable*, xformer*> {
+	const string start;
+	const string stop;
+	make_define_rem(const string& b, const string& e): start(b), stop(e) {}
+
+	xformer* operator()(shared_variable* v)
+	{
+		return new define_rem(v, start, stop);
+	}
+};
+
 class define_full: public xformer {
 	const shared_variable* v;
 	const string stop;
@@ -523,6 +534,16 @@ public:
 
 	xformer* clone() const { return new define_full(*this); }
 	string class_name() const { return "define_full"; }
+};
+
+struct make_define_full: public unary_function<shared_variable*, xformer*> {
+	const string stop;
+	make_define_full(const string& e): stop(e) {}
+
+	xformer* operator()(shared_variable* v)
+	{
+		return new define_full(v, stop);
+	}
 };
 
 template <class Xrow, class Xcolumn>

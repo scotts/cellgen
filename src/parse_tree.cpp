@@ -881,12 +881,13 @@ struct remove_xforms {
 };
 
 void loop_mitosis(ast_node& for_loop, xformerlist& lbrace, xformerlist& rbrace, const conditions& conds, 
-		const shared_variable* first, const string& buffer_size)
+		const sharedset& shared, const string& buffer_size)
 {
+	const shared_variable* first = *shared.begin();
 	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(first).name()));
 	rbrace.push_back(new buffer_loop_stop());
-	for_loop.value.xformations.push_back(new define_rem(first, conds.start, conds.stop));
-	for_loop.value.xformations.push_back(new define_full(first, conds.stop));
+	append(for_loop.value.xformations, fmap(make_define_rem(conds.start, conds.stop), shared));
+	append(for_loop.value.xformations, fmap(make_define_full(conds.stop), shared));
 
 	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(first).name()));
@@ -970,9 +971,10 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				const shared_variable* first = *set_union_all(seen_ins, seen_outs).begin();
+				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
+				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
-				loop_mitosis(node, lbrace, rbrace, inner, first, buffer_size);
+				loop_mitosis(node, lbrace, rbrace, inner, seen_all, buffer_size);
 			}
 
 			conditions bridge_out = inner;
@@ -1139,7 +1141,8 @@ struct parallel_for_op {
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
 			
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
-				const shared_variable* first = *set_union_all(flat_ins, flat_outs).begin();
+				const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
+				const shared_variable* first = *flat_all.begin();
 				const string& factor = first->math().ihs(parconds.induction).non_ihs(parconds.induction).str();
 				string buffer_size = buffer_adaptor(first).size();
 			
@@ -1147,7 +1150,7 @@ struct parallel_for_op {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				loop_mitosis(parent, lbrace, rbrace, parconds, first, buffer_size);
+				loop_mitosis(parent, lbrace, rbrace, parconds, flat_all, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));

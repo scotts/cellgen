@@ -242,7 +242,7 @@ public:
 	string name() const { return v->region_variable::name() + "_rem"; }
 	string define(const string& start, const string& stop) const
 	{
-		return "int " + name() + "= (" + stop + "-" + start + ") %" + buffer_adaptor(v).size() + ";";
+		return "int " + name() + "= (" + stop + "-" + start + ") %" + buffer_adaptor(v).size();
 	}
 };
 
@@ -253,7 +253,7 @@ public:
 	string name() const { return v->region_variable::name() + "_ful"; }
 	string define(const string& stop)
 	{
-		return "int " + name() + "= " + stop + "-" + rem_adaptor(v).name() + ";";
+		return "int " + name() + "= " + stop + "-" + rem_adaptor(v).name();
 	}
 };
 
