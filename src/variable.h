@@ -174,7 +174,6 @@ public:
 };
 
 class buffer_adaptor {
-private:
 	const region_variable* v;
 
 public:
@@ -203,7 +202,6 @@ public:
 };
 
 class dma_list_adaptor {
-private:
 	const shared_variable* v;
 
 public:
@@ -235,6 +233,28 @@ public:
 	string type() const { return v->variable::type(); }
 	string name() const { return v->variable::name(); }
 	string declare() const { return type() + " " + name(); }
+};
+
+class rem_adaptor {
+	const region_variable* v;
+public:
+	rem_adaptor(const region_variable* _v): v(_v) {}
+	string name() const { return v->region_variable::name() + "_rem"; }
+	string define(const string& start, const string& stop) const
+	{
+		return "int " + name() + "= (" + stop + "-" + start + ") %" + buffer_adaptor(v).size() + ";";
+	}
+};
+
+class full_adaptor {
+	const region_variable* v;
+public:
+	full_adaptor(const region_variable* _v): v(_v) {}
+	string name() const { return v->region_variable::name() + "_ful"; }
+	string define(const string& stop)
+	{
+		return "int " + name() + "= " + stop + "-" + rem_adaptor(v).name() + ";";
+	}
 };
 
 typedef set<variable*>			varset;

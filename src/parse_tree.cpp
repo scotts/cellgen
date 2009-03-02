@@ -847,17 +847,19 @@ struct match_identifier {
 class too_many_expression_statements {};
 
 struct modify_for_loop {
+	const shared_variable* v;
 	const conditions& conds;
 	const string buffer_size;
 	int seen;
-	modify_for_loop(const conditions& c, const string& b): conds(c), buffer_size(b), seen(0) {}
+	modify_for_loop(const shared_variable* _v, const conditions& c, const string& b): 
+		v(_v), conds(c), buffer_size(b), seen(0) {}
 	void operator()(ast_node& node)
 	{
 		if (is_expression(node)) {
 			++seen;
 
 			switch (seen) {
-				case 2:	for_all(node.children, match_identifier(conds.stop, new variable_name(full)));
+				case 2:	for_all(node.children, match_identifier(conds.stop, new naked_string(full_adaptor(v).name())));
 					break;
 				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
 					node.children.clear();
@@ -878,20 +880,22 @@ struct remove_xforms {
 	}
 };
 
-void loop_mitosis(ast_node& for_loop, xformerlist& lbrace, xformerlist& rbrace, const conditions& conds, const string& buffer_size)
+void loop_mitosis(ast_node& for_loop, xformerlist& lbrace, xformerlist& rbrace, const conditions& conds, 
+		const shared_variable* first, const string& buffer_size)
 {
-	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, leftover.name()));
+	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(first).name()));
 	rbrace.push_back(new buffer_loop_stop());
-	for_loop.value.xformations.push_back(new define_leftover_full(conds.start, conds.stop, buffer_size));
+	for_loop.value.xformations.push_back(new define_rem(first, conds.start, conds.stop));
+	for_loop.value.xformations.push_back(new define_full(first, conds.stop));
 
 	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
-	(*left_cmpd.second).value.xformations.push_back(new if_clause(leftover));
+	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(first).name()));
 
 	ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 
-	modify_for_loop(conds, buffer_size)(for_loop);
+	modify_for_loop(first, conds, buffer_size)(for_loop);
 	descend< remove_xforms<if_clause> >()(*loop_cmpd); // Hack! hack-hack-hack
-	call_descend(make_for_all_xformations(mem_fn(&xformer::leftover_me)), *(++loop_cmpd));
+	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd));
 }
 
 struct for_compound_op {
@@ -966,8 +970,9 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				const string& buffer_size = buffer_adaptor(*set_union_all(seen_ins, seen_outs).begin()).size();
-				loop_mitosis(node, lbrace, rbrace, inner, buffer_size);
+				const shared_variable* first = *set_union_all(seen_ins, seen_outs).begin();
+				const string& buffer_size = buffer_adaptor(first).size();
+				loop_mitosis(node, lbrace, rbrace, inner, first, buffer_size);
 			}
 
 			conditions bridge_out = inner;
@@ -1142,7 +1147,7 @@ struct parallel_for_op {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				loop_mitosis(parent, lbrace, rbrace, parconds, buffer_size);
+				loop_mitosis(parent, lbrace, rbrace, parconds, first, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));

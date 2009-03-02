@@ -31,7 +31,7 @@ inline int count_ocurrences(const string& code, const string& find)
 
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
-	virtual void leftover_me() {} // Sigh. It's a hack to put this here, but it makes life so much easier.
+	virtual void remainder_me() {} // Sigh. It's a hack to put this here, but it makes life so much easier.
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 	virtual string class_name() const = 0; // For debugging purposes only.
@@ -121,14 +121,14 @@ struct make_conditions: public unary_function<shared_variable*, xformer*> {
 	}
 };
 
-class leftover_xformer: virtual public xformer {
+class remainder_xformer: virtual public xformer {
 protected:
-	bool is_leftover;
+	bool is_remainder;
 public:
-	leftover_xformer(): is_leftover(false) {}
-	virtual void leftover_me()
+	remainder_xformer(): is_remainder(false) {}
+	virtual void remainder_me()
 	{
-		is_leftover = true;
+		is_remainder = true;
 	}
 };
 
@@ -182,17 +182,17 @@ public:
 	string class_name() const { return "total_timer_start"; }
 };
 
-class buffer_loop_start: public leftover_xformer {
+class buffer_loop_start: public remainder_xformer {
 	const variable index;
 	const string buffer_size;
-	const string leftover_size;
+	const string remainder_size;
 public:
-	buffer_loop_start(const variable& i, const string& b, const string& l): index(i), buffer_size(b), leftover_size(l) {}
+	buffer_loop_start(const variable& i, const string& b, const string& l): index(i), buffer_size(b), remainder_size(l) {}
 	string operator()(const string& old)
 	{
 		return old + 
 			"for (" + index.name() + "= 0;" + index.name() + "<" + 
-			(is_leftover ? leftover_size : buffer_size) + 
+			(is_remainder ? remainder_size : buffer_size) + 
 			"; ++" + index.name() + ") {"; 
 	}
 
@@ -227,12 +227,12 @@ public:
 };
 
 class if_clause: public xformer {
-	const variable var;
+	const string exp;
 public:
-	if_clause(const variable& v): var(v) {}
-	string operator()(const string& old)
+	if_clause(const string& e): exp(e) {}
+	string operator()(const string&)
 	{
-		return "if (" + var.name() + ")";
+		return "if (" + exp + ")";
 	}
 
 	xformer* clone() const { return new if_clause(*this); }
@@ -261,6 +261,19 @@ public:
 
 	xformer* clone() const { return new variable_name(*this); }
 	string class_name() const { return "variable_name"; }
+};
+
+class naked_string: public xformer {
+	const string str;
+public:
+	naked_string(const string& s): str(s) {}
+	string operator()(const string&)
+	{
+		return str;
+	}
+
+	xformer* clone() const { return new naked_string(*this); }
+	string class_name() const { return "naked_string"; }
 };
 
 struct variable_increment: public xformer {
@@ -480,6 +493,38 @@ public:
 	string class_name() const { return "define_buffer"; }
 };
 
+class define_rem: public xformer {
+	const shared_variable* v;
+	const string start;
+	const string stop;
+
+public:
+	define_rem(const shared_variable* _v, const string& b, const string& e): 
+		v(_v), start(b), stop(e) {}
+	string operator()(const string& old)
+	{
+		return old + rem_adaptor(v).define(start, stop) + ";";
+	}
+
+	xformer* clone() const { return new define_rem(*this); }
+	string class_name() const { return "define_rem"; }
+};
+
+class define_full: public xformer {
+	const shared_variable* v;
+	const string stop;
+
+public:
+	define_full(const shared_variable* _v, const string& b): v(_v), stop(b) {}
+	string operator()(const string& old)
+	{
+		return old + full_adaptor(v).define(stop) + ";";
+	}
+
+	xformer* clone() const { return new define_full(*this); }
+	string class_name() const { return "define_full"; }
+};
+
 template <class Xrow, class Xcolumn>
 struct make_choice: public unary_function<shared_variable*, xformer*>  {
 	const conditions& conds_row;
@@ -534,23 +579,6 @@ public:
 
 	xformer* clone() const { return new init_private_buffer(*this); }
 	string class_name() const { return "init_private_buffer"; }
-};
-
-class define_leftover_full: public xformer {
-	const string start;
-	const string stop;
-	const string buffer_size;
-public:
-	define_leftover_full(const string& t, const string& p, const string& b): start(t), stop(p), buffer_size(b) {}
-	string operator()(const string& old)
-	{
-		return	old + 
-			leftover.declare() + "= (" + stop + " - " + start + ") % " + buffer_size + ";" +
-			full.declare() + "=" + stop + "-" + leftover.name() + ";";
-	}
-
-	xformer* clone() const { return new define_leftover_full(*this); }
-	string class_name() const { return "define_leftover_full"; }
 };
 
 struct define_variable: public xformer {
@@ -912,7 +940,7 @@ public:
 };
 
 template <class Access>
-struct gen_in: virtual public conditions_xformer, virtual public leftover_xformer, public Access {
+struct gen_in: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
 	gen_in(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
@@ -925,16 +953,16 @@ struct gen_in: virtual public conditions_xformer, virtual public leftover_xforme
 		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + to_string(depth) + ";";
 
 		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
-		string leftover_size;
+		string remainder_size;
 		if (v->is_flat() && factor != "") {
-			leftover_size = leftover.name() + "*" + factor;
+			remainder_size = rem_adaptor(v).name() + "*" + factor;
 		}
 		else {
-			leftover_size = leftover.name();
+			remainder_size = rem_adaptor(v).name();
 		}
 
 		string in;
-		if (is_leftover) {
+		if (is_remainder) {
 			in = old +
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + ";" +
 				wait_next;
@@ -946,7 +974,7 @@ struct gen_in: virtual public conditions_xformer, virtual public leftover_xforme
 				rotate_next + 
 				wait_next +
 				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer() + ")", 
-						"(" + Access::bounds_check() + "<" + full.name() + "?" + buff.size() + ":" + leftover_size + ")" ) + 
+						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + rem_adaptor(v).name() + ")" ) + 
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";
@@ -960,7 +988,7 @@ struct gen_in: virtual public conditions_xformer, virtual public leftover_xforme
 };
 
 template <class Access>
-struct gen_out: virtual public conditions_xformer, virtual public leftover_xformer, public Access {
+struct gen_out: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
 	gen_out(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
@@ -978,7 +1006,7 @@ struct gen_out: virtual public conditions_xformer, virtual public leftover_xform
 
 		string out;
 		string dma;
-		if (is_leftover) {
+		if (is_remainder) {
 			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::final_size()); 
 			out = dma + wait + old;
 		}
@@ -998,7 +1026,7 @@ struct gen_out: virtual public conditions_xformer, virtual public leftover_xform
  * This needs to become several functions.
  */
 template <class Access>
-struct gen_out_final: virtual public conditions_xformer, virtual public leftover_xformer, public Access {
+struct gen_out_final: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
 	gen_out_final(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
