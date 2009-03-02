@@ -14,6 +14,24 @@ using namespace std;
 
 const string pass_var = "pass";
 
+struct conditions {
+	string start;
+	string induction;
+	string stop;
+
+	conditions()
+		{}
+	conditions(const string& _start, const string& _induction, const string& _stop):
+		start(_start), induction(_induction), stop(_stop)
+		{}
+
+	bool operator==(const conditions& o) const
+	{
+		return start == o.start && induction == o.induction && stop == o.stop;
+	}
+};
+typedef list<conditions> condslist;
+
 class variable {
 	string _type;
 	string _name;
@@ -122,7 +140,7 @@ public:
 
 enum orientation_t { UNINITIALIZED, ROW, COLUMN };
 
-class unitialized_access_orientation {};
+class unitialized_access_orientation: public exception {};
 
 class shared_variable: public region_variable {
 	add_expr _math;
@@ -236,24 +254,33 @@ public:
 };
 
 class rem_adaptor {
-	const region_variable* v;
+	const shared_variable* v;
 public:
-	rem_adaptor(const region_variable* _v): v(_v) {}
+	rem_adaptor(const shared_variable* _v): v(_v) {}
 	string name() const { return v->region_variable::name() + "_rem"; }
-	string define(const string& start, const string& stop) const
+	string define(const conditions& conds) const
 	{
-		return "int " + name() + "= (" + stop + "-" + start + ") %" + buffer_adaptor(v).size();
+		string factor;
+		if (v->is_flat()) {
+			factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+			if (factor != "") {
+				factor = "/" + factor;
+			}
+		}
+		
+		const string base = "(" + conds.stop + "-" + conds.start + ") %(" + buffer_adaptor(v).size() + factor + ")";
+		return "const int " + name() + "= " + base + "+ (" + base + "% 16)";
 	}
 };
 
 class full_adaptor {
-	const region_variable* v;
+	const shared_variable* v;
 public:
-	full_adaptor(const region_variable* _v): v(_v) {}
+	full_adaptor(const shared_variable* _v): v(_v) {}
 	string name() const { return v->region_variable::name() + "_ful"; }
 	string define(const string& stop)
 	{
-		return "int " + name() + "= " + stop + "-" + rem_adaptor(v).name();
+		return "const int " + name() + "= " + stop + "-" + rem_adaptor(v).name();
 	}
 };
 

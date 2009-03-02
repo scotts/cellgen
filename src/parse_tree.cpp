@@ -886,7 +886,7 @@ void loop_mitosis(ast_node& for_loop, xformerlist& lbrace, xformerlist& rbrace, 
 	const shared_variable* first = *shared.begin();
 	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(first).name()));
 	rbrace.push_back(new buffer_loop_stop());
-	append(for_loop.value.xformations, fmap(make_define_rem(conds.start, conds.stop), shared));
+	append(for_loop.value.xformations, fmap(make_define_rem(conds), shared));
 	append(for_loop.value.xformations, fmap(make_define_full(conds.stop), shared));
 
 	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
@@ -1621,12 +1621,14 @@ struct cell_region {
 			*/
 
 			xformerlist& front = node.children.front().value.xformations;
+			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;
+			const string& max_factor = max->math().ihs(par_induction).non_ihs(par_induction).str();
 
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
-			append(front, fmap(make_shared_buffer_size(buffer, max_depths), shared));
+			append(front, fmap(make_shared_buffer_size(buffer, max_factor, par_induction, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));

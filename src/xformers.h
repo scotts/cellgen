@@ -61,24 +61,6 @@ struct make_xformer: public unary_function<const V*, xformer*> {
 	}
 };
 
-struct conditions {
-	string start;
-	string induction;
-	string stop;
-
-	conditions()
-		{}
-	conditions(const string& _start, const string& _induction, const string& _stop):
-		start(_start), induction(_induction), stop(_stop)
-		{}
-
-	bool operator==(const conditions& o) const
-	{
-		return start == o.start && induction == o.induction && stop == o.stop;
-	}
-};
-typedef list<conditions> condslist;
-
 class depth_xformer: virtual public xformer {
 protected:
 	const int depth;
@@ -154,8 +136,8 @@ public:
 		string offset;
 		string factor;
 		if (v->is_flat()) {
-			string offset = math.non_ihs(conds.induction).str();
-			string factor = math.ihs(conds.induction).non_ihs(conds.induction).str();
+			offset = math.non_ihs(conds.induction).str();
+			factor = math.ihs(conds.induction).non_ihs(conds.induction).str();
 			if (offset != "") {
 				offset = "+" + offset;
 			}
@@ -316,9 +298,12 @@ struct reduction_assign: public xformer {
 class shared_buffer_size: public depth_xformer {
 	const shared_variable* v;
 	const int buffer;
+	const string par_induction;
+	const string max_factor;
 
 public:
-	shared_buffer_size(const shared_variable* _v, const int b, const int d): depth_xformer(d), v(_v), buffer(b) {}
+	shared_buffer_size(const shared_variable* _v, const int b, const string& p, const string& m, const int d): 
+		depth_xformer(d), v(_v), buffer(b), par_induction(p), max_factor(m) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -326,7 +311,19 @@ public:
 			string def;
 
 			if (buffer) {
-				def = "(" + to_string(buffer) + ")";
+				string this_factor;
+				try {
+					this_factor = v->math().ihs(par_induction).non_ihs(par_induction).str();
+				}
+				catch (ivar_not_found) {
+					this_factor = "1";
+				}
+
+				string divisor;
+				if (from_string<int>(this_factor) < from_string<int>(max_factor)) {
+					divisor = "/" + max_factor;
+				}
+				def = "(" + to_string(buffer) + divisor + ")";
 			}
 			else {
 				def = default_buff_size;
@@ -343,12 +340,15 @@ public:
 
 struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*> {
 	const int buffer;
+	const string& max_factor;
+	const string& par_induction;
 	const depths& local_depths;
-	make_shared_buffer_size(const int b, const depths& l): buffer(b), local_depths(l) {}
+	make_shared_buffer_size(const int b, const string& m, const string& p, const depths& l): 
+		buffer(b), max_factor(m), par_induction(p), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new shared_buffer_size(v, buffer, local_depths.find(v)->second);
+		return new shared_buffer_size(v, buffer, par_induction, max_factor, local_depths.find(v)->second);
 	}
 };
 
@@ -495,15 +495,13 @@ public:
 
 class define_rem: public xformer {
 	const shared_variable* v;
-	const string start;
-	const string stop;
+	const conditions conds;
 
 public:
-	define_rem(const shared_variable* _v, const string& b, const string& e): 
-		v(_v), start(b), stop(e) {}
+	define_rem(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
 	string operator()(const string& old)
 	{
-		return old + rem_adaptor(v).define(start, stop) + ";";
+		return old + rem_adaptor(v).define(conds) + ";";
 	}
 
 	xformer* clone() const { return new define_rem(*this); }
@@ -511,13 +509,12 @@ public:
 };
 
 struct make_define_rem: public unary_function<shared_variable*, xformer*> {
-	const string start;
-	const string stop;
-	make_define_rem(const string& b, const string& e): start(b), stop(e) {}
+	const conditions& conds;
+	make_define_rem(const conditions& c): conds(c) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new define_rem(v, start, stop);
+		return new define_rem(v, conds);
 	}
 };
 
@@ -995,7 +992,7 @@ struct gen_in: virtual public conditions_xformer, virtual public remainder_xform
 				rotate_next + 
 				wait_next +
 				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer() + ")", 
-						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + rem_adaptor(v).name() + ")" ) + 
+						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + remainder_size + ")" ) + 
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";

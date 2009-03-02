@@ -36,10 +36,15 @@ void assert_equal()
 	int i;
 	for (i = 0; i < N; ++i) {
 		if (root[i] != root_ref[i]) {
-			printf("failure at %d, ppe %f, spe %f\n", i, root[i], root_ref[i]);
+			printf("failure at %d, ppe %f, spe %f\n", i, root_ref[i], root[i]);
 			return;
 		}
 	}
+}
+
+int double_eq(double a, double b)
+{
+	return fabs(a - b) < 0.0000001;
 }
 
 int main()
@@ -195,7 +200,9 @@ int main()
 		}
 	}
 
-	assert(lnL == lnL_ref);
+	if (double_eq(lnL, lnL_ref)) {
+		printf("reduction failure: ppe %f, spe %f\n", lnL_ref, lnL);
+	}
 
 	return 0;
 }

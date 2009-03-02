@@ -1,6 +1,5 @@
 #include "math_exprs.h"
 
-class ivar_not_found: public exception {};
 
 /* class paren_expr
  */
@@ -269,9 +268,6 @@ mult_expr add_expr::side(const string& ivar, const mult_expr* left_result, const
 		m = right_result;
 	}
 	else {
-		cout	<< "add_expr::side:" << endl
-			<< "ivar: " << ivar << endl
-			<< str() << endl;
 		throw ivar_not_found();
 	}
 

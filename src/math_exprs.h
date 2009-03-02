@@ -10,6 +10,8 @@ using namespace std;
 #include "operations.h"
 #include "utility.h"
 
+class ivar_not_found: public exception {};
+
 class add_expr;
 
 class paren_expr {
