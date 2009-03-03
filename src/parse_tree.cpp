@@ -1303,8 +1303,6 @@ struct unroll_for_op {
 			// First iteration doesn't need sending out stuff.
 			for_all(node.children, remove_xforms<gen_out<row_access> >());
 			for_all(node.children, remove_xforms<gen_out<column_access> >());
-			for_all(node.children, remove_xforms<gen_out_final<row_access> >());
-			for_all(node.children, remove_xforms<gen_out_final<column_access> >());
 
 			if (!to_copy.empty()) {
 				// front or back?
@@ -1332,8 +1330,6 @@ struct unroll_for_op {
 							remove_xforms<gen_out<row_access> >()(copy);
 							remove_xforms<gen_out<column_access> >()(copy);
 						}
-						remove_xforms<gen_out_final<row_access> >()(copy);
-						remove_xforms<gen_out_final<column_access> >()(copy);
 					}
 
 					node.children.insert(node.children.end() - 1, copy);

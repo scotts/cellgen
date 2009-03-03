@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define __N1 64
-#define __N2 (64)
-#define __N3 256
+#define __N1 (64+16)
+#define __N2 (64+16)
+#define __N3 (256+16)
 const int N1 = __N1;
 const int N2 = __N2;
 const int N3 = __N3;

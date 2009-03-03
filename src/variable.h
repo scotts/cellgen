@@ -268,8 +268,14 @@ public:
 			}
 		}
 		
-		const string base = "(" + conds.stop + "-" + conds.start + ") %(" + buffer_adaptor(v).size() + factor + ")";
-		return "const int " + name() + "= " + base + "+ (" + base + "% 16)";
+		const string base = "((" + conds.stop + "-" + conds.start + ") % (" + buffer_adaptor(v).size() + factor + "))";
+
+		string correction;
+		if (factor == "") {
+			correction = "+(" + base + "% 16)";
+		}
+
+		return "int " + name() + "= " + base + correction;
 	}
 };
 
@@ -280,7 +286,7 @@ public:
 	string name() const { return v->region_variable::name() + "_ful"; }
 	string define(const string& stop)
 	{
-		return "const int " + name() + "= " + stop + "-" + rem_adaptor(v).name();
+		return "int " + name() + "= " + stop + "-" + rem_adaptor(v).name();
 	}
 };
 

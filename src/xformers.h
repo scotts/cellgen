@@ -645,8 +645,8 @@ public:
 	virtual string next_buffer() const = 0;
 	virtual string this_buffer() const = 0;
 	virtual string first_buffer() const = 0;
-	virtual string final_size() const = 0;
 	virtual string final_buffer() const = 0;
+	virtual string remainder_size() const = 0;
 	virtual string dma_in(const string& address) const = 0;
 	virtual string dma_in(const string& address, const string& tsize) const = 0;
 	virtual string dma_out(const string& address, const int depth) const = 0;
@@ -763,23 +763,27 @@ public:
 		return first;
 	}
 
-	string final_size() const
-	{
-		buffer_adaptor buff(v);
-		return "(((" + conds.stop + "-" + conds.start + ")" + factor() + ")%" + buff.size() + ")";
-	}
-
 	string final_buffer() const
 	{
 		buffer_adaptor buff(v);
 
 		string offset;
 		if (!v->is_flat()) {
-			//offset = conds.induction + "*" + v->dimensions().back() + "+";
 			offset = v->math().non_ihs(conds.induction).str() + "+";
 		}
 
-		return offset + "(" + conds.stop + factor() + ")-" + final_size();
+		return offset + "(" + full_adaptor(v).name() + factor() + ")";
+	}
+
+	string remainder_size() const
+	{
+		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+		if (v->is_flat() && factor != "") {
+			return rem_adaptor(v).name() + "*" + factor;
+		}
+		else {
+			return rem_adaptor(v).name();
+		}
 	}
 
 	string dma_in(const string& address) const
@@ -852,7 +856,6 @@ public:
 
 	string this_buffer() const
 	{
-		//return "(" + v->math().add_iteration(conds.induction, "(1-" + buffer_adaptor(v).size() + ")") + ")";
 		return v->math().str();
 	}
 
@@ -861,14 +864,14 @@ public:
 		return v->math().zero_induction(conds.induction);
 	}
 
-	string final_size() const
-	{
-		return "((" + conds.stop + "-" + conds.start + ")%" + buffer_adaptor(v).size() + ")";
-	}
-
 	string final_buffer() const
 	{
-		return "(" + v->math().replace_induction(conds.induction, "(" + conds.stop + "-" + final_size() + "))");
+		return v->math().replace_induction(conds.induction, full_adaptor(v).name());
+	}
+
+	string remainder_size() const
+	{
+		return rem_adaptor(v).name();
 	}
 
 	string stride() const
@@ -970,35 +973,23 @@ struct gen_in: virtual public conditions_xformer, virtual public remainder_xform
 		const string wait_prev = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id);";
 		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + to_string(depth) + ";";
 
-		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
-		string remainder_size;
-		if (v->is_flat() && factor != "") {
-			remainder_size = rem_adaptor(v).name() + "*" + factor;
-		}
-		else {
-			remainder_size = rem_adaptor(v).name();
-		}
-
-		string in;
 		if (is_remainder) {
-			in = old +
+			return old +
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + ";" +
 				wait_next;
 		}
 		else {
-			in =  old +
+			return old +
 				"cellgen_dma_prep_start();" + 
 				prev.name() + "=" + next.name() + ";" +
 				rotate_next + 
 				wait_next +
 				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer() + ")", 
-						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + remainder_size + ")" ) + 
+						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + Access::remainder_size() + ")") + 
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";
 		}
-
-		return in;
 	}
 
 	xformer* clone() const { return new gen_in<Access>(*this); }
@@ -1022,18 +1013,15 @@ struct gen_out: virtual public conditions_xformer, virtual public remainder_xfor
 
 		const string wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
 
-		string out;
 		string dma;
 		if (is_remainder) {
-			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::final_size()); 
-			out = dma + wait + old;
+			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::remainder_size()); 
+			return dma + wait + old;
 		}
 		else {
 			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::this_buffer() + ")", depth);
-			out = "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
+			return "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
 		}
-
-		return out;
 	}
 
 	xformer* clone() const { return new gen_out<Access>(*this); }
@@ -1043,6 +1031,7 @@ struct gen_out: virtual public conditions_xformer, virtual public remainder_xfor
 /*
  * This needs to become several functions.
  */
+/*
 template <class Access>
 struct gen_out_final: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
 	gen_out_final(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
@@ -1072,5 +1061,6 @@ struct gen_out_final: virtual public conditions_xformer, virtual public remainde
 	xformer* clone() const { return new gen_out_final<Access>(*this); }
 	string class_name() const { return "gen_out_final<" + Access::class_name() + ">"; }
 };
+*/
 
 #endif // XFORMERS_H
