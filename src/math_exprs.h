@@ -30,6 +30,7 @@ public:
 	paren_expr& operator=(add_expr* r);
 	paren_expr& operator=(const paren_expr& p);
 	paren_expr& operator+=(const string& s);
+	bool operator==(const paren_expr& o) const;
 
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
@@ -79,6 +80,8 @@ public:
 	string zero_induction(const string& ivar) const;
 
 	operations cost() const;
+
+	bool operator==(const mult_expr& o) const { return _lhs == o._lhs && _op == o._op && _rhs == o._rhs; }
 };
 
 class add_expr {
@@ -113,9 +116,17 @@ public:
 	string next_iteration(const string& ivar) const;
 	string replace_induction(const string& ivar, const string& rep) const;
 	string zero_induction(const string& ivar) const;
+
+	string factor(const string& ivar) const
+	{
+		return ihs(ivar).non_ihs(ivar).str();
+	}
+
 	unsigned int index(const string& ivar) const;
 
 	operations cost() const;
+
+	bool operator==(const add_expr& o) const { return _lhs == o._lhs && _op == o._op && _rhs == o._rhs; }
 };
 
 #endif	// MULT_EXPR_H

@@ -258,7 +258,12 @@ class rem_adaptor {
 public:
 	rem_adaptor(const shared_variable* _v): v(_v) {}
 	string name() const { return v->region_variable::name() + "_rem"; }
-	string define(const conditions& conds) const
+	string declare() const
+	{
+		return "int " + name();
+	}
+
+	string reset(const conditions& conds, const string& max_factor) const
 	{
 		string factor;
 		if (v->is_flat()) {
@@ -271,11 +276,11 @@ public:
 		const string base = "((" + conds.stop + "-" + conds.start + ") % (" + buffer_adaptor(v).size() + factor + "))";
 
 		string correction;
-		if (factor == "") {
+		if (factor == "" && max_factor != "" && from_string<int>(factor) < from_string<int>(max_factor)) {
 			correction = "+(" + base + "% 16)";
 		}
 
-		return "int " + name() + "= " + base + correction;
+		return name() + "= " + base + correction;
 	}
 };
 
@@ -284,9 +289,14 @@ class full_adaptor {
 public:
 	full_adaptor(const shared_variable* _v): v(_v) {}
 	string name() const { return v->region_variable::name() + "_ful"; }
-	string define(const string& stop)
+	string declare() const
 	{
-		return "int " + name() + "= " + stop + "-" + rem_adaptor(v).name();
+		return "int " + name(); 
+	}
+
+	string reset(const string& stop) const
+	{
+		return name() + "= " + stop + "-" + rem_adaptor(v).name();
 	}
 };
 

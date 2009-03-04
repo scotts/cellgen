@@ -392,6 +392,7 @@ struct postfix_op {
 	bool found_private;
 	shared_variable* shared_var;
 	private_variable* priv_var;
+	string local_id;
 	list<add_expr> accesses;
 	
 	postfix_op(const shared_symtbl& s, const priv_symtbl& p, const condslist& c, sharedset& v):
@@ -413,6 +414,9 @@ struct postfix_op {
 				else if (p != priv_symbols.end()) {
 					priv_var = p->second;
 					found_private = true;
+				}
+				else {
+					local_id = val;
 				}
 			}
 		}
@@ -880,21 +884,85 @@ struct remove_xforms {
 	}
 };
 
-void loop_mitosis(ast_node& for_loop, xformerlist& lbrace, xformerlist& rbrace, const conditions& conds, 
-		const sharedset& shared, const string& buffer_size)
+struct transform_local_buffers {
+	const shared_symtbl& shared_symbols; 
+	const priv_symtbl& priv_symbols;
+	const conditions& conds;
+	const shared_variable* cause;
+	transform_local_buffers(const shared_symtbl& s, const priv_symtbl& p, const conditions& c, const shared_variable* ca):
+		shared_symbols(s), priv_symbols(p), conds(c), cause(ca)
+		{}
+	void operator()(ast_node& node)
+	{
+		if (node.value.id() == ids::postfix_expression) {
+			sharedset vars;
+			condslist box;	
+			box.push_back(conds);
+			postfix_op o(shared_symbols, priv_symbols, box, vars);
+			for_all(node.children, &o);
+
+			if (!o.found_shared && !o.found_private && exists_in(o.accesses, add_expr(mult_expr(conds.induction)))) {
+				node.value.xformations.push_back(new augment_local(o.local_id, conds.induction, buffer_index, cause));
+				node.children.clear();
+			}
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+string remove_multop(const string& str)
 {
-	const shared_variable* first = *shared.begin();
-	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(first).name()));
+	size_t pos = str.find_first_of("*/%");
+	if (pos != string::npos) {
+		return str.substr(pos + 1, str.size() - 1);
+	}
+	return str;
+}
+
+struct max_buffer: unary_function<const region_variable*, void> {
+	const string& induction;
+	shared_variable* max;
+	max_buffer(const string& i): induction(i), max(NULL) {}
+	void operator()(shared_variable* v)
+	{
+		if (max) {
+			int max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
+			int prov = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
+			if (max_int < prov) {
+				max = v;
+			}
+		}
+		else {
+			max = v;
+		}
+	}
+};
+
+// Need to transform postfix accesses for all non-shared variables.
+void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
+		const conditions& conds, const sharedset& seen, const string& buffer_size)
+{
+	const shared_variable* max = for_all(seen, max_buffer(conds.induction)).max;
+	const string& max_factor = max->math().factor(conds.induction);
+	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
+	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
+
+	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(max).name()));
 	rbrace.push_back(new buffer_loop_stop());
-	append(for_loop.value.xformations, fmap(make_define_rem(conds), shared));
-	append(for_loop.value.xformations, fmap(make_define_full(conds.stop), shared));
+
+	append(for_loop.value.xformations, fmap(make_reset_rem(conds, max_factor), seen));
+	append(for_loop.value.xformations, fmap(make_reset_full(conds.stop), seen));
+
+	for_all(for_loop.children, transform_local_buffers(shared_symbols, priv_symbols, conds, max));
 
 	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_deep(for_loop, is_compound_expression);
-	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(first).name()));
+	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
 
 	ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 
-	modify_for_loop(first, conds, buffer_size)(for_loop);
+	modify_for_loop(max, conds, buffer_size)(for_loop);
 	descend< remove_xforms<if_clause> >()(*loop_cmpd); // Hack! hack-hack-hack
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd));
 }
@@ -974,7 +1042,7 @@ struct for_compound_op {
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
-				loop_mitosis(node, lbrace, rbrace, inner, seen_all, buffer_size);
+				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
 			}
 
 			conditions bridge_out = inner;
@@ -1143,14 +1211,14 @@ struct parallel_for_op {
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
 				const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
 				const shared_variable* first = *flat_all.begin();
-				const string& factor = first->math().ihs(parconds.induction).non_ihs(parconds.induction).str();
+				const string& factor = first->math().factor(parconds.induction);
 				string buffer_size = buffer_adaptor(first).size();
 			
 				if (factor != "") {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				loop_mitosis(parent, lbrace, rbrace, parconds, flat_all, buffer_size);
+				loop_mitosis(parent, shared_symbols, priv_symbols, parconds, flat_all, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
@@ -1268,96 +1336,6 @@ struct wipeout_const_and_pure_declarations {
 	}
 };
 
-struct unroll_for_op {
-	const sharedset& in;
-	const sharedset& inout;
-	const bool is_row;
-	const string& stop;
-	const string& induction;
-	const int unroll;
-	const bool dma_unroll;
-	unroll_for_op(const sharedset& i, const sharedset& io, const bool r, const string& _stop, 
-			const string& ind, const int u, const bool d): 
-		in(i), inout(io), is_row(r), stop(_stop), induction(ind), unroll(u), dma_unroll(d)
-		{}
-	void operator()(ast_node& node)
-	{
-		if (node.value.id() == ids::expression_statement) {
-			descend< remove_xforms<variable_name> >()(node);
-			/*
-			if (is_row) {
-				// Yeah, kinda odd. We changed the original for_loop in place when we knew 
-				// we were unrolling, so we're going to remove those, then add the new ones.
-				for_all(node.children, match_identifier("SPE_stop", new variable_name(unrolled)));
-			}
-			else {
-				for_all(node.children, match_identifier(stop, new variable_name(unrolled)));
-			}
-			*/
-		}
-		else if (node.value.id() == ids::compound) {
-
-			list<ast_node> to_copy;
-			copy_all(node.children, back_inserter(to_copy));
-
-			// First iteration doesn't need sending out stuff.
-			for_all(node.children, remove_xforms<gen_out<row_access> >());
-			for_all(node.children, remove_xforms<gen_out<column_access> >());
-
-			if (!to_copy.empty()) {
-				// front or back?
-				to_copy.front().value.xformations.push_back(new variable_increment(induction));
-			}
-
-			// We copy it unroll-1 times because the first iteration
-			// already exists.
-			for (int i = 0; i < unroll - 1; ++i) {
-				for (list<ast_node>::iterator j = to_copy.begin(); j != to_copy.end(); ++j) {
-					ast_node copy = *j;
-					for_all(copy.children, wipeout_const_and_pure_declarations());
-					for_all(copy.children, init_declarations_to_expressions());
-
-					// All "inner" iterations don't need any in/out xformations, 
-					// but the final iteration needs out xformations. The final node 
-					// of the final iteration needs an increment so the induction 
-					// variable is correct for the next iteration.
-					if (!dma_unroll) {
-						descend< remove_xforms<gen_in<row_access> > >()(copy);
-						descend< remove_xforms<gen_in<column_access> > >()(copy);
-					}
-					if (i < unroll - 2) {
-						if (!dma_unroll) {
-							remove_xforms<gen_out<row_access> >()(copy);
-							remove_xforms<gen_out<column_access> >()(copy);
-						}
-					}
-
-					node.children.insert(node.children.end() - 1, copy);
-				}
-			}
-
-			// Columns already have a gen_in_first.
-			//
-			// TODO: I don't think this is needed anymore. Need to check.
-			/*
-			xformerlist& xforms = last.value.xformations;
-			const sharedset& allins = set_union_all(in, inout);
-			const conditions no_start("", induction, stop);
-			cout << "unroll: " << no_start.induction << endl;
-
-			append(xforms, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(no_start), allins)); 
-
-			ast_node& last = node.children.back();
-			descend<epilogue_all>()(last);
-			make_descend(unroll_all(unroll))(node);
-			*/
-		}
-		else {
-			for_all(node.children, this);
-		}
-	}
-};
-
 struct compound {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -1384,34 +1362,6 @@ struct compound {
 		}
 		else {
 			for_all(node.children, this);
-		}
-	}
-};
-
-string remove_multop(const string& str)
-{
-	size_t pos = str.find_first_of("*/%");
-	if (pos != string::npos) {
-		return str.substr(pos + 1, str.size() - 1);
-	}
-	return str;
-}
-
-struct max_buffer: unary_function<const region_variable*, void> {
-	const string& induction;
-	shared_variable* max;
-	max_buffer(const string& i): induction(i), max(NULL) {}
-	void operator()(shared_variable* v)
-	{
-		if (max) {
-			int max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
-			int prov = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
-			if (max_int < prov) {
-				max = v;
-			}
-		}
-		else {
-			max = v;
 		}
 	}
 };
@@ -1618,7 +1568,7 @@ struct cell_region {
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;
-			const string& max_factor = max->math().ihs(par_induction).non_ihs(par_induction).str();
+			const string& max_factor = max->math().factor(par_induction);
 
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
@@ -1635,6 +1585,8 @@ struct cell_region {
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
+			append(front, fmap(make_xformer<define_rem, shared_variable>(), shared));
+			append(front, fmap(make_xformer<define_full, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_reduction, reduction_variable>(), reductions));
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
 

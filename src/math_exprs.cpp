@@ -86,6 +86,16 @@ paren_expr& paren_expr::operator+=(const string& s)
 	return *this;
 }
 
+bool paren_expr::operator==(const paren_expr& o) const
+{
+	if (recurse && o.recurse) {
+		return *recurse == *o.recurse;
+	}
+	else {
+		return terminal == o.terminal;
+	}
+}
+
 paren_expr::~paren_expr()
 {
 	delete recurse;

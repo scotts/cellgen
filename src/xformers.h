@@ -137,10 +137,11 @@ public:
 		string factor;
 		if (v->is_flat()) {
 			offset = math.non_ihs(conds.induction).str();
-			factor = math.ihs(conds.induction).non_ihs(conds.induction).str();
 			if (offset != "") {
 				offset = "+" + offset;
 			}
+
+			factor = math.factor(conds.induction);
 			if (factor != "") {
 				factor = "*" + factor;
 			}
@@ -151,6 +152,30 @@ public:
 
 	xformer* clone() const { return new to_buffer_space(*this); }
 	string class_name() const { return "to_buffer_space"; }
+};
+
+class augment_local: public remainder_xformer {
+	const string id;
+	const string induction;
+	const variable index;
+	const shared_variable* cause;
+public:
+	augment_local(const string& d, const string& n, const variable& x, const shared_variable* c): 
+		id(d), induction(n), index(x), cause(c) {}
+	string operator()(const string& old)
+	{
+		string offset;
+		if (is_remainder) {
+			offset = full_adaptor(cause).name();
+		}
+		else {
+			offset = induction;
+		}
+
+		return old + id + "[" + offset + "+" + index.name() + "]";
+	}
+	xformer* clone() const { return new augment_local(*this); }
+	string class_name() const { return "augment_local"; }
 };
 
 class total_timer_start: public xformer {
@@ -313,7 +338,7 @@ public:
 			if (buffer) {
 				string this_factor;
 				try {
-					this_factor = v->math().ihs(par_induction).non_ihs(par_induction).str();
+					this_factor = v->math().factor(par_induction);
 				}
 				catch (ivar_not_found) {
 					this_factor = "1";
@@ -495,51 +520,81 @@ public:
 
 class define_rem: public xformer {
 	const shared_variable* v;
-	const conditions conds;
 
 public:
-	define_rem(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
+	define_rem(const shared_variable* _v): v(_v) {}
 	string operator()(const string& old)
 	{
-		return old + rem_adaptor(v).define(conds) + ";";
+		return	old + rem_adaptor(v).declare() + ";";
 	}
 
 	xformer* clone() const { return new define_rem(*this); }
 	string class_name() const { return "define_rem"; }
 };
 
-struct make_define_rem: public unary_function<shared_variable*, xformer*> {
-	const conditions& conds;
-	make_define_rem(const conditions& c): conds(c) {}
-
-	xformer* operator()(shared_variable* v)
-	{
-		return new define_rem(v, conds);
-	}
-};
-
 class define_full: public xformer {
 	const shared_variable* v;
-	const string stop;
 
 public:
-	define_full(const shared_variable* _v, const string& b): v(_v), stop(b) {}
+	define_full(const shared_variable* _v): v(_v) {}
 	string operator()(const string& old)
 	{
-		return old + full_adaptor(v).define(stop) + ";";
+		return	old + full_adaptor(v).declare() + ";";
 	}
 
 	xformer* clone() const { return new define_full(*this); }
 	string class_name() const { return "define_full"; }
 };
 
-struct make_define_full: public unary_function<shared_variable*, xformer*> {
-	const string stop;
-	make_define_full(const string& e): stop(e) {}
+class reset_rem: public xformer {
+	const shared_variable* v;
+	const conditions conds;
+	const string max_factor;
+
+public:
+	reset_rem(const shared_variable* _v, const conditions& c, const string& m): v(_v), conds(c), max_factor(m) {}
+	string operator()(const string& old)
+	{
+		return old + rem_adaptor(v).reset(conds, max_factor) + ";";
+	}
+
+	xformer* clone() const { return new reset_rem(*this); }
+	string class_name() const { return "reset_rem"; }
+};
+
+struct make_reset_rem: public unary_function<shared_variable*, xformer*> {
+	const conditions& conds;
+	const string& max_factor;
+	make_reset_rem(const conditions& c, const string& m): conds(c), max_factor(m) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new define_full(v, stop);
+		return new reset_rem(v, conds, max_factor);
+	}
+};
+
+class reset_full: public xformer {
+	const shared_variable* v;
+	const string stop;
+
+public:
+	reset_full(const shared_variable* _v, const string& b): v(_v), stop(b) {}
+	string operator()(const string& old)
+	{
+		return old + full_adaptor(v).reset(stop) + ";";
+	}
+
+	xformer* clone() const { return new reset_full(*this); }
+	string class_name() const { return "reset_full"; }
+};
+
+struct make_reset_full: public unary_function<shared_variable*, xformer*> {
+	const string stop;
+	make_reset_full(const string& e): stop(e) {}
+
+	xformer* operator()(shared_variable* v)
+	{
+		return new reset_full(v, stop);
 	}
 };
 
@@ -690,7 +745,7 @@ public:
 
 	string bounds_check() const
 	{
-		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+		const string& factor = v->math().factor(conds.induction);
 
 		string buffer_size;
 		if (factor != "") {
@@ -752,7 +807,7 @@ public:
 			first = v->math().zero_induction(conds.induction);
 		}
 		else {
-			string factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+			string factor = v->math().factor(conds.induction);
 			if (factor != "") {
 				factor = "*" + factor;
 			}
@@ -777,7 +832,7 @@ public:
 
 	string remainder_size() const
 	{
-		const string& factor = v->math().ihs(conds.induction).non_ihs(conds.induction).str();
+		const string& factor = v->math().factor(conds.induction);
 		if (v->is_flat() && factor != "") {
 			return rem_adaptor(v).name() + "*" + factor;
 		}
@@ -1027,40 +1082,5 @@ struct gen_out: virtual public conditions_xformer, virtual public remainder_xfor
 	xformer* clone() const { return new gen_out<Access>(*this); }
 	string class_name() const { return "gen_out<" + Access::class_name() + ">"; }
 };
-
-/*
- * This needs to become several functions.
- */
-/*
-template <class Access>
-struct gen_out_final: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
-	gen_out_final(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
-	string operator()(const string& old)
-	{
-		string ret;
-
-		buffer_adaptor buff(v);
-		orig_adaptor orig(v);
-		next_adaptor next(v);
-		const string if_statement = "if ((" + Access::final_iteration() + ")%" + buff.size() + ")";
-
-		ret =	"cellgen_dma_prep_start(); " +
-			if_statement + "{ " +
-				prev.name() + "=" + next.name() + ";" +
-				next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; " +
-				dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::final_size()) +
-			"} \n"
-			"MMGP_SPE_dma_wait(" + prev.name() + ", fn_id); " +
-			"MMGP_SPE_dma_wait(" + next.name() + ", fn_id); " 
-			"MMGP_SPE_dma_wait((" + next.name() + "+(" + to_string(depth) + "-1))%" + to_string(depth) + ", fn_id); "
-			"cellgen_dma_prep_stop(); ";
-
-		return old + ret;
-	}
-
-	xformer* clone() const { return new gen_out_final<Access>(*this); }
-	string class_name() const { return "gen_out_final<" + Access::class_name() + ">"; }
-};
-*/
 
 #endif // XFORMERS_H
