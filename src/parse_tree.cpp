@@ -1580,7 +1580,7 @@ struct cell_region {
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
 
-			const string& buffer_size = buffer_adaptor(for_all(shared, max_buffer(par_induction)).max).size();
+			const string& buffer_size = buffer_adaptor(max).size();
 			front.push_back(new compute_bounds(buffer_size));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
