@@ -296,12 +296,12 @@ struct variable_increment: public xformer {
 };
 
 class compute_bounds: public xformer {
-	const string buffer_size;
+	const string least;
 public:
-	compute_bounds(const string& b): buffer_size(b) {}
+	compute_bounds(const string& l): least(l) {}
 	string operator()(const string& old)
 	{
-		return old + "compute_bounds(&SPE_start, &SPE_stop," + buffer_size + ");";
+		return old + "compute_bounds(&SPE_start, &SPE_stop, sizeof(" + least + "));";
 	}
 
 	xformer* clone() const { return new compute_bounds(*this); }

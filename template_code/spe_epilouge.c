@@ -23,43 +23,44 @@ void compute_bounds(int *start, int *stop, int buff_sz)
 /*
  * Jae-seung's revision.
  */
-void compute_bounds (int *start, int *stop, int buff_sz)
+void compute_bounds (int *start, int *stop, size_t element_sz)
 {
-  int total_chunks = (*stop - *start) / buff_sz;
+  int bytes16 = 16 / element_sz;
+  int total_chunks = (*stop - *start) / bytes16;
   int thread_chunks = total_chunks / SPE_threads;
-  int rem     = ((*stop - *start) % (buff_sz * SPE_threads)) / buff_sz;
-  int rem_rem = ((*stop - *start) % (buff_sz * SPE_threads)) % buff_sz;
+  int rem     = ((*stop - *start) % (bytes16 * SPE_threads)) / bytes16;
+  int rem_rem = ((*stop - *start) % (bytes16 * SPE_threads)) % bytes16;
 
   int id = SPE_threads - rem;
 
   if (SPE_id == SPE_threads - 1) {
       if (SPE_id > id) {
-          *start = *start + (SPE_id * thread_chunks * buff_sz + buff_sz * (SPE_id - id));
+          *start = *start + (SPE_id * thread_chunks * bytes16 + bytes16 * (SPE_id - id));
       }
       else {
-          *start = *start + (SPE_id * thread_chunks * buff_sz);
+          *start = *start + (SPE_id * thread_chunks * bytes16);
       }
 
       if (SPE_id >= id) {
-          *stop = *start + ((thread_chunks + 1) * buff_sz + rem_rem);
+          *stop = *start + ((thread_chunks + 1) * bytes16 + rem_rem);
       }
       else {
-          *stop = *start + (thread_chunks * buff_sz + rem_rem);
+          *stop = *start + (thread_chunks * bytes16 + rem_rem);
       }
   }
   else {
       if (SPE_id > id) {
-          *start = *start + (SPE_id * thread_chunks * buff_sz + buff_sz * (SPE_id - id));
+          *start = *start + (SPE_id * thread_chunks * bytes16 + bytes16 * (SPE_id - id));
       }
       else {
-          *start = *start + (SPE_id * thread_chunks * buff_sz);
+          *start = *start + (SPE_id * thread_chunks * bytes16);
       }
 
       if (SPE_id >= id) {
-          *stop = *start + ((thread_chunks + 1) * buff_sz);
+          *stop = *start + ((thread_chunks + 1) * bytes16);
       }
       else {
-          *stop = *start + (thread_chunks * buff_sz);
+          *stop = *start + (thread_chunks * bytes16);
       }
   }
 }

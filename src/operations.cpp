@@ -39,6 +39,12 @@ variable_type construct_variable_type(const string& type)
 	return UNKNOWN_VAR;
 }
 
+bool variable_type_less(const variable_type a, const variable_type b)
+{
+	int table[] = {0, 1, 2, 1, 2, 3};
+	return table[a] < table[b];
+}
+
 operations operator+(const operations& a, const operations& b)
 {
 	operations o;

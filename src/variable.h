@@ -169,7 +169,7 @@ public:
 	bool has_orientation() const { return _orientation != UNINITIALIZED; }
 	virtual string name() const { return region_variable::name() + "_adr"; }
 
-	list<string> dimensions() const { return _dimensions; }
+	const list<string>& dimensions() const { return _dimensions; }
 	bool is_flat() const { return _dimensions.size() == 0; }
 	bool seen() const { return _orientation != UNINITIALIZED; }
 

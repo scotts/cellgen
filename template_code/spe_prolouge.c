@@ -10,4 +10,4 @@
 
 const int out_tag = 2;
 
-void compute_bounds (int *start, int *stop, int buff_sz);
+void compute_bounds (int *start, int *stop, size_t element_sz);

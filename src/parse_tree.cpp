@@ -1494,6 +1494,22 @@ struct accumulate_cost {
 	}
 };
 
+struct smallest_type: unary_function<const shared_variable*, void> {
+	string least;
+	smallest_type() {}
+	void operator()(shared_variable* v)
+	{
+		if (least != "") {
+			if (variable_type_less(construct_variable_type(buffer_adaptor(v).type()), construct_variable_type(least))) {
+				least = buffer_adaptor(v).type();
+			}
+		}
+		else {
+			least = buffer_adaptor(v).type();
+		}
+	}
+};
+
 /* Reasoning about the call sequence for nested for-loops can be confusing. Excluding 
  * all of the function objects that look through declarations and assignment 
  * statements, the sequence is:
@@ -1580,8 +1596,8 @@ struct cell_region {
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
 
-			const string& buffer_size = buffer_adaptor(max).size();
-			front.push_back(new compute_bounds(buffer_size));
+			const string& least = for_all(shared, smallest_type()).least;
+			front.push_back(new compute_bounds(least));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));

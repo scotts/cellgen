@@ -23,6 +23,7 @@ enum op_type {ADD, SUB, MUL, DIV, MOD, UNKNOWN_OP};
  */
 op_type construct_op_type(const string& op);
 variable_type construct_variable_type(const string& op);
+bool variable_type_less(const variable_type a, const variable_type b);
 
 class latency_estimator {
 	map<variable_type, map<op_type, int> > latency;
