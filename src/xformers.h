@@ -333,27 +333,24 @@ public:
 	{
 		string declaration;
 		if (depth > 0) {
-			string def;
+			assert(buffer);
 
-			if (buffer) {
-				string this_factor;
-				try {
-					this_factor = v->math().factor(par_induction);
-				}
-				catch (ivar_not_found) {
-					this_factor = "1";
-				}
+			string this_factor;
+			try {
+				this_factor = v->math().factor(par_induction);
+			}
+			catch (ivar_not_found) {
+				this_factor = "1";
+			}
 
-				string divisor;
-				if (from_string<int>(this_factor) < from_string<int>(max_factor)) {
-					divisor = "/" + max_factor;
-				}
-				def = "(" + to_string(buffer) + divisor + ")";
+			string divisor;
+			if (from_string<int>(this_factor) < from_string<int>(max_factor)) {
+				divisor = "/" + max_factor;
 			}
-			else {
-				def = default_buff_size;
-			}
+			const string def = "(" + to_string(buffer) + "/ sizeof(" + buffer_adaptor(v).type() + ")" + divisor + ")";
+
 			declaration = const_variable("int", buffer_adaptor(v).size(), def).define() + ";";
+
 		}
 
 		return old + declaration;

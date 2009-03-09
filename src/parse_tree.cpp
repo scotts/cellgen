@@ -1461,12 +1461,11 @@ operations parse_xformation(xformer* x, operations& overhead, operations& startu
 
 	ast_parse_string parse = ast_parse(first, last, c_free_compound, skip);
 
-	if (!parse.full) {
-		throw failure_to_parse_xformer(code, x->class_name());
+	operations cost;
+	if (parse.full) {
+		for_all(parse.trees, selection_op(overhead, startup));
 	}
 
-	operations cost;
-	for_all(parse.trees, selection_op(overhead, startup));
 	return cost;
 }
 
@@ -1530,7 +1529,7 @@ struct cell_region {
 			const reduceset& reductions = (*region)->reductions();
 			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
 			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
-			const int buffer = (*region)->buffer();
+			const int user_buffer = (*region)->buffer();
 
 			// Assumption: one parallel induction variable.
 			sharedset in;
@@ -1552,18 +1551,10 @@ struct cell_region {
 			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
 
-			// Deliberately do this AFTER compund and depth assignments, but before leftover stuff.
-			/*
 			operations overhead;
 			operations startup;
-			try {
+			if (!user_buffer) {
 				call_descend(accumulate_cost(overhead, startup), node);	
-			}
-			catch (failure_to_parse_xformer e) {
-				cerr	<< "Failed to parse " << e.name << ":" << endl
-					<< "---" << endl
-					<< e.code << endl
-					<< "---" << endl;
 			}
 
 			cout	<< "iteration: " << endl
@@ -1578,9 +1569,10 @@ struct cell_region {
 				<< startup 
 				<< "cycles: " << startup.cycles() << endl
 				<< endl
-				<< "buffer size : " << estimator.buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
+				<< "buffer size : " << estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
 				<< endl;
-			*/
+
+			const int buffer = user_buffer ? user_buffer : estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles());
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;

@@ -31,8 +31,8 @@ class latency_estimator {
 public:
 	latency_estimator();
 	int cycles(const int n, const op_type op, const variable_type var) const;
-	int buffer_size(const int iteration, const int startup) const;
 };
+int estimate_buffer_size(const int iteration, const int startup);
 
 const latency_estimator estimator;
 

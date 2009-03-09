@@ -961,6 +961,7 @@ struct c_grammar: public grammar<c_grammar> {
 	    free_compound_statement
 		= root_node_d[
 			(declaration_list || statement_list)
+			| !expression
 			| IDENTIFIER >> array_index
 			| IDENTIFIER
 		];

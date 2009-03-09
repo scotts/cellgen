@@ -199,7 +199,7 @@ int latency_estimator::cycles(const int n, const op_type op, const variable_type
 	return n * latency.find(var)->second.find(op)->second;
 }
 
-int latency_estimator::buffer_size(const int iteration, const int startup) const
+int estimate_buffer_size(const int iteration, const int startup)
 {
 	return static_cast<int>((iteration - (dma_startup_cost + startup)) / dma_bandwidth_cycles);
 }
