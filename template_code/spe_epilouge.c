@@ -1,68 +1,38 @@
 
-/*
- * Scott's original version.
- */
-/*
-void compute_bounds(int *start, int *stop, int buff_sz)
+inline void bounds_assign(int* start, int* stop, const int rem_id, const int bytes16, const int thread_chunks, const int rem_rem)
 {
-	int total_chunks = (*stop - *start) / buff_sz;
-	int thread_chunks = total_chunks / SPE_threads;
-	int rem = (*stop - *start) % (buff_sz * SPE_threads);
-
-	if (SPE_id == SPE_threads - 1) {
-		*start = *start + (SPE_id * thread_chunks * buff_sz);
-		*stop = *start + (thread_chunks * buff_sz) + rem;
-	}
-	else {
-		*start = *start + (SPE_id * thread_chunks * buff_sz);
-		*stop = *start + (thread_chunks * buff_sz);
-	}
-}
-*/
-
-/*
- * Jae-seung's revision.
- */
-void compute_bounds (int *start, int *stop, size_t element_sz)
-{
-  int bytes16 = 16 / element_sz;
-  int total_chunks = (*stop - *start) / bytes16;
-  int thread_chunks = total_chunks / SPE_threads;
-  int rem     = ((*stop - *start) % (bytes16 * SPE_threads)) / bytes16;
-  int rem_rem = ((*stop - *start) % (bytes16 * SPE_threads)) % bytes16;
-
-  int id = SPE_threads - rem;
-
-  if (SPE_id == SPE_threads - 1) {
-      if (SPE_id > id) {
-          *start = *start + (SPE_id * thread_chunks * bytes16 + bytes16 * (SPE_id - id));
+      if (SPE_id > rem_id) {
+          *start = *start + (SPE_id * thread_chunks * bytes16 + bytes16 * (SPE_id - rem_id));
       }
       else {
           *start = *start + (SPE_id * thread_chunks * bytes16);
       }
 
-      if (SPE_id >= id) {
+      if (SPE_id >= rem_id) {
           *stop = *start + ((thread_chunks + 1) * bytes16 + rem_rem);
       }
       else {
           *stop = *start + (thread_chunks * bytes16 + rem_rem);
       }
-  }
-  else {
-      if (SPE_id > id) {
-          *start = *start + (SPE_id * thread_chunks * bytes16 + bytes16 * (SPE_id - id));
-      }
-      else {
-          *start = *start + (SPE_id * thread_chunks * bytes16);
-      }
+}
 
-      if (SPE_id >= id) {
-          *stop = *start + ((thread_chunks + 1) * bytes16);
-      }
-      else {
-          *stop = *start + (thread_chunks * bytes16);
-      }
-  }
+void compute_bounds (int *start, int *stop, size_t element_sz)
+{
+	const int bytes16 = 16 / element_sz;
+	const int total_chunks = (*stop - *start) / bytes16;
+	const int thread_chunks = total_chunks / SPE_threads;
+	const int thread_bytes_rem = ((*stop - *start) % (bytes16 * SPE_threads));
+	const int thread_rem = thread_bytes_rem / bytes16;
+	const int rem_rem = thread_bytes_rem % bytes16;
+
+	const int rem_id = SPE_threads - thread_rem;
+
+	if (SPE_id == SPE_threads - 1) {
+		bounds_assign(start, stop, rem_id, bytes16, thread_chunks, rem_rem);
+	}
+	else {
+		bounds_assign(start, stop, rem_id, bytes16, thread_chunks, 0);
+	}
 }
 
 /*
