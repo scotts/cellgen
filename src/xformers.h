@@ -320,19 +320,50 @@ struct reduction_assign: public xformer {
 	string class_name() const { return "reduction_assign"; }
 };
 
-class shared_buffer_size: public depth_xformer {
-	const shared_variable* v;
+// FIXME: The relationship between this and shared_buffer_size is inelegant.
+class max_buffer_size: public depth_xformer {
+	const shared_variable* max;
 	const int buffer;
+	const int num_shared;
 	const string par_induction;
-	const string max_factor;
 
 public:
-	shared_buffer_size(const shared_variable* _v, const int b, const string& p, const string& m, const int d): 
-		depth_xformer(d), v(_v), buffer(b), par_induction(p), max_factor(m) {}
+	max_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const int d): 
+		depth_xformer(d), max(m), buffer(b), num_shared(n), par_induction(p) {}
 	string operator()(const string& old)
 	{
 		string declaration;
 		if (depth > 0) {
+			assert(buffer);
+
+			const string base = "(" + to_string(buffer) + "/ sizeof(" + buffer_adaptor(max).type() + ")" + "/" + to_string(num_shared) + ")";
+			const string def = base + "+ 16 - (" + base + " % 16)";
+
+			declaration = const_variable("int", buffer_adaptor(max).size(), def).define() + ";";
+
+		}
+
+		return old + declaration;
+	}
+
+	xformer* clone() const { return new max_buffer_size(*this); }
+	string class_name() const { return "max_buffer_size"; }
+};
+
+class shared_buffer_size: public depth_xformer {
+	const shared_variable* v;
+	const shared_variable* max;
+	const int buffer;
+	const int num_shared;
+	const string par_induction;
+
+public:
+	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const int d): 
+		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p) {}
+	string operator()(const string& old)
+	{
+		string declaration;
+		if (depth > 0 && v != max) {
 			assert(buffer);
 
 			string this_factor;
@@ -343,11 +374,15 @@ public:
 				this_factor = "1";
 			}
 
-			string divisor;
+			const string& max_factor = max->math().factor(par_induction);
+			string def;
 			if (from_string<int>(this_factor) < from_string<int>(max_factor)) {
-				divisor = "/" + max_factor;
+				def = buffer_adaptor(max).size() + "/" + max_factor;
 			}
-			const string def = "(" + to_string(buffer) + "/ sizeof(" + buffer_adaptor(v).type() + ")" + divisor + ")";
+			else {
+				const string base = "(" + to_string(buffer) + "/ sizeof(" + buffer_adaptor(v).type() + ")" + "/" + to_string(num_shared) + ")";
+				def = base + "+ 16 - (" + base + " % 16)";
+			}
 
 			declaration = const_variable("int", buffer_adaptor(v).size(), def).define() + ";";
 
@@ -361,16 +396,17 @@ public:
 };
 
 struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*> {
+	const shared_variable* max;
 	const int buffer;
-	const string& max_factor;
+	const int num_shared;
 	const string& par_induction;
 	const depths& local_depths;
-	make_shared_buffer_size(const int b, const string& m, const string& p, const depths& l): 
-		buffer(b), max_factor(m), par_induction(p), local_depths(l) {}
+	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const depths& l): 
+		max(m), buffer(b), num_shared(n), par_induction(p), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new shared_buffer_size(v, buffer, par_induction, max_factor, local_depths.find(v)->second);
+		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, local_depths.find(v)->second);
 	}
 };
 

@@ -1576,13 +1576,13 @@ struct cell_region {
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;
-			const string& max_factor = max->math().factor(par_induction);
 
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
-			append(front, fmap(make_shared_buffer_size(buffer, max_factor, par_induction, max_depths), shared));
+			front.push_back(new max_buffer_size(max, buffer, shared.size(), par_induction, max_depths[max]));
+			append(front, fmap(make_shared_buffer_size(max, buffer, shared.size(), par_induction, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
