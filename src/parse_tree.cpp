@@ -452,12 +452,12 @@ struct struct_access_search {
 
 class shared_variable_double_orientation {};
 
-variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-		operations& ops, const condslist& conds, sharedset& vars)
+c_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
+		operations& ops, op_type data, const condslist& conds, sharedset& vars)
 {
 	postfix_op o(shared_symbols, priv_symbols, conds, vars);
 	for_all(node.children, &o);
-	variable_type type = UNKNOWN_VAR;
+	c_type type = UNKNOWN_VAR;
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
@@ -479,6 +479,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 			o.shared_var->column();
 		}
 		
+		ops.inc(data, construct_c_type(o.shared_var->type()));
 		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, conds.back(), buffer_index));
 
 		// The to_buffer_space xformer subsumes the code inside the original array access. But, 
@@ -503,7 +504,7 @@ variable_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols
 	return type;
 }
 
-variable_type type_promotion(const variable_type l, const variable_type r)
+c_type type_promotion(const c_type l, const c_type r)
 {
 	if (l == DOUBLE || r == DOUBLE) {
 		return DOUBLE;
@@ -530,9 +531,9 @@ struct local_variable_not_found {
 	local_variable_not_found(const string& n): name(n) {}
 };
 
-variable_type ident_or_constant_type(const ast_node& node, const priv_symtbl& privs, const var_symtbl& locals)
+c_type ident_or_constant_type(const ast_node& node, const priv_symtbl& privs, const var_symtbl& locals)
 {
-	variable_type type = UNKNOWN_VAR;
+	c_type type = UNKNOWN_VAR;
 
 	if (is_constant(node)) {
 		if (is_int_constant(node)) {
@@ -548,10 +549,10 @@ variable_type ident_or_constant_type(const ast_node& node, const priv_symtbl& pr
 		priv_symtbl::const_iterator p;
 
 		if ((l = locals.find(name)) != locals.end()) {
-			type = construct_variable_type(l->second->type());
+			type = construct_c_type(l->second->type());
 		}
 		else if ((p = privs.find(name)) != privs.end()) {
-			type = construct_variable_type(p->second->type());
+			type = construct_c_type(p->second->type());
 		}
 		else {
 			throw local_variable_not_found(name);
@@ -565,30 +566,31 @@ struct multiplicative_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
+	op_type data;
 	const condslist& conds;
 	sharedset& vars;
 	const var_symtbl& locals;
-	variable_type type;
+	c_type type;
 	op_type op;
-	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const condslist& c, sharedset& v, const var_symtbl& l):
-		shared_symbols(s), priv_symbols(p), ops(o), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
+	multiplicative_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, op_type d, const condslist& c, sharedset& v, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(o), data(d), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::multiplicative_expression) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, conds, vars, locals);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 			type = o.type;
 		}
 		else if(node.value.id() == ids::multiplicative_expression_helper) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, conds, vars, locals);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
 			ops.inc(o.op, type);
 		}
 		else if (node.value.id() == ids::postfix_expression) {
-			type = postfix_postop(node, shared_symbols, priv_symbols, ops, conds, vars);
+			type = postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
 		}
 		else if (is_kind_of_mul(node)) {
 			op = construct_op_type(string(node.value.begin(), node.value.end()));
@@ -606,31 +608,32 @@ struct additive_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
+	op_type data;
 	const condslist& conds;
 	sharedset& vars;
 	const var_symtbl& locals;
-	variable_type type;
+	c_type type;
 	op_type op;
-	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, const condslist& c, sharedset& v, const var_symtbl& l):
-		shared_symbols(s), priv_symbols(p), ops(o), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
+	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, op_type d, const condslist& c, sharedset& v, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(o), data(d), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::multiplicative_expression) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, conds, vars, locals);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
 			type = o.type;
 		}
 		else if (node.value.id() == ids::additive_expression_helper) {
-			additive_op o(shared_symbols, priv_symbols, ops, conds, vars, locals);
+			additive_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
 			ops.inc(o.op, type);
 		}
 		else if (node.value.id() == ids::postfix_expression) {
-			type = postfix_postop(node, shared_symbols, priv_symbols, ops, conds, vars);
+			type = postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
 		}
 		else if (is_kind_of_add(node)) {
 			op = construct_op_type(string(node.value.begin(), node.value.end()));
@@ -648,24 +651,25 @@ struct assignment_split {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	operations& ops;
+	op_type data;
 	const condslist& conds;
 	sharedset& vars;
 	const var_symtbl& locals;
-	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, const condslist& c, sharedset& v, const var_symtbl& l):
-		shared_symbols(s), priv_symbols(p), ops(o), conds(c), vars(v), locals(l)
+	assignment_split(const shared_symtbl& s, const priv_symtbl& p, operations& o, op_type d, const condslist& c, sharedset& v, const var_symtbl& l):
+		shared_symbols(s), priv_symbols(p), ops(o), data(d), conds(c), vars(v), locals(l)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node.value.id() == ids::postfix_expression) {
 			// Ignoring type because there's no computation.
-			postfix_postop(node, shared_symbols, priv_symbols, ops, conds, vars);
+			postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
 		}
 		else if (node.value.id() == ids::additive_expression) {
-			additive_op o(shared_symbols, priv_symbols, ops, conds, vars, locals);
+			additive_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 		}
 		else if (node.value.id() == ids::multiplicative_expression) {
-			multiplicative_op o(shared_symbols, priv_symbols, ops, conds, vars, locals);
+			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 		}
 		else {
@@ -692,8 +696,8 @@ struct assignment_search {
 			ast_iterator eqs = find_if_all(node.children, is_equals);
 
 			try {
-				for_each(node.children.begin(), eqs, assignment_split(shared_symbols, priv_symbols, ops, conds, out, locals));
-				for_each(eqs, node.children.end(), assignment_split(shared_symbols, priv_symbols, ops, conds, in, locals));
+				for_each(node.children.begin(), eqs, assignment_split(shared_symbols, priv_symbols, ops, STORE, conds, out, locals));
+				for_each(eqs, node.children.end(), assignment_split(shared_symbols, priv_symbols, ops, LOAD, conds, in, locals));
 			}
 			catch (shared_variable_double_orientation e) {
 				throw user_error("Shared variables can only be accessed in row major or column "
@@ -713,6 +717,9 @@ struct assignment_search {
 struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
+	sharedset& global_in;
+	sharedset& global_out;
+	sharedset& global_inout;
 	var_symtbl locals;
 	operations& ops;
 	condslist conds;
@@ -723,11 +730,15 @@ struct serial_for_op {
 	conditions sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, condslist& c, bind_xformer& n):
-		shared_symbols(s), priv_symbols(p), ops(o), conds(c), condnodes(n), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
+			operations& o, condslist& c, bind_xformer& n):
+		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
+		ops(o), conds(c), condnodes(n), expressions_seen(0)
 		{}
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, operations& o, condslist& c, bind_xformer& n):
-		shared_symbols(s), priv_symbols(p), locals(l), ops(o), conds(c), condnodes(n), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
+			const var_symtbl& l, operations& o, condslist& c, bind_xformer& n):
+		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
+		locals(l), ops(o), conds(c), condnodes(n), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
@@ -740,17 +751,10 @@ struct serial_for_op {
 		// out -= inout
 		for_all(inout, erase_from_set<shared_variable*>(out));	
 
-		// g_inout += inout + intersection(in + g_in, out + g_out)
+		// Global NEVER makes inout distinction. That ONLY happens locally.
 		g_in.insert(in.begin(), in.end());
 		g_out.insert(out.begin(), out.end());
 		g_inout.insert(inout.begin(), inout.end());
-		set_intersection_all(g_in, g_out, inserter(g_inout, g_inout.begin()));
-
-		// g_in -= g_inout
-		for_all(g_inout, erase_from_set<shared_variable*>(g_in));
-
-		// g_out -= g_inout
-		for_all(g_inout, erase_from_set<shared_variable*>(g_out));
 	}
 
 	void operator()(ast_node& node);
@@ -791,7 +795,7 @@ struct declaration_op {
 		}
 		else if (node.value.id() == ids::init_declarator) {
 			pair<ast_iterator, ast_node*> p = find_equals(node);
-			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, ops, conds, in, locals)); 
+			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, ops, LOAD, conds, in, locals)); 
 		}
 		else if (node.value.id() == ids::identifier) {
 			string name = string(node.value.begin(), node.value.end());
@@ -961,9 +965,9 @@ void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
 
 	ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
-
 	modify_for_loop(max, conds, buffer_size)(for_loop);
 	descend< remove_xforms<if_clause> >()(*loop_cmpd); // Hack! hack-hack-hack
+
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd));
 }
 
@@ -974,15 +978,20 @@ struct for_compound_op {
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
+	sharedset& global_in;
+	sharedset& global_out;
+	sharedset& global_inout;
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
 			sharedset& i, sharedset& o, sharedset& io, 
+			sharedset& gi, sharedset& go, sharedset& gio, 
 			operations& op, condslist& c, bind_xformer& n): 
 		shared_symbols(s), priv_symbols(p), locals(l), 
-		in(i), out(o), inout(io), 
+		in(i), out(o), inout(io),
+		global_in(gi), global_out(go), global_inout(gio),
 		ops(op), conds(c), condnodes(n)
 		{}
 	void operator()(ast_node& node)
@@ -1003,9 +1012,11 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
-			serial_for_op o(shared_symbols, priv_symbols, locals, ops, conds, condnodes);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, locals, ops, conds, condnodes);
 			for_all(node.children, &o);
-			o.merge_inout(in, out, inout);
+
+			o.merge_inout(global_in, global_out, global_inout);
+			conds = o.conds;
 
 			sharedset& local_in = o.in;
 			sharedset& local_out = o.out;
@@ -1131,7 +1142,7 @@ void serial_for_op::operator()(ast_node& node)
 		}
 	}
 	else if (node.value.id() == ids::compound) {
-		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, ops, conds, condnodes);
+		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, global_in, global_out, global_inout, ops, conds, condnodes);
 		for_all(node.children, &o);
 	}
 	else {
@@ -1182,10 +1193,11 @@ struct parallel_for_op {
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
-			serial_for_op o(shared_symbols, priv_symbols, ops, conds, condnodes_col);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds, condnodes_col);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);
+			conds = o.conds;
 
 			sharedset& in = o.in;
 			sharedset& out = o.out;
@@ -1493,18 +1505,21 @@ struct accumulate_cost {
 	}
 };
 
-struct smallest_type: unary_function<const shared_variable*, void> {
-	string least;
-	smallest_type() {}
+struct type_comparison: unary_function<const shared_variable*, void> {
+	typedef bool (*c_type_comp)(const c_type, const c_type);
+	c_type_comp comp;
+	string winner;
+
+	type_comparison(c_type_comp c): comp(c) {}
 	void operator()(shared_variable* v)
 	{
-		if (least != "") {
-			if (variable_type_less(construct_variable_type(buffer_adaptor(v).type()), construct_variable_type(least))) {
-				least = buffer_adaptor(v).type();
+		if (winner != "") {
+			if (comp(construct_c_type(buffer_adaptor(v).type()), construct_c_type(winner))) {
+				winner = buffer_adaptor(v).type();
 			}
 		}
 		else {
-			least = buffer_adaptor(v).type();
+			winner = buffer_adaptor(v).type();
 		}
 	}
 };
@@ -1553,10 +1568,8 @@ struct cell_region {
 
 			operations overhead;
 			operations startup;
-			if (!user_buffer) {
-				call_descend(accumulate_cost(overhead, startup), node);	
-			}
-
+			call_descend(accumulate_cost(overhead, startup), node);	
+			/*
 			cout	<< "iteration: " << endl
 				<< iteration 
 				<< "cycles: " << iteration.cycles() << endl 
@@ -1567,12 +1580,8 @@ struct cell_region {
 				<< endl
 				<< "startup: " << endl
 				<< startup 
-				<< "cycles: " << startup.cycles() << endl
-				<< endl
-				<< "buffer size : " << estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles()) 
-				<< endl;
-
-			const int buffer = user_buffer ? user_buffer : estimate_buffer_size(iteration.cycles() + overhead.cycles(), startup.cycles());
+				<< "cycles: " << startup.cycles() << endl;
+			*/
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;
@@ -1580,16 +1589,19 @@ struct cell_region {
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
 
+			const string least = for_all(shared, type_comparison(c_type_less)).winner;
+			front.push_back(new compute_bounds(least));
+
+			const string greatest = for_all(shared, type_comparison(c_type_greater)).winner;
+			front.push_back(new define_clipped_range(conds.back().start, conds.back().stop, greatest));
+
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
-			front.push_back(new max_buffer_size(max, buffer, shared.size(), par_induction, max_depths[max]));
-			append(front, fmap(make_shared_buffer_size(max, buffer, shared.size(), par_induction, max_depths), shared));
+			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
+			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
-
-			const string& least = for_all(shared, smallest_type()).least;
-			front.push_back(new compute_bounds(least));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));

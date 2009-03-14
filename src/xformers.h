@@ -320,6 +320,21 @@ struct reduction_assign: public xformer {
 	string class_name() const { return "reduction_assign"; }
 };
 
+class define_clipped_range: public xformer {
+	const string start;
+	const string stop;
+	const string max_type;
+public:
+	define_clipped_range(const string& b, const string& e, const string& m): start(b), stop(e), max_type(m) {}
+	string operator()(const string& old)
+	{
+		return old + clipped_range.declare() + "=min((" + stop + "-" + start + "), 16384/sizeof(" + max_type + "));";
+	}
+
+	xformer* clone() const { return new define_clipped_range(*this); }
+	string class_name() const { return "define_clipped_range"; }
+};
+
 // FIXME: The relationship between this and shared_buffer_size is inelegant.
 class max_buffer_size: public depth_xformer {
 	const shared_variable* max;
@@ -334,13 +349,15 @@ public:
 	{
 		string declaration;
 		if (depth > 0) {
-			assert(buffer);
-
-			const string base = "(" + to_string(buffer) + "/ sizeof(" + buffer_adaptor(max).type() + ")" + "/" + to_string(num_shared) + ")";
-			const string def = base + "+ 16 - (" + base + " % 16)";
-
+			string def;
+			if (buffer) {
+				def = to_string(buffer);
+			}
+			else {
+				const string base = "(" + clipped_range.name() + "/" + to_string(depth) + ")";
+				def = base + "- (" + base + "% 16)";
+			}
 			declaration = const_variable("int", buffer_adaptor(max).size(), def).define() + ";";
-
 		}
 
 		return old + declaration;
@@ -364,8 +381,6 @@ public:
 	{
 		string declaration;
 		if (depth > 0 && v != max) {
-			assert(buffer);
-
 			string this_factor;
 			try {
 				this_factor = v->math().factor(par_induction);
@@ -380,12 +395,16 @@ public:
 				def = buffer_adaptor(max).size() + "/" + max_factor;
 			}
 			else {
-				const string base = "(" + to_string(buffer) + "/ sizeof(" + buffer_adaptor(v).type() + ")" + "/" + to_string(num_shared) + ")";
-				def = base + "+ 16 - (" + base + " % 16)";
+				if (buffer) {
+					def = to_string(buffer);
+				}
+				else {
+					const string base = "(" + clipped_range.name() + "/" + to_string(depth) + ")";
+					def = base + "- (" + base + "% 16)";
+				}
 			}
 
 			declaration = const_variable("int", buffer_adaptor(v).size(), def).define() + ";";
-
 		}
 
 		return old + declaration;
@@ -738,7 +757,7 @@ public:
 	virtual string dma_in(const string& address) const = 0;
 	virtual string dma_in(const string& address, const string& tsize) const = 0;
 	virtual string dma_out(const string& address, const int depth) const = 0;
-	virtual string dma_out(const string& address, const int depth, const string& tsize) const = 0;
+	virtual string dma_out(const string& address, const int depth, const string& tsize, const string& next) const = 0;
 };
 
 class row_access: public base_access {
@@ -892,19 +911,15 @@ public:
 
 	string dma_out(const string& address, const int depth) const
 	{
-		return dma_out(address, depth, buffer_adaptor(v).size());
+		return dma_out(address, depth, buffer_adaptor(v).size(), next_adaptor(v).name());
 	}
 
-	string dma_out(const string& address, const int depth, const string& tsize) const
+	string dma_out(const string& address, const int depth, const string& tsize, const string& next) const
 	{
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
-		next_adaptor next(v);
 
-		return "DMA_put(" + orig.name() + "," + 
-				address + "," +
-				"sizeof(" + buff.type() + ")*" + tsize + "," +
-				next.name() + ");";
+		return "DMA_put(" + orig.name() + "," + address + "," + "sizeof(" + buff.type() + ")*" + tsize + "," + next + ");";
 	}
 };
 
@@ -1001,20 +1016,18 @@ public:
 
 	string dma_out(const string& address, const int depth) const
 	{
-		return dma_out(address, depth, buffer_adaptor(v).size());
+		return dma_out(address, depth, buffer_adaptor(v).size(), "(" + next_adaptor(v).name() + "+(" + to_string(depth) + "-1))%" + to_string(depth));
 	}
 
-	string dma_out(const string& address, const int depth, const string& tsize) const
+	string dma_out(const string& address, const int depth, const string& tsize, const string& next) const
 	{
 		dma_list_adaptor lst(v);
 		buffer_adaptor buff(v);
-		next_adaptor next(v);
 		orig_adaptor orig(v);
 		string make_list;
-		const string& depth_s = to_string(depth);
 
 		if (depth < 3) {
-			make_list = "add_to_dma_list(&" + lst.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
+			make_list = "add_to_dma_list(&" + lst.name(next) + "," + 
 					tsize + "," +
 					address + ","
 					"sizeof(" + buff.type() + "), " + 
@@ -1023,12 +1036,7 @@ public:
 		}
 
 		return 	make_list + 
-			"DMA_putl(" + orig.name() + "," +
-				address + "," +
-				"&" + lst.name("(" + next.name() + "+(" + depth_s + "-1))%" + depth_s) + "," + 
-				"(" + next.name() + "+(" + depth_s + "-1))%" + depth_s + ","
-				"1," +
-				"sizeof(" + buff.type() + "));";
+			"DMA_putl(" + orig.name() + "," + address + "," + "&" + lst.name(next) + "," + next + "," "1," + "sizeof(" + buff.type() + "));";
 	}
 };
 
@@ -1103,7 +1111,7 @@ struct gen_out: virtual public conditions_xformer, virtual public remainder_xfor
 
 		string dma;
 		if (is_remainder) {
-			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::remainder_size()); 
+			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::remainder_size(), next.name()); 
 			return dma + wait + old;
 		}
 		else {

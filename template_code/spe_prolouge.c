@@ -10,4 +10,9 @@
 
 const int out_tag = 2;
 
+inline int min(const int a, const int b)
+{
+	return (a < b) ? a : b;
+}
+
 void compute_bounds (int *start, int *stop, size_t element_sz);

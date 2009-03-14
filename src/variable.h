@@ -61,7 +61,7 @@ public:
 
 	bool is_non_scalar() const { return _type.find("*") != string::npos || _type.find("[") != string::npos; }
 
-	variable_type scalar_type()
+	c_type scalar_type()
 	{
 		if (_type.find("int") != string::npos) {
 			return INT;
@@ -85,6 +85,7 @@ public:
 
 const variable prev("int", "prev", "0");
 const variable buffer_index("int", "__i__", "0");
+const variable clipped_range("int", "__N__");
 
 class const_variable: public variable {
 public:
@@ -100,7 +101,6 @@ const const_variable buff_size("int", "buff_size", "16");
 */
 
 const const_variable leftover("int", "leftover");
-const const_variable full("int", "full"); 
 
 class pound_define: public variable {
 public:
