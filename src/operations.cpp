@@ -221,11 +221,11 @@ latency_estimator::latency_estimator()
 	latency[FLOAT][LOAD] = 6;
 	latency[FLOAT][STORE] = 6;
 
-	latency[DOUBLE][ADD] = 7;
-	latency[DOUBLE][SUB] = 7;
-	latency[DOUBLE][MUL] = 7;
-	latency[DOUBLE][DIV] = 7; // assuming div is same cost as mul
-	latency[DOUBLE][MOD] = 7; // complete guess
+	latency[DOUBLE][ADD] = 13;
+	latency[DOUBLE][SUB] = 13;
+	latency[DOUBLE][MUL] = 13;
+	latency[DOUBLE][DIV] = 13; // assuming div is same cost as mul
+	latency[DOUBLE][MOD] = 13; // complete guess
 	latency[DOUBLE][LOAD] = 6;
 	latency[DOUBLE][STORE] = 6;
 }
@@ -233,10 +233,5 @@ latency_estimator::latency_estimator()
 int latency_estimator::cycles(const int n, const op_type op, const c_type var) const
 {
 	return n * latency.find(var)->second.find(op)->second;
-}
-
-int estimate_buffer_size(const int iteration, const int startup)
-{
-	return static_cast<int>((iteration - (dma_startup_cost + startup)) / dma_bandwidth_cycles);
 }
 

@@ -209,14 +209,21 @@ public:
 	void inc_load(const c_type type) { load(type, 1); }
 	void inc_store(const c_type type) { store(type, 1); }
 
+	int comp_cycles()
+	{
+		return char_ops.comp_cycles() + int_ops.comp_cycles() + 
+			float_ops.comp_cycles() + double_ops.comp_cycles();
+	}
+
+	int data_cycles()
+	{
+		return char_ops.data_cycles() + int_ops.data_cycles() + 
+			float_ops.data_cycles() + double_ops.data_cycles();
+	}
+
 	int cycles()
 	{ 
-		const int comp_pipeline = char_ops.comp_cycles() + int_ops.comp_cycles() + 
-			float_ops.comp_cycles() + double_ops.comp_cycles();
-		const int data_pipeline = char_ops.data_cycles() + int_ops.data_cycles() + 
-			float_ops.data_cycles() + double_ops.data_cycles();
-
-		return max(comp_pipeline, data_pipeline);
+		return max(comp_cycles(), data_cycles());
 	}
 };
 

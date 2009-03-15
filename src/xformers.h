@@ -354,7 +354,7 @@ public:
 				def = to_string(buffer);
 			}
 			else {
-				const string base = "(" + clipped_range.name() + "/" + to_string(depth) + ")";
+				const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 				def = base + "- (" + base + "% 16)";
 			}
 			declaration = const_variable("int", buffer_adaptor(max).size(), def).define() + ";";
@@ -399,7 +399,7 @@ public:
 					def = to_string(buffer);
 				}
 				else {
-					const string base = "(" + clipped_range.name() + "/" + to_string(depth) + ")";
+					const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 					def = base + "- (" + base + "% 16)";
 				}
 			}

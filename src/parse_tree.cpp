@@ -1566,22 +1566,26 @@ struct cell_region {
 			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
 
+			const string least = for_all(shared, type_comparison(c_type_less)).winner;
+			const string greatest = for_all(shared, type_comparison(c_type_greater)).winner;
+
 			operations overhead;
 			operations startup;
 			call_descend(accumulate_cost(overhead, startup), node);	
+			operations total = iteration + startup + overhead;
 			/*
-			cout	<< "iteration: " << endl
-				<< iteration 
-				<< "cycles: " << iteration.cycles() << endl 
+			cout	<< "iteration " << endl << iteration 
+				<< "data " << iteration.data_cycles() << ", " << "comp " << iteration.comp_cycles() << endl
 				<< endl
-				<< "overhead: " << endl
-				<< overhead
-				<< "cycles: " << overhead.cycles() << endl
+				<< "overhead " << endl << overhead
+				<< "data " << overhead.data_cycles() << ", " << "comp " << overhead.comp_cycles () << endl
 				<< endl
-				<< "startup: " << endl
-				<< startup 
-				<< "cycles: " << startup.cycles() << endl;
+				<< "startup " << endl << startup
+				<< "data " << startup.data_cycles() << ", " << "comp " << startup.comp_cycles() << endl
+				<< "total data " << total.data_cycles() << ", " << "total comp " << total.comp_cycles() << endl
+				<< endl;
 			*/
+			cout << "(Nbytes*" << total.cycles() << ")/(sizeof(" << greatest << ")*Nthreads)" << endl;
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;
@@ -1589,10 +1593,7 @@ struct cell_region {
 			front.push_back(new define_variable(prev));
 			front.push_back(new define_variable(buffer_index));
 
-			const string least = for_all(shared, type_comparison(c_type_less)).winner;
 			front.push_back(new compute_bounds(least));
-
-			const string greatest = for_all(shared, type_comparison(c_type_greater)).winner;
 			front.push_back(new define_clipped_range(conds.back().start, conds.back().stop, greatest));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
