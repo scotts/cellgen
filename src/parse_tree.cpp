@@ -1543,7 +1543,7 @@ struct cell_region {
 			const privset& priv = (*region)->priv();
 			const reduceset& reductions = (*region)->reductions();
 			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
-			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
+			priv_symtbl& priv_symbols = (*region)->priv_symbols();
 			const int user_buffer = (*region)->buffer();
 
 			// Assumption: one parallel induction variable.
@@ -1585,7 +1585,12 @@ struct cell_region {
 				<< "total data " << total.data_cycles() << ", " << "total comp " << total.comp_cycles() << endl
 				<< endl;
 			*/
-			cout << "(Nbytes*" << total.cycles() << ")/(sizeof(" << greatest << ")*Nthreads)" << endl;
+			cout << "max((" << dma_startup_cost << " + L(Nbytes)/Nthreads), (Nbytes*" << total.cycles() << ")/(sizeof(" << greatest << ")*Nthreads))" << endl;
+			(*region)->estimate("estimate_cycles(" + 
+					priv_symbols[conds.back().stop]->definition() + "-" + 
+					priv_symbols[conds.back().start]->definition() + "," + 
+					    to_string(total.cycles()) + 
+					    ", sizeof(" + greatest + "));");
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;

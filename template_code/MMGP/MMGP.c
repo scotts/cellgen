@@ -13,6 +13,7 @@
 #include <sys/sysinfo.h>
 #include <string.h>
 #include <pthread.h>
+#include <assert.h>
 
 /* Sending mail to an SPE. Parameters:
  * id - id of the targeting SPE,
@@ -39,6 +40,45 @@ spe_mfc_command_area_t *mfc_ps_area[MAX_NUM_SPEs];
 spe_spu_control_area_t *mbox_ps_area[MAX_NUM_SPEs];
 spe_sig_notify_1_area_t *sig_notify_ps_area[MAX_NUM_SPEs];
 spe_mssync_area_t *mssync_ps_area[MAX_NUM_SPEs];
+
+inline int max(const int a, const int b)
+{
+	return (a > b) ? a : b;
+}
+
+int linear_model(const int n_bytes)
+{
+	assert(n_bytes > 0);
+
+	int cycles = 0;
+
+	if (n_bytes <= 2048) {
+		cycles = 349.70 + 0.13 * n_bytes;
+	}
+	else if (n_bytes <= 4096) {
+		cycles = 472.76 + 0.16 * n_bytes;
+	}
+	else {
+		cycles = 306.45 + 0.21 * n_bytes;
+	}
+
+	return cycles;
+}
+
+int transfer_cycles(const int n_bytes)
+{
+	return 128 + linear_model(n_bytes);
+}
+
+int computation_cycles(const int n, const int iteration_cycles)
+{
+	return (n * iteration_cycles) / __SPE_threads;
+}
+
+int estimate_cycles(const int n, const int iteration_cycles, const size_t elem_sz)
+{
+	printf("%d\n", max(transfer_cycles(n * elem_sz), computation_cycles(n, iteration_cycles)));
+}
 
 void *pthread_function(void *arg) {
     pthread_data_t *datap = (pthread_data_t *)arg;

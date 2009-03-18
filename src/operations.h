@@ -5,10 +5,7 @@
 #include <map>
 using namespace std;
 
-const int dma_startup_cost = 16; // cycles
-const double dma_bandwidth_s = 1; // GBytes/s
-const double spe_frequency = 3.192; // GHz
-const double dma_bandwidth_cycles = dma_bandwidth_s / spe_frequency;
+const int dma_startup_cost = 128; // cycles
 
 enum c_type {CHAR, INT, LONG, FLOAT, DOUBLE, UNKNOWN_VAR};
 enum op_type {ADD, SUB, MUL, DIV, MOD, LOAD, STORE, UNKNOWN_OP};
@@ -33,7 +30,6 @@ public:
 	latency_estimator();
 	int cycles(const int n, const op_type op, const c_type var) const;
 };
-int estimate_buffer_size(const int iteration, const int startup);
 
 const latency_estimator estimator;
 

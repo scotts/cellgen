@@ -16,6 +16,7 @@ class spe_region {
 	priv_symtbl _priv_symbols;
 	ast_node* _ast_root;
 	string _induction;
+	string _estimate;
 	int _unroll;
 	int _buffer;
 	bool _dma_unroll;
@@ -42,6 +43,9 @@ public:
 	int buffer() const		{ return _buffer; }
 	bool dma_unroll() const		{ return _dma_unroll; }
 	string induction() const	{ return _induction; }
+
+	void estimate(const string& e) { _estimate = e; }
+	string estimate() const { return _estimate; }
 
 	void induction(const string& i)
 	{

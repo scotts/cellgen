@@ -208,19 +208,21 @@ public:
 template <class T>
 class special_assign {
 	vars_op<T>& op;
+	map<string, T*>& symtbl;
 	string local;
 	spelist& regions;
 
 public:
-	special_assign(vars_op<T>& o, string l, spelist& r): op(o), local(l), regions(r) {}
+	special_assign(vars_op<T>& o, map<string, T*>& s, string l, spelist& r): op(o), symtbl(s), local(l), regions(r) {}
 	void operator()(fileiter first, const fileiter& last) const
 	{
 		stringstream ss;
 		while (first != last) {
 			ss << *first++;
 		}
-
-		op.current_set().insert(new T("int", local, ss.str(), regions.size() + 1));
+		T* v = new T("int", local, ss.str(), regions.size() + 1);
+		symtbl[local] = v;
+		op.current_set().insert(v);
 	}
 };
 
@@ -283,8 +285,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		unroll(0), buffer(0), dma_unroll(false),
 		ppe_op(ppe),
 		priv_op(privs, private_symbols, regions),
-		start_op(priv_op, "SPE_start", regions),
-		stop_op(priv_op, "SPE_stop", regions),
+		start_op(priv_op, private_symbols, "SPE_start", regions),
+		stop_op(priv_op, private_symbols, "SPE_stop", regions),
 		shared_op(shared, shared_symbols, regions),
 		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),

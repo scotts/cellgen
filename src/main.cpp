@@ -226,6 +226,8 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 
 			string id = to_string(loop_num++);
 
+			file << (*r)->estimate() << endl;
+
 			stringstream passes;
 			for_all((*r)->priv(), pass_assign(passes));
 			for_all((*r)->shared(), pass_assign(passes));
