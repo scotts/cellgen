@@ -614,8 +614,9 @@ struct additive_op {
 	const var_symtbl& locals;
 	c_type type;
 	op_type op;
+	bool found_mult;
 	additive_op(const shared_symtbl& s, const priv_symtbl& p, operations& o, op_type d, const condslist& c, sharedset& v, const var_symtbl& l):
-		shared_symbols(s), priv_symbols(p), ops(o), data(d), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP)
+		shared_symbols(s), priv_symbols(p), ops(o), data(d), conds(c), vars(v), locals(l), type(UNKNOWN_VAR), op(UNKNOWN_OP), found_mult(false)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -624,13 +625,16 @@ struct additive_op {
 			for_all(node.children, &o);
 
 			type = o.type;
+			found_mult = true;
 		}
 		else if (node.value.id() == ids::additive_expression_helper) {
 			additive_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
-			ops.inc(o.op, type);
+			if (!o.found_mult) {
+				ops.inc(o.op, type);
+			}
 		}
 		else if (node.value.id() == ids::postfix_expression) {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
@@ -1012,15 +1016,22 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (node.value.id() == ids::for_loop) {
+			const size_t before_in = global_in.size();
+			const size_t before_out = global_out.size();
+			const size_t before_inout = global_inout.size();
+
 			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, locals, ops, conds, condnodes);
 			for_all(node.children, &o);
-
 			o.merge_inout(global_in, global_out, global_inout);
-			conds = o.conds;
 
 			sharedset& local_in = o.in;
 			sharedset& local_out = o.out;
 			sharedset& local_inout = o.inout;
+
+			if ((before_in != global_in.size() || before_out != global_out.size() || before_inout != global_inout.size()) ||
+					set_union_all(local_in, local_out, local_inout).size() > 0) {
+				conds = o.conds;
+			}
 
 			depths local_depths;
 			for_all(local_in, make_assign_set<shared_variable*>(2, local_depths));
@@ -1134,7 +1145,9 @@ void serial_for_op::operator()(ast_node& node)
 			}
 			else if (expressions_seen == 2) {
 				sercond.stop = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
-				conds.push_back(sercond);
+				if (!exists_in(conds, sercond)) {
+					conds.push_back(sercond);
+				}
 			}
 			else {
 				throw user_error("number of expressions seen in serial_for_op.");
@@ -1468,6 +1481,7 @@ struct failure_to_parse_xformer {
 operations parse_xformation(xformer* x, operations& overhead, operations& startup)
 {
 	const string code = (*x)("");
+
 	string::const_iterator first = code.begin();
 	string::const_iterator last = code.end();
 
@@ -1543,7 +1557,7 @@ struct cell_region {
 			const privset& priv = (*region)->priv();
 			const reduceset& reductions = (*region)->reductions();
 			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
-			priv_symtbl& priv_symbols = (*region)->priv_symbols();
+			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
 			const int user_buffer = (*region)->buffer();
 
 			// Assumption: one parallel induction variable.
@@ -1571,7 +1585,7 @@ struct cell_region {
 
 			operations overhead;
 			operations startup;
-			call_descend(accumulate_cost(overhead, startup), node);	
+			//call_descend(accumulate_cost(overhead, startup), node);	
 			operations total = iteration + startup + overhead;
 			/*
 			cout	<< "iteration " << endl << iteration 
@@ -1585,12 +1599,32 @@ struct cell_region {
 				<< "total data " << total.data_cycles() << ", " << "total comp " << total.comp_cycles() << endl
 				<< endl;
 			*/
-			cout << "max((" << dma_startup_cost << " + L(Nbytes)/Nthreads), (Nbytes*" << total.cycles() << ")/(sizeof(" << greatest << ")*Nthreads))" << endl;
-			(*region)->estimate("estimate_cycles(" + 
-					priv_symbols[conds.back().stop]->definition() + "-" + 
-					priv_symbols[conds.back().start]->definition() + "," + 
-					    to_string(total.cycles()) + 
-					    ", sizeof(" + greatest + "));");
+
+			string n = "1";
+			for (condslist::iterator i = conds.begin(); i != conds.end(); ++i) {
+				n += "*(";
+
+				priv_symtbl::const_iterator p;
+				if ((p = priv_symbols.find(i->stop)) != priv_symbols.end()) {
+					n += (*p).second->definition();
+				}
+				else {
+					n += conds.back().stop;
+				}
+
+				n += "-";
+
+				if ((p = priv_symbols.find(i->start)) != priv_symbols.end()) {
+					n += (*p).second->definition();
+				}
+				else {
+					n += conds.back().start;
+				}
+
+				n += ")";
+			}
+
+			(*region)->estimate("estimate_cycles(" + n + "," + to_string(total.cycles()) + ", sizeof(" + greatest + "),");
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;

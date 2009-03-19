@@ -65,8 +65,6 @@ static inline unsigned long long get_tb() {
      return ((unsigned long long)tbhi << 32) | tblo;
 }
 
-
-
 /* Structure used for PPE<->SPE signaling */
 struct signal {
 

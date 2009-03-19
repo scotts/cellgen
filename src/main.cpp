@@ -224,9 +224,9 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 		file << (*b)->str();
 		if (++b != blocks.end()) {
 
-			string id = to_string(loop_num++);
+			string id = to_string(loop_num);
 
-			file << (*r)->estimate() << endl;
+			file << (*r)->estimate() << loop_num << ");" << endl;
 
 			stringstream passes;
 			for_all((*r)->priv(), pass_assign(passes));
@@ -250,6 +250,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 			}
 
 			++r;
+			++loop_num;
 		}
 	}
 }
