@@ -1,4 +1,6 @@
-h1. Cellgen: OpenMP-like support for the Cell processor
+h1. Cellgen
+
+OpenMP-like support for the Cell processor
 Scott Schneider, scschnei@cs.vt.edu
 http://www.cs.vt.edu/~scschnei/cellgen
 
@@ -41,6 +43,7 @@ In all of these code examples, we assume the Cellgen blocks of code
 reside in a legal C program.
 
 h3. The Basics
+
 All Cellgen code is preceded by a @#pragma cell@ directive.
 Cellgen ignores all other lines of code until it reaches that pragma.
 The Cellgen code is also enclosed in braces. The simplest Cellgen
@@ -88,6 +91,7 @@ the entire iteration space of the loop. Each SPE executes a subset
 of the iteration space [0--10).
 
 h3. Computations with Flat Arrays
+
 None of the prior examples performed any interestion computations
 or even transferred any data beyond loop parameters. The following
 example multiplies each element of a single-dimensional array by a
@@ -122,6 +126,7 @@ barrier at the end of the Cell region. Note that all of the iterations of the
 loop are *independent*. Currently, Cellgen can only handle independent loops.
 
 h3. Reductions
+
 The result from the previous example was an entire array. Cellgen
 can also handle reductions, where the computation relies on a large
 dataset, but the result is reduced to a single value.
@@ -145,6 +150,7 @@ reductions for addition (@+@) and multiplication
 (@*@).
 
 h3. Multidimensional Arrays
+
 Dense matrices are usually implemented with multidimensional arrays
 in C. Cellgen can handle multidimensional arrays, but it requires
 more information than with flat arrays, and some programmer assistance
