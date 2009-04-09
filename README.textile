@@ -69,6 +69,7 @@ In the previous two examples, the SPEs all behaved the same. While the Cellgen m
 distribute the same code to each SPE, the power comes from giving each SPE different data. In
 the following example, each SPE executes different parts of the iteration space for a loop.
 
+<pre>
 <code>
 #pragma cell SPE_start(0) SPE_stop(10)
 {
@@ -78,6 +79,7 @@ the following example, each SPE executes different parts of the iteration space 
   }
 }
 </code>
+</pre>
 
 We've introduced two new directives: @SPE_start@ and @SPE_stop@.  Conceptually, @SPE_start@
 and @SPE_stop@ are the starting and stopping conditions for the entire iteration space of the
@@ -89,6 +91,7 @@ None of the prior examples performed any interestion computations or even transf
 beyond loop parameters. The following example multiplies each element of a single-dimensional
 array by a constant.
 
+<pre>
 <code>
 int vector[N];
 int factor; // presumabley set elsewhere
@@ -101,6 +104,7 @@ int factor; // presumabley set elsewhere
   }
 }
 </code>
+</pre>
 
 This code sample introduces several new concepts. First, in order to pass data into a Cell
 region, we must specify if it is @shared@ or @private@. Variables declared @shared@ will have
@@ -119,6 +123,7 @@ h3. Reductions
 The result from the previous example was an entire array. Cellgen can also handle reductions,
 where the computation relies on a large dataset, but the result is reduced to a single value.
 
+<pre>
 <code>
 int vector[N];
 int sum = 0;
@@ -131,6 +136,7 @@ int sum = 0;
   }
 }
 </code>
+</pre>
 
 After all SPEs have finished, @sum@ contains the summation of all elements of @vector@. Cellgen
 supports reductions for addition (@+@) and multiplication (@*@).
@@ -144,6 +150,7 @@ programmer assistance is required with column accesses.
 To start with, we shall consider row accesses. The following code multiplies each element of
 a 3-dimensional array by a constant factor:
 
+<pre>
 <code>
 int matrix[N1][N2][N3];
 int factor; 
@@ -164,6 +171,7 @@ int factor;
   }
 }
 </code>
+</pre>
 
 Cellgen needs to know the dimensions of the matrix, which are provided in the @shared@
 directive. The dimensions can be either constants or variables only known at runtime. Cellgen
@@ -175,6 +183,7 @@ Column accesses currently require more work from the programmer.  Because DMA li
 with addresses that are 16-byte aligned, Cellgen expects the programmer to pad their data. The
 same computation, but accessing columns:
 
+<pre>
 <code>
 typedef struct int16b_t {
   int num;
@@ -200,6 +209,7 @@ int factor;
   }
 }
 </code>
+</pre>
 
 In the future, Cellgen will handle data padding so that row and column accesses appear the same
 to programmers.
