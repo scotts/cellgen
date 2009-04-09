@@ -6,7 +6,7 @@ See the "project page":http://www.cs.vt.edu/~scschnei/cellgen for publications.
 h2. Compiling
 
 Cellgen uses "Boost.Spirit":http://spirit.sourceforge.net/ for parsing, which uses extensively nested templates. When 
-debugging information is turned on (-g), each level of nesting is not compiled away, and remains
+debugging information is turned on (@-g@), each level of nesting is not compiled away, and remains
 in the executable. Consequently, including debugging information makes an order of magnitude
 difference in executable size.
 
