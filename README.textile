@@ -36,7 +36,7 @@ Regarding mechanics, Cellgen is a source-to-source compiler: it
 accepts C code and emits C code. The current workflow requires a
 programmer to call \lstinline{cellgen} on a \lstinline{*.cellgen}
 file, which will produce code for both the PPE and SPE. Currently,
-we rely on the sophisticated Make files provided by the IBM SDK~\cite{}
+we rely on the sophisticated Make files provided by the IBM SDK
 to produce executable code.
 
 In all of these code examples, we assume the Cellgen blocks of code
