@@ -1,18 +1,17 @@
 
-inline void bounds_assign(int* start, int* stop, const int rem_id, const int bytes16, const int thread_chunks, const int rem_rem)
+inline void bounds_assign(int* start, int* stop, const int cutoff_id, const int bytes16, const int base_chunks, const int leftover)
 {
-      if (SPE_id > rem_id) {
-          *start = *start + (SPE_id * thread_chunks * bytes16 + bytes16 * (SPE_id - rem_id));
-      }
-      else {
-          *start = *start + (SPE_id * thread_chunks * bytes16);
+      *start = *start + (SPE_id * base_chunks * bytes16);
+
+      if (SPE_id > cutoff_id) {
+          *start += bytes16 * (SPE_id - cutoff_id);
       }
 
-      if (SPE_id >= rem_id) {
-          *stop = *start + ((thread_chunks + 1) * bytes16 + rem_rem);
+      if (SPE_id >= cutoff_id) {
+          *stop = *start + ((base_chunks + 1) * bytes16 + leftover);
       }
       else {
-          *stop = *start + (thread_chunks * bytes16 + rem_rem);
+          *stop = *start + (base_chunks * bytes16 + leftover);
       }
 }
 
@@ -20,18 +19,17 @@ void compute_bounds (int *start, int *stop, size_t element_sz)
 {
 	const int bytes16 = 16 / element_sz;
 	const int total_chunks = (*stop - *start) / bytes16;
-	const int thread_chunks = total_chunks / SPE_threads;
+	const int base_chunks = total_chunks / SPE_threads;
 	const int thread_bytes_rem = ((*stop - *start) % (bytes16 * SPE_threads));
-	const int thread_rem = thread_bytes_rem / bytes16;
-	const int rem_rem = thread_bytes_rem % bytes16;
+	const int leftover = thread_bytes_rem % bytes16;
 
-	const int rem_id = SPE_threads - thread_rem;
+	const int cutoff_id = SPE_threads - (thread_bytes_rem / bytes16);
 
 	if (SPE_id == SPE_threads - 1) {
-		bounds_assign(start, stop, rem_id, bytes16, thread_chunks, rem_rem);
+		bounds_assign(start, stop, cutoff_id, bytes16, base_chunks, leftover);
 	}
 	else {
-		bounds_assign(start, stop, rem_id, bytes16, thread_chunks, 0);
+		bounds_assign(start, stop, cutoff_id, bytes16, base_chunks, 0);
 	}
 }
 

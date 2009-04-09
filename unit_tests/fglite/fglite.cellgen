@@ -62,11 +62,7 @@ void all_rows_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t 
 			int k;
 			for (k = 0; k < NCOLS; ++k) {
 				crow1[k] = conc[i][k][s].num;
-			}
-			for (k = 0; k < NCOLS; ++k) {
 				wrow[k] = wind_u[i][k].num;
-			}
-			for (k = 0; k < NCOLS; ++k) {
 				drow[k] = diff[i][k].num;
 			}
 				
