@@ -114,7 +114,7 @@ Cell region. Variables declared @private@ will be transferred to each SPE once, 
 will have their own local copy.
 
 Each SPE will carry out its computation in parallel, and there is an implicit barrier at the end
-of the Cell region. Note that all of the iterations of the loop are *independent*. Currently,
+of the Cell region. Note that all of the iterations of the loop are _independent_. Currently,
 Cellgen can only handle independent loops.
 
 h3. Reductions
