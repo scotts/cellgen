@@ -1,7 +1,7 @@
 h1. Cellgen
 
 OpenMP-like support for the Cell processor
-Scott Schneider, scschnei@cs.vt.edu
+"Scott Schneider":scschnei@cs.vt.edu
 http://www.cs.vt.edu/~scschnei/cellgen
 
 h2. Compiling
