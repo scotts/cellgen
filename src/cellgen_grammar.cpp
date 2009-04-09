@@ -174,6 +174,26 @@ public:
 	}
 };
 
+template <>
+class scalar_op<bool> {
+	bool& scalar;
+
+public:
+	scalar_op(bool& s): scalar(s) {}
+
+	void operator()(fileiter first, const fileiter& last) const
+	{
+		scalar = true;
+	}
+
+	bool pickup()
+	{
+		bool temp = scalar;
+		scalar = false;
+		return temp;
+	}
+};
+
 template <class T>
 class push_back_op {
 	T& container;
@@ -232,15 +252,14 @@ struct create_spe_region {
 	vars_op<shared_variable>&	shared_op;
 	vars_op<reduction_variable>&	reduce_def_op;
 	scalar_op<string>&		reduce_op_op;
-	scalar_op<int>&			unroll_op;
 	scalar_op<int>&			buffer_op;
-	scalar_op<bool>&		dma_unroll_op;
+	scalar_op<bool>&		vector_op;
 
 	create_spe_region(spelist& r, vars_op<private_variable>& p, 
 			vars_op<shared_variable>& s, vars_op<reduction_variable>& rd, 
-			scalar_op<string>& ro, scalar_op<int>& uo, scalar_op<int>& bo, scalar_op<bool>& d):
+			scalar_op<string>& ro, scalar_op<int>& bo, scalar_op<bool>& v):
 		regions(r), priv_op(p), shared_op(s), 
-		reduce_def_op(rd), reduce_op_op(ro), unroll_op(uo), buffer_op(bo), dma_unroll_op(d)
+		reduce_def_op(rd), reduce_op_op(ro), buffer_op(bo), vector_op(v)
 		{}
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -250,9 +269,8 @@ struct create_spe_region {
 						reduce_op_op.pickup(),
 						shared_op.pickup_symbols(),
 						priv_op.pickup_symbols(),
-						unroll_op.pickup(),
 						buffer_op.pickup(),
-						dma_unroll_op.pickup()
+						vector_op.pickup()
 						);
 		regions.push_back(r);
 	}
@@ -266,9 +284,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	priv_symtbl private_symbols;
 	reduc_symtbl reduction_symbols;
 	string op;
-	int unroll;
 	int buffer;
-	bool dma_unroll;
+	bool vector;
 	push_back_op<sslist> ppe_op;
 	vars_op<private_variable> priv_op;
 	special_assign<private_variable> start_op;
@@ -276,13 +293,12 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	vars_op<shared_variable> shared_op;
 	vars_op<reduction_variable> reduce_def_op;
 	scalar_op<string> reduce_op_op;
-	scalar_op<int> unroll_op;
 	scalar_op<int> buffer_op;
-	scalar_op<bool> dma_unroll_op;
+	scalar_op<bool> vector_op;
 	create_spe_region region_op;
 
 	cellgen_grammar(sslist& ppe, spelist& regions):
-		unroll(0), buffer(0), dma_unroll(false),
+		buffer(0),
 		ppe_op(ppe),
 		priv_op(privs, private_symbols, regions),
 		start_op(priv_op, private_symbols, "SPE_start", regions),
@@ -290,17 +306,16 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		shared_op(shared, shared_symbols, regions),
 		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),
-		unroll_op(unroll),
 		buffer_op(buffer),
-		dma_unroll_op(dma_unroll),
+		vector_op(vector),
 		region_op(regions,
 			priv_op, 
 			shared_op,
 			reduce_def_op,
 			reduce_op_op,
-			unroll_op,
-			buffer_op,
-			dma_unroll_op)
+			buffer_op, 
+			vector_op
+			)
 		{}
 
 	template <typename ScannerT>
@@ -311,9 +326,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			start_code, start_priv, stop_code, stop_priv,
 			priv_code, priv_list, priv_dec, priv_dec_f,
 			shared_code, shared_list, shared_dec, shared_dec_f,
-			unrolled_code, unroll_num,
 			buffer_code, buffer_num,
-			dma_unroll_code, dma_val;
+			vector_code, vector_num;
 
 		rule<ScannerT, parser_tag<ids::cell_region> >
 			pragma_code;
@@ -344,9 +358,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			| 	stop_code
 			|	reduction
 			| 	shared_code
-			|	unrolled_code
 			|	buffer_code
-			|	dma_unroll_code
+			|	vector_code
 			;
 
 			start_code = 
@@ -423,17 +436,11 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 					lexeme_d[ *(anychar_p - ',' - ')') ]
 				];
 
-			unrolled_code = no_node_d[strlit<>("unroll(")] >> unroll_num[self.unroll_op] >> no_node_d[chlit<>(')')];
-
-			unroll_num = no_node_d[int_p];
+			vector_code = no_node_d[strlit<>("vector")][self.vector_op];
 
 			buffer_code = no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
 
 			buffer_num = no_node_d[int_p];
-
-			dma_unroll_code = no_node_d[strlit<>("dma_unroll(")] >> dma_val[self.dma_unroll_op] >> no_node_d[chlit<>(')')];
-
-			dma_val = no_node_d[int_p];
 		}
 	};
 };

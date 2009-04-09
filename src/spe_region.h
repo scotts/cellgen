@@ -17,15 +17,13 @@ class spe_region {
 	ast_node* _ast_root;
 	string _induction;
 	string _estimate;
-	int _unroll;
 	int _buffer;
-	bool _dma_unroll;
+	bool _vector;
 
 public:
-	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, int u, int b, bool d):
-		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _shared_symbols(ss), _priv_symbols(ps), _unroll(u), _buffer(b), _dma_unroll(d)
+	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, int b, bool v):
+		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _shared_symbols(ss), _priv_symbols(ps), _buffer(b), _vector(v)
 	{
-		assert(_unroll >= 0);
 		assert(_buffer >= 0);
 		if (_reductions.size() > 0) {
 			assert(_reduction_op != "");
@@ -39,9 +37,8 @@ public:
 	priv_symtbl& priv_symbols()	{ return _priv_symbols; }
 
 	string reduction_op() const	{ return _reduction_op; }
-	int unroll() const		{ return _unroll; }
 	int buffer() const		{ return _buffer; }
-	bool dma_unroll() const		{ return _dma_unroll; }
+	bool vector() const		{ return _vector; }
 	string induction() const	{ return _induction; }
 
 	void estimate(const string& e) { _estimate = e; }
