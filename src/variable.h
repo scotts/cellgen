@@ -18,16 +18,17 @@ struct conditions {
 	string start;
 	string induction;
 	string stop;
+	string step;
 
 	conditions()
 		{}
-	conditions(const string& _start, const string& _induction, const string& _stop):
-		start(_start), induction(_induction), stop(_stop)
+	conditions(const string& _start, const string& _induction, const string& _stop, const string& _step):
+		start(_start), induction(_induction), stop(_stop), step(_step)
 		{}
 
 	bool operator==(const conditions& o) const
 	{
-		return start == o.start && induction == o.induction && stop == o.stop;
+		return start == o.start && induction == o.induction && stop == o.stop && step == o.step;
 	}
 };
 typedef list<conditions> condslist;

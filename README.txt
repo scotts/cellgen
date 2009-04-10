@@ -17,7 +17,7 @@ Other than that, a simple "make" should do.
 Usage
 -----
 
-cellgen foo.cellgen [-n <# SPEs>] [-I <include file for PPE/SPE]
+cellgen foo.cellgen [-n <# SPEs>] [-I <include file for PPE/SPE>]
 
 Brief Programming Tutorital
 ---------------------------

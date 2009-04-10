@@ -957,7 +957,7 @@ void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const
 	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
 	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
 
-	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(max).name()));
+	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
 	rbrace.push_back(new buffer_loop_stop());
 
 	append(for_loop.value.xformations, fmap(make_reset_rem(conds, max_factor), seen));
@@ -1124,35 +1124,53 @@ struct conditional_search {
 	}
 };
 
-void serial_for_op::operator()(ast_node& node)
+class build_string {
+	string& str;
+public:
+	build_string(string& s): str(s) {}
+	void operator()(ast_node& node)
+	{
+		str += string(node.value.begin(), node.value.end());
+	}
+};
+
+void parse_conditions(ast_node& node, const int expressions_seen, condslist& conds, conditions& cond)
 {
-	if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement) {
-		++expressions_seen;
+	if (expressions_seen >= 4) {
+		throw user_error("number of expressions seen in serial_for_op.");
+	}
 
-		// Second expression is the test, which will contain both the induction and 
-		// conditional identifiers.
-		if (expressions_seen < 3) {
-			conditional_search conditional;
-			for_all(node.children, &conditional);
+	if (expressions_seen < 3) {
+		conditional_search conditional;
+		for_all(node.children, &conditional);
 
-			if (!conditional.lhs || !conditional.rhs) {
-				throw user_error("No relational or assignment expression in nested for loop.");
-			}
+		if (!conditional.lhs || !conditional.rhs) {
+			throw user_error("No relational or assignment expression in nested for loop.");
+		}
 
-			if (expressions_seen == 1) {
-				sercond.induction = string(conditional.lhs->value.begin(), conditional.lhs->value.end());
-				sercond.start = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
-			}
-			else if (expressions_seen == 2) {
-				sercond.stop = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
-				if (!exists_in(conds, sercond)) {
-					conds.push_back(sercond);
-				}
-			}
-			else {
-				throw user_error("number of expressions seen in serial_for_op.");
+		if (expressions_seen == 1) {
+			cond.induction = string(conditional.lhs->value.begin(), conditional.lhs->value.end());
+			cond.start = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
+		}
+		else if (expressions_seen == 2) {
+			cond.stop = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
+			if (!exists_in(conds, cond)) {
+				conds.push_back(cond);
 			}
 		}
+	}
+	else {
+		string str;
+		call_descend(build_string(str), node);
+		cond.step = str;
+	}
+}
+
+void serial_for_op::operator()(ast_node& node)
+{
+	if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || node.value.id() == ids::assignment_expression) {
+		++expressions_seen;
+		parse_conditions(node, expressions_seen, conds, sercond);
 	}
 	else if (node.value.id() == ids::compound) {
 		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, global_in, global_out, global_inout, ops, conds, condnodes);
@@ -1179,30 +1197,26 @@ struct parallel_for_op {
 	condslist& conds;
 	bind_xformer& condnodes;
 	ast_node& parent;
-	conditions parconds;
+	conditions parcond;
+	int expressions_seen;
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, 
 			sharedset& io, operations& op, condslist& c, bind_xformer& n, ast_node& par): 
 		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), 
-		ops(op), conds(c), condnodes(n), parent(par)
+		ops(op), conds(c), condnodes(n), parent(par), expressions_seen(0)
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::identifier) {
-			const string ident(node.value.begin(), node.value.end());
-			if (ident != "SPE_start" && ident != "SPE_stop") {
-				if (parconds.induction != "" && parconds.induction != ident) {
-					throw multiple_parallel_induction_variables(parconds.induction, ident);
-				}
-				parconds.induction = ident;
+		if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || node.value.id() == ids::assignment_expression) {
+			++expressions_seen;
+			parse_conditions(node, expressions_seen, conds, parcond);
 
-				// We assume this now. In the future we should discover this.
-				parconds.start = "SPE_start";
-				parconds.stop = "SPE_stop";
-
-				if (!exists_in(conds, parconds)) {
-					conds.push_back(parconds);
-				}
+			if (expressions_seen == 1 && parcond.start != "SPE_start") {
+				throw user_error("start condition is not SPE_start.");	
 			}
+			else if (expressions_seen == 2 && parcond.stop != "SPE_stop") {
+				throw user_error("stop condition is not SPE_stop.");	
+			}
+
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
@@ -1227,8 +1241,8 @@ struct parallel_for_op {
 			const fn_and<shared_variable> row_and_flat(&shared_variable::is_row, &shared_variable::is_flat);
 			const sharedset& flat_ins = filter(row_and_flat, set_union_all(in, inout));
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
-			const make_conditions<gen_in<row_access> > make_gen_in_row(parconds, local_depths);
-			const make_conditions<gen_out<row_access> > make_gen_out_row(parconds, local_depths);
+			const make_conditions<gen_in<row_access> > make_gen_in_row(parcond, local_depths);
+			const make_conditions<gen_out<row_access> > make_gen_out_row(parcond, local_depths);
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
@@ -1236,14 +1250,14 @@ struct parallel_for_op {
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
 				const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
 				const shared_variable* first = *flat_all.begin();
-				const string& factor = first->math().factor(parconds.induction);
+				const string& factor = first->math().factor(parcond.induction);
 				string buffer_size = buffer_adaptor(first).size();
 			
 				if (factor != "") {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				loop_mitosis(parent, shared_symbols, priv_symbols, parconds, flat_all, buffer_size);
+				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, flat_all, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));

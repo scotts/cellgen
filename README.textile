@@ -18,7 +18,7 @@ h2. Usage
 
 <pre>
 <code>
-cellgen foo.cellgen [-n <# SPEs>] [-I <include file for PPE/SPE]
+cellgen foo.cellgen [-n <# SPEs>] [-I <include file for PPE/SPE>]
 </code>
 </pre>
 

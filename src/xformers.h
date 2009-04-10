@@ -193,14 +193,17 @@ class buffer_loop_start: public remainder_xformer {
 	const variable index;
 	const string buffer_size;
 	const string remainder_size;
+	const string induction;
+	const string step;
 public:
-	buffer_loop_start(const variable& i, const string& b, const string& l): index(i), buffer_size(b), remainder_size(l) {}
+	buffer_loop_start(const variable& i, const string& b, const string& l, const string& ind, const string& s): 
+		index(i), buffer_size(b), remainder_size(l), induction(ind), step(s) {}
 	string operator()(const string& old)
 	{
-		return old + 
-			"for (" + index.name() + "= 0;" + index.name() + "<" + 
-			(is_remainder ? remainder_size : buffer_size) + 
-			"; ++" + index.name() + ") {"; 
+		return old + "for (" + 
+			index.name() + "= 0;" + 
+			index.name() + "<" + (is_remainder ? remainder_size : buffer_size) + ";" + 
+			regex_replace(step, regex(induction), index.name()) + ") {"; 
 	}
 
 	xformer* clone() const { return new buffer_loop_start(*this); }
