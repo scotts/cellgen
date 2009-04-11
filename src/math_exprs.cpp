@@ -243,11 +243,14 @@ string add_expr::str() const
 	if (_lhs.str() == "" && _op == "" && _rhs.str() == "") {
 		return "";
 	}
-	if (_rhs.str() == "" && _op == "") {
+	else if (_lhs.str() == "") {
+		return _rhs.str();
+	}
+	else if (_rhs.str() == "") {
 		return _lhs.str();
 	}
 
-	return "((" + _lhs.str() + ")" + _op + "(" + _rhs.str() + "))";
+	return "(" + _lhs.str() + _op + _rhs.str() + ")";
 }
 
 string add_expr::add_iteration(const string& ivar, const string& size) const

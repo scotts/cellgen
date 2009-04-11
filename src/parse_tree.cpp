@@ -1041,6 +1041,7 @@ struct for_compound_op {
 			xformerlist& nested = node.value.xformations;
 			const conditions& outer = conds.back();
 			const conditions& inner = o.conds.back();
+
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
 			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
@@ -1066,9 +1067,6 @@ struct for_compound_op {
 				const string& buffer_size = buffer_adaptor(first).size();
 				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
 			}
-
-			conditions bridge_out = inner;
-			bridge_out.induction = outer.induction;
 
 			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
 			for_all(seen_outs, mem_fn(&shared_variable::out_generated));
@@ -1137,7 +1135,7 @@ public:
 void parse_conditions(ast_node& node, const int expressions_seen, condslist& conds, conditions& cond)
 {
 	if (expressions_seen >= 4) {
-		throw user_error("number of expressions seen in serial_for_op.");
+		throw user_error("number of expressions seen in parse_conditions.");
 	}
 
 	if (expressions_seen < 3) {
@@ -1154,21 +1152,23 @@ void parse_conditions(ast_node& node, const int expressions_seen, condslist& con
 		}
 		else if (expressions_seen == 2) {
 			cond.stop = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
-			if (!exists_in(conds, cond)) {
-				conds.push_back(cond);
-			}
 		}
 	}
 	else {
 		string str;
 		call_descend(build_string(str), node);
 		cond.step = str;
+
+		if (!exists_in(conds, cond)) {
+			conds.push_back(cond);
+		}
 	}
 }
 
 void serial_for_op::operator()(ast_node& node)
 {
-	if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || node.value.id() == ids::assignment_expression) {
+	if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || 
+			node.value.id() == ids::assignment_expression || node.value.id() == ids::unary_expression) {
 		++expressions_seen;
 		parse_conditions(node, expressions_seen, conds, sercond);
 	}
@@ -1206,7 +1206,8 @@ struct parallel_for_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || node.value.id() == ids::assignment_expression) {
+		if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || 
+				node.value.id() == ids::assignment_expression || node.value.id() == ids::unary_expression) {
 			++expressions_seen;
 			parse_conditions(node, expressions_seen, conds, parcond);
 
@@ -1216,7 +1217,6 @@ struct parallel_for_op {
 			else if (expressions_seen == 2 && parcond.stop != "SPE_stop") {
 				throw user_error("stop condition is not SPE_stop.");	
 			}
-
 		}
 		else if (node.value.id() == ids::compound) {
 			bind_xformer condnodes_col;
