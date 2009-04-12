@@ -18,11 +18,10 @@ class spe_region {
 	string _induction;
 	string _estimate;
 	int _buffer;
-	bool _vector;
 
 public:
-	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, int b, bool v):
-		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _shared_symbols(ss), _priv_symbols(ps), _buffer(b), _vector(v)
+	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, int b):
+		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _shared_symbols(ss), _priv_symbols(ps), _buffer(b)
 	{
 		assert(_buffer >= 0);
 		if (_reductions.size() > 0) {
@@ -38,7 +37,6 @@ public:
 
 	string reduction_op() const	{ return _reduction_op; }
 	int buffer() const		{ return _buffer; }
-	bool vector() const		{ return _vector; }
 	string induction() const	{ return _induction; }
 
 	void estimate(const string& e) { _estimate = e; }

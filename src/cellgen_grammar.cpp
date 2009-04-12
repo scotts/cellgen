@@ -253,13 +253,12 @@ struct create_spe_region {
 	vars_op<reduction_variable>&	reduce_def_op;
 	scalar_op<string>&		reduce_op_op;
 	scalar_op<int>&			buffer_op;
-	scalar_op<bool>&		vector_op;
 
 	create_spe_region(spelist& r, vars_op<private_variable>& p, 
 			vars_op<shared_variable>& s, vars_op<reduction_variable>& rd, 
-			scalar_op<string>& ro, scalar_op<int>& bo, scalar_op<bool>& v):
+			scalar_op<string>& ro, scalar_op<int>& bo):
 		regions(r), priv_op(p), shared_op(s), 
-		reduce_def_op(rd), reduce_op_op(ro), buffer_op(bo), vector_op(v)
+		reduce_def_op(rd), reduce_op_op(ro), buffer_op(bo)
 		{}
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -269,8 +268,7 @@ struct create_spe_region {
 						reduce_op_op.pickup(),
 						shared_op.pickup_symbols(),
 						priv_op.pickup_symbols(),
-						buffer_op.pickup(),
-						vector_op.pickup()
+						buffer_op.pickup()
 						);
 		regions.push_back(r);
 	}
@@ -285,7 +283,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	reduc_symtbl reduction_symbols;
 	string op;
 	int buffer;
-	bool vector;
 	push_back_op<sslist> ppe_op;
 	vars_op<private_variable> priv_op;
 	special_assign<private_variable> start_op;
@@ -294,7 +291,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	vars_op<reduction_variable> reduce_def_op;
 	scalar_op<string> reduce_op_op;
 	scalar_op<int> buffer_op;
-	scalar_op<bool> vector_op;
 	create_spe_region region_op;
 
 	cellgen_grammar(sslist& ppe, spelist& regions):
@@ -307,14 +303,12 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),
 		buffer_op(buffer),
-		vector_op(vector),
 		region_op(regions,
 			priv_op, 
 			shared_op,
 			reduce_def_op,
 			reduce_op_op,
-			buffer_op, 
-			vector_op
+			buffer_op
 			)
 		{}
 
@@ -326,8 +320,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			start_code, start_priv, stop_code, stop_priv,
 			priv_code, priv_list, priv_dec, priv_dec_f,
 			shared_code, shared_list, shared_dec, shared_dec_f,
-			buffer_code, buffer_num,
-			vector_code, vector_num;
+			buffer_code, buffer_num;
 
 		rule<ScannerT, parser_tag<ids::cell_region> >
 			pragma_code;
@@ -359,7 +352,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			|	reduction
 			| 	shared_code
 			|	buffer_code
-			|	vector_code
 			;
 
 			start_code = 
@@ -435,8 +427,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			shared_dec_f = no_node_d[
 					lexeme_d[ *(anychar_p - ',' - ')') ]
 				];
-
-			vector_code = no_node_d[strlit<>("vector")][self.vector_op];
 
 			buffer_code = no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
 
