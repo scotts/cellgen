@@ -17,7 +17,7 @@ inline void bounds_assign(int* start, int* stop, const int cutoff_id, const int 
 
 void compute_bounds (int *start, int *stop, size_t element_sz)
 {
-	const int bytes16 = 16 / element_sz;
+	const int bytes16 = 128 / element_sz;
 	const int total_chunks = (*stop - *start) / bytes16;
 	const int base_chunks = total_chunks / SPE_threads;
 	const int thread_bytes_rem = ((*stop - *start) % (bytes16 * SPE_threads));

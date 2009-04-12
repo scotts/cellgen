@@ -44,6 +44,30 @@ xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
 
 // FIXME: For some of these identities, I should use named constants, not string.
 
+template <class Node>
+bool node_is(const Node& node, const int id)
+{
+	return node.value.id() == id;
+}
+
+template <class Node>
+bool node_is(const Node& node, const int id1, const int id2)
+{
+	return node.value.id() == id1 || node.value.id() == id2;
+}
+
+template <class Node>
+bool node_is(const Node& node, const int id1, const int id2, const int id3)
+{
+	return node.value.id() == id1 || node.value.id() == id2 || node.value.id() == id3;
+}
+
+template <class Node>
+bool node_is(const Node& node, const int id1, const int id2, const int id3, const int id4)
+{
+	return node.value.id() == id1 || node.value.id() == id2 || node.value.id() == id3 || node.value.id() == id4;
+}
+
 bool is_int(const string& str)
 {
 	return str.find("int") != string::npos || str.find("long") != string::npos;
@@ -66,9 +90,7 @@ bool is_int_constant(const ast_node& node)
 
 bool is_float_constant(const ast_node& node)
 {
-	return node.value.id() == ids::float_constant_1 ||
-		node.value.id() == ids::float_constant_2 ||
-		node.value.id() == ids::float_constant_3;
+	return node_is(node, ids::float_constant_1, ids::float_constant_2, ids::float_constant_3);
 }
 
 bool is_constant(const ast_node& node)
@@ -78,7 +100,7 @@ bool is_constant(const ast_node& node)
 
 bool is_declaration(const ast_node& node)
 {
-	return node.value.id() == ids::declaration;
+	return node_is(node, ids::declaration);
 }
 
 bool is_bracket(const string& s)
@@ -113,7 +135,7 @@ bool is_operation(const string& s)
 
 bool is_ident_or_constant(const ast_node& node)
 {
-	return node.value.id() == ids::identifier || is_constant(node);
+	return node_is(node, ids::identifier) || is_constant(node);
 }
 
 bool is_equals(const ast_node& node)
@@ -142,7 +164,7 @@ bool is_type_specifier(const ast_node& node)
 
 bool is_struct_access(const ast_node& node)
 {
-	return node.value.id() == ids::dot || node.value.id() == ids::ptr_op;
+	return node_is(node, ids::dot, ids::ptr_op);
 }
 
 template <class Node>
@@ -167,12 +189,12 @@ bool is_expression(const ast_node& node)
 
 bool is_for_loop(ast_node& node)
 {
-	return node.value.id() == ids::for_loop;
+	return node_is(node, ids::for_loop);
 }
 
 bool is_compound_expression(ast_node& node)
 {
-	return node.value.id() == ids::compound;
+	return node_is(node, ids::compound);
 }
 
 add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices)
@@ -254,7 +276,7 @@ struct array_mult_op {
 	{
 		string val(node.value.begin(), node.value.end());
 
-		if (node.value.id() == ids::multiplicative_expression) {
+		if (node_is(node, ids::multiplicative_expression)) {
 			mult_expr m;
 			array_mult_op o(conds, found_induction, m, id);
 			for_all(node.children, &o);
@@ -272,7 +294,7 @@ struct array_mult_op {
 			found_op = true;
 		}
 		else if (is_ident_or_constant(node)) {
-			if (node.value.id() == ids::identifier) {
+			if (node_is(node, ids::identifier)) {
 				if (exists_in(conds, val, induction_equal)) {
 					id = val;
 					found_induction = true;
@@ -305,7 +327,7 @@ struct array_add_op {
 	{
 		string val(node.value.begin(), node.value.end());
 
-		if (node.value.id() == ids::multiplicative_expression) {
+		if (node_is(node, ids::multiplicative_expression)) {
 			mult_expr mult;
 			string id;
 			array_mult_op o(conds, found_induction, mult, id);
@@ -352,11 +374,11 @@ struct array_op {
 	{
 		string val(node.value.begin(), node.value.end());
 
-		if (node.value.id() == ids::int_constant_dec) {
+		if (node_is(node, ids::int_constant_dec)) {
 			lmult.lhs(val);
 			add.lhs(lmult);
 		}
-		else if (node.value.id() == ids::identifier) {
+		else if (node_is(node, ids::identifier)) {
 			// FIXME: do we need this or not?
 			if (exists_in(conds, val, induction_equal)) {
 				lmult.lhs(val);
@@ -365,11 +387,11 @@ struct array_op {
 				found_induction = true;
 			}
 		}
-		else if (node.value.id() == ids::additive_expression) {
+		else if (node_is(node, ids::additive_expression)) {
 			array_add_op o(conds, found_induction, add);
 			for_all(node.children, &o);
 		}
-		else if (node.value.id() == ids::multiplicative_expression) {
+		else if (node_is(node, ids::multiplicative_expression)) {
 			string id;
 			array_mult_op o(conds, found_induction, lmult, id);
 			for_all(node.children, &o);
@@ -402,7 +424,7 @@ struct postfix_op {
 	void operator()(ast_node& node)
 	{
 		string val(node.value.begin(), node.value.end());
-		if (node.value.id() == ids::identifier) {
+		if (node_is(node, ids::identifier)) {
 			if (!found_shared) {
 				shared_symtbl::const_iterator s = shared_symbols.find(val);
 				priv_symtbl::const_iterator p = priv_symbols.find(val);
@@ -420,7 +442,7 @@ struct postfix_op {
 				}
 			}
 		}
-		else if (node.value.id() == ids::array_index) {
+		else if (node_is(node, ids::array_index)) {
 			add_expr a;
 			array_op o(conds, found_induction, a);
 			for_all(node.children, &o);
@@ -577,19 +599,19 @@ struct multiplicative_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::multiplicative_expression) {
+		if (node_is(node, ids::multiplicative_expression)) {
 			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 			type = o.type;
 		}
-		else if(node.value.id() == ids::multiplicative_expression_helper) {
+		else if (node_is(node, ids::multiplicative_expression_helper)) {
 			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
 			type = type_promotion(type, o.type);
 			ops.inc(o.op, type);
 		}
-		else if (node.value.id() == ids::postfix_expression) {
+		else if (node_is(node, ids::postfix_expression)) {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
 		}
 		else if (is_kind_of_mul(node)) {
@@ -620,14 +642,14 @@ struct additive_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::multiplicative_expression) {
+		if (node_is(node, ids::multiplicative_expression)) {
 			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
 			type = o.type;
 			found_mult = true;
 		}
-		else if (node.value.id() == ids::additive_expression_helper) {
+		else if (node_is(node, ids::additive_expression_helper)) {
 			additive_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 
@@ -636,7 +658,7 @@ struct additive_op {
 				ops.inc(o.op, type);
 			}
 		}
-		else if (node.value.id() == ids::postfix_expression) {
+		else if (node_is(node, ids::postfix_expression)) {
 			type = postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
 		}
 		else if (is_kind_of_add(node)) {
@@ -664,15 +686,15 @@ struct assignment_split {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::postfix_expression) {
+		if (node_is(node, ids::postfix_expression)) {
 			// Ignoring type because there's no computation.
 			postfix_postop(node, shared_symbols, priv_symbols, ops, data, conds, vars);
 		}
-		else if (node.value.id() == ids::additive_expression) {
+		else if (node_is(node, ids::additive_expression)) {
 			additive_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 		}
-		else if (node.value.id() == ids::multiplicative_expression) {
+		else if (node_is(node, ids::multiplicative_expression)) {
 			multiplicative_op o(shared_symbols, priv_symbols, ops, data, conds, vars, locals);
 			for_all(node.children, &o);
 		}
@@ -696,7 +718,7 @@ struct assignment_search {
 	void operator()(ast_node& node)
 	{
 		// Needs to work for non-assignment expressions.
-		if (node.value.id() == ids::assignment_expression) {
+		if (node_is(node, ids::assignment_expression)) {
 			ast_iterator eqs = find_if_all(node.children, is_equals);
 
 			try {
@@ -797,11 +819,11 @@ struct declaration_op {
 		if (is_type_specifier(node)) {
 			type = string(node.value.begin(), node.value.end());
 		}
-		else if (node.value.id() == ids::init_declarator) {
+		else if (node_is(node, ids::init_declarator)) {
 			pair<ast_iterator, ast_node*> p = find_equals(node);
 			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, ops, LOAD, conds, in, locals)); 
 		}
-		else if (node.value.id() == ids::identifier) {
+		else if (node_is(node, ids::identifier)) {
 			string name = string(node.value.begin(), node.value.end());
 			locals[name] = new variable(type, name);
 		}
@@ -845,7 +867,7 @@ struct match_identifier {
 
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::identifier) {
+		if (node_is(node, ids::identifier)) {
 			if (to_replace == string(node.value.begin(), node.value.end())) {
 				node.value.xformations.push_back(x);
 			}
@@ -902,7 +924,7 @@ struct transform_local_buffers {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::postfix_expression) {
+		if (node_is(node, ids::postfix_expression)) {
 			sharedset vars;
 			condslist box;	
 			box.push_back(conds);
@@ -1000,13 +1022,13 @@ struct for_compound_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::declaration) {
+		if (node_is(node, ids::declaration)) {
 			declaration_op o(shared_symbols, priv_symbols, locals, ops, conds);
 			for_all(node.children, &o);
 
 			in.insert(o.in.begin(), o.in.end());
 		}
-		else if (node.value.id() == ids::expression_statement || node.value.id() == ids::selection_statement) {
+		else if (node_is(node, ids::expression_statement, ids::selection_statement)) {
 			assignment_search o(shared_symbols, priv_symbols, ops, conds, out, locals);
 			for_all(node.children, &o);
 
@@ -1015,7 +1037,7 @@ struct for_compound_op {
 
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
-		else if (node.value.id() == ids::for_loop) {
+		else if (is_for_loop(node)) {
 			const size_t before_in = global_in.size();
 			const size_t before_out = global_out.size();
 			const size_t before_inout = global_inout.size();
@@ -1087,7 +1109,7 @@ struct operator_wedge {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::identifier || is_constant(node)) {
+		if (node_is(node, ids::identifier) || is_constant(node)) {
 			if (!seen_operator) {
 				lhs = &node;
 			}
@@ -1112,7 +1134,7 @@ struct conditional_search {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::relational_expression || node.value.id() == ids::assignment_expression) {
+		if (node_is(node, ids::relational_expression, ids::assignment_expression)) {
 			operator_wedge w(lhs, rhs);
 			for_all(node.children, &w);
 		}
@@ -1167,12 +1189,11 @@ void parse_conditions(ast_node& node, const int expressions_seen, condslist& con
 
 void serial_for_op::operator()(ast_node& node)
 {
-	if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || 
-			node.value.id() == ids::assignment_expression || node.value.id() == ids::unary_expression) {
+	if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression)) {
 		++expressions_seen;
 		parse_conditions(node, expressions_seen, conds, sercond);
 	}
-	else if (node.value.id() == ids::compound) {
+	else if (node_is(node, ids::compound)) {
 		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, global_in, global_out, global_inout, ops, conds, condnodes);
 		for_all(node.children, &o);
 	}
@@ -1206,8 +1227,7 @@ struct parallel_for_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::expression || node.value.id() == ids::expression_statement || 
-				node.value.id() == ids::assignment_expression || node.value.id() == ids::unary_expression) {
+		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression)) {
 			++expressions_seen;
 			parse_conditions(node, expressions_seen, conds, parcond);
 
@@ -1218,7 +1238,7 @@ struct parallel_for_op {
 				throw user_error("stop condition is not SPE_stop.");	
 			}
 		}
-		else if (node.value.id() == ids::compound) {
+		else if (node_is(node, ids::compound)) {
 			bind_xformer condnodes_col;
 			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds, condnodes_col);
 			o(node);
@@ -1271,7 +1291,7 @@ struct parallel_for_op {
 
 bool has_declaration(const ast_node& node)
 {
-	if (node.value.id() == ids::declaration) {
+	if (node_is(node, ids::declaration)) {
 		return true;
 	}
 	else {
@@ -1291,7 +1311,7 @@ struct wipeout_identifier {
 		ident(i), root(r) {}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::identifier) {
+		if (node_is(node, ids::identifier)) {
 			if (ident == string(node.value.begin(), node.value.end())) {
 				root.value.xformations.push_back(new nop);
 				root.children.clear();
@@ -1303,7 +1323,7 @@ struct wipeout_identifier {
 struct wipeout_declarations {
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::declaration) {
+		if (node_is(node, ids::declaration)) {
 			node.value.xformations.push_back(new nop);
 			node.children.clear();
 		}
@@ -1313,9 +1333,7 @@ struct wipeout_declarations {
 struct init_declarations_to_expressions {
 	void operator()(ast_node& node)
 	{
-		if (	node.value.id() == ids::declaration_specifiers || 
-			node.value.id() == ids::pointer || is_type_specifier(node))
-		{
+		if (node_is(node, ids::declaration_specifiers, ids::pointer) || is_type_specifier(node)) {
 			node.value.xformations.push_back(new nop);
 			node.children.clear();
 		}
@@ -1327,7 +1345,7 @@ struct init_declarations_to_expressions {
 
 bool is_const_declaration(const ast_node& node)
 {
-	if (node.value.id() == ids::declaration_specifiers) {
+	if (node_is(node, ids::declaration_specifiers)) {
 		if (node.children.empty()) {
 			return false;
 		}
@@ -1346,7 +1364,7 @@ bool is_const_declaration(const ast_node& node)
 
 bool is_pure_declaration(const ast_node& node)
 {
-	if (node.value.id() == ids::init_declarator) {
+	if (node_is(node, ids::init_declarator)) {
 		return false;
 	}
 	else {
@@ -1362,7 +1380,7 @@ bool is_pure_declaration(const ast_node& node)
 struct wipeout_const_and_pure_declarations {
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::declaration) {
+		if (node_is(node, ids::declaration)) {
 			if (is_const_declaration(node) || is_pure_declaration(node)) {
 				node.value.xformations.push_back(new nop);
 				node.children.clear();
@@ -1390,7 +1408,7 @@ struct compound {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::for_loop) {
+		if (node_is(node, ids::for_loop)) {
 			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, conds, condnodes, node);
 			try {
 				for_all(node.children, &o);
@@ -1474,7 +1492,7 @@ struct selection_op {
 	{
 		const string val = string(node.value.begin(), node.value.end());
 
-		if (node.value.id() == ids::selection_statement) {
+		if (node_is(node, ids::selection_statement)) {
 			for_all(node.children, statement_op(overhead, startup));
 		}
 		else if (is_operation(val)) {
@@ -1565,7 +1583,7 @@ struct cell_region {
 	cell_region(spelist::iterator r): region(r) {}
 	void operator()(ast_node& node)
 	{
-		if (node.value.id() == ids::compound) {
+		if (node_is(node, ids::compound)) {
 			// Trust me, this enchances readability.
 			sharedset& shared = (*region)->shared();
 			const privset& priv = (*region)->priv();
