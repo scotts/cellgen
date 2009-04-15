@@ -1061,6 +1061,7 @@ struct for_compound_op {
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
 			xformerlist& nested = node.value.xformations;
+
 			const conditions& outer = conds.back();
 			const conditions& inner = o.conds.back();
 
@@ -1069,9 +1070,11 @@ struct for_compound_op {
 			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
 			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, local_inout));
 
-			conditions bridge_in = outer;
-			bridge_in.induction = inner.induction;
-			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
+			if (conds.size() > 0 && o.conds.size() > 0) {
+				conditions bridge_in = outer;
+				bridge_in.induction = inner.induction;
+				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
+			}
 
 			// TODO:
 			// 	- Optimization if buffer is same size as (stop - start)?
@@ -1183,6 +1186,7 @@ void parse_conditions(ast_node& node, const int expressions_seen, condslist& con
 
 		if (!exists_in(conds, cond)) {
 			conds.push_back(cond);
+			cout << cond.start << " " << cond.induction << " " << cond.stop << " " << cond.step << endl;
 		}
 	}
 }
@@ -1609,6 +1613,7 @@ struct cell_region {
 			for_all(inout, make_assign_set<shared_variable*>(3, max_depths));
 			for_all(priv, make_assign_set<private_variable*>(1, max_depths));
 
+			cout << conds.size() << endl;
 			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
 

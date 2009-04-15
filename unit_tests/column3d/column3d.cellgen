@@ -23,7 +23,7 @@ void inout1(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N2) buffer(0) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* test = test[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N2) buffer(0) shared(int16b_t* test = test[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -59,7 +59,7 @@ void in_and_out2(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(0) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -95,7 +95,7 @@ void in_and_out1(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N2) buffer(0) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N2) buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -131,7 +131,7 @@ void inout2(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(0) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int16b_t* test = test[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(0) shared(int16b_t* test = test[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {

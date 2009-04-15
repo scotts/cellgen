@@ -26,8 +26,7 @@ void MMGP_offload(void);
 void MMGP_start_SPE(unsigned int i, int value);
 void MMGP_wait_SPE(int fn_id);
 void MMGP_create_threads(void);
-//void (*MMGP_reduction)(double *cont, int num);
-//
+
 #define MMGP_reduction(c, op, fn_id) \
 ({ \
 	int i; \
@@ -89,11 +88,8 @@ volatile unsigned int pass[MAX_NUM_SPEs];
 volatile unsigned int signal[MAX_NUM_SPEs];
 
 unsigned long long MPI_calls;
-//unsigned long long ppe_T[MAX_NUM_SPEs], ppe_N[MAX_NUM_SPEs],  total_time, start_time;
-//unsigned long long spe_L[MAX_NUM_SPEs], spe_T[MAX_NUM_SPEs];
 unsigned long long COMM_rec[10], MPI_total, MPI_count;
 unsigned int __SPE_threads;
-//double prediction[20][20];
 unsigned int NUM_SPE;
 
 #ifdef PROFILING

@@ -35,7 +35,7 @@ int double_eq(double a, double b)
 
 void all_rows_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t wind_u[NROWS][NCOLS], double16b_t diff[NROWS][NCOLS])
 {
-	#pragma cell SPE_start(0) SPE_stop(NROWS) buffer(1024) shared(double16b_t* wind_u = wind_u[NROWS][NCOLS], double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* diff = diff[NROWS][NCOLS]) private(double dt = dt, int NROWS = NROWS, int NCOLS = NCOLS, int NSPEC = NSPEC)
+	#pragma cell SPE_start(0) SPE_stop(NROWS) buffer(32) shared(double16b_t* wind_u = wind_u[NROWS][NCOLS], double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* diff = diff[NROWS][NCOLS]) private(double dt = dt)
 	{
 	int i, s;
 	for (i = SPE_start; i < SPE_stop; i++) {
@@ -610,7 +610,7 @@ void all_rows_ppe(double dt, double conc[NROWS][NCOLS][NSPEC], double wind_u[NRO
 
 void all_cols_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t wind_v[NROWS][NCOLS], double16b_t diff[NROWS][NCOLS])
 {
-	#pragma cell SPE_start(0) SPE_stop(NCOLS) buffer(1024) shared(double16b_t* wind_v = wind_v[NROWS][NCOLS], double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* diff = diff[NROWS][NCOLS]) private(double dt = dt, int NROWS = NROWS, int NCOLS = NCOLS, int NSPEC = NSPEC)
+	#pragma cell SPE_start(0) SPE_stop(NCOLS) buffer(32) shared(double16b_t* wind_v = wind_v[NROWS][NCOLS], double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* diff = diff[NROWS][NCOLS]) private(double dt = dt)
 	{
 	int j, k, s;
 	for (j = SPE_start; j < SPE_stop; j++) {

@@ -101,8 +101,12 @@ public:
 
 template <>
 class vars_op<shared_variable>: public vars_op_base<shared_variable> {
+	privset& privs;
+	priv_symtbl& priv_symbols;
 public:
-	vars_op(sharedset& v, shared_symtbl& s, spelist& r): vars_op_base<shared_variable>(v, s, r) {}
+	vars_op(sharedset& v, shared_symtbl& s, privset& p, priv_symtbl& ps, spelist& r): 
+		vars_op_base<shared_variable>(v, s, r), privs(p), priv_symbols(ps)
+	{}
 
 	void operator()(fileiter first, const fileiter& last) const
 	{
@@ -127,8 +131,16 @@ public:
 			bool capture = false;
 			for (string::const_iterator c = definition.begin(); c != definition.end(); ++c) {
 				if (*c == ']') {
-					capture = false;
 					dimensions.push_back(dim);
+
+					// Implicitly pass the dimensions as private ints.
+					if (priv_symbols.find(dim) == priv_symbols.end()) {
+						private_variable* p = new private_variable("int", dim, dim, this->regions.size() + 1);
+						privs.insert(p);
+						priv_symbols[dim] = p;
+					}
+
+					capture = false;
 					dim = "";
 				}
 
@@ -299,7 +311,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		priv_op(privs, private_symbols, regions),
 		start_op(priv_op, private_symbols, "SPE_start", regions),
 		stop_op(priv_op, private_symbols, "SPE_stop", regions),
-		shared_op(shared, shared_symbols, regions),
+		shared_op(shared, shared_symbols, privs, private_symbols, regions),
 		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),
 		buffer_op(buffer),

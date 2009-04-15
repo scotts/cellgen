@@ -23,7 +23,7 @@ void in_and_out(int in[N1][N2][N3], int out[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int* in = in[N1][N2][N3], int* out = out[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) shared(int* in = in[N1][N2][N3], int* out = out[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
@@ -59,7 +59,7 @@ void inout(int ref[N1][N2][N3], int test[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) private(int N1 = N1, int N2 = N2, int N3 = N3) shared(int* test = test[N1][N2][N3])
+	#pragma cell SPE_start(0) SPE_stop(N1) buffer(256) shared(int* test = test[N1][N2][N3])
 	{
 		int i, j, k;
 		for (i = SPE_start; i < SPE_stop; ++i) {
