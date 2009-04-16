@@ -150,8 +150,8 @@ int factor;
 Cellgen needs to know the dimensions of the matrix, which are provided in the "shared"
 directive. The dimensions can be either constants or variables only known at runtime. Cellgen
 requires the matrix dimensions so that it can compute addresses for the DMAs which will get
-and put values in main memory. Currently, if the dimensions are variables, the programmer must
-explicitly pass them as "private" variables.  This peculiarity will be fixed in a later version.
+and put values in main memory. All of the dimensions of the matrix are implicitly passed as 
+private variables.
 
 Column accesses currently require more work from the programmer.  Because DMA lists work best
 with addresses that are 16-byte aligned, Cellgen expects the programmer to pad their data. The
