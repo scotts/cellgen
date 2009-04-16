@@ -1058,7 +1058,7 @@ struct for_compound_op {
 
 			if ((before_in != global_in.size() || before_out != global_out.size() || before_inout != global_inout.size()) ||
 					set_union_all(local_in, local_out, local_inout).size() > 0) {
-				//conds = o.conds;
+				conds = o.conds;
 			}
 
 			depths local_depths;
@@ -1084,7 +1084,6 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				conds = o.conds;
 				const conditions& outer = conds.back();
 				conditions bridge_in = outer;
 				bridge_in.induction = inner.induction;

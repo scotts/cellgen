@@ -135,10 +135,7 @@ int matrix[N1][N2][N3];
 int factor; 
 
 #pragma cell SPE_start(0) SPE_stop(N1) shared(int* m = matrix[N1][N2][N3]) \
-                                        private(int f = factor, \
-                                               int N1 = N1, \
-                                               int N2 = N2, \
-                                               int N3 = N3)
+                                        private(int f = factor)
 {
   int i, j, k;
   for (i = SPE_start; i < SPE_stop; ++i) {
@@ -169,10 +166,7 @@ int16b_t matrix[N1][N2][N3];
 int factor; 
 
 #pragma cell SPE_start(0) SPE_stop(N1) shared(int16b_t* m = matrix[N1][N2][N3]) \
-                                        private(int f = factor, \
-                                               int N1 = N1, \
-                                               int N2 = N2, \
-                                               int N3 = N3)
+                                        private(int f = factor)
 {
   int i, j, k;
   for (i = SPE_start; i < SPE_stop; ++i) {

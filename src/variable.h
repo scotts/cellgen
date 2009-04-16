@@ -26,9 +26,11 @@ struct conditions {
 		start(_start), induction(_induction), stop(_stop), step(_step)
 		{}
 
+	// Not using the step. I should, but I need to do some semantic analysis to make sure that 
+	// "++i" == "i++".
 	bool operator==(const conditions& o) const
 	{
-		return start == o.start && induction == o.induction && stop == o.stop && step == o.step;
+		return start == o.start && induction == o.induction && stop == o.stop;
 	}
 };
 typedef list<conditions> condslist;
