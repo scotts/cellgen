@@ -68,6 +68,12 @@ bool node_is(const Node& node, const int id1, const int id2, const int id3, cons
 	return node.value.id() == id1 || node.value.id() == id2 || node.value.id() == id3 || node.value.id() == id4;
 }
 
+template <class Node>
+bool node_is(const Node& node, const int id1, const int id2, const int id3, const int id4, const int id5)
+{
+	return node.value.id() == id1 || node.value.id() == id2 || node.value.id() == id3 || node.value.id() == id4 || node.value.id() == id5;
+}
+
 bool is_int(const string& str)
 {
 	return str.find("int") != string::npos || str.find("long") != string::npos;
@@ -1052,7 +1058,7 @@ struct for_compound_op {
 
 			if ((before_in != global_in.size() || before_out != global_out.size() || before_inout != global_inout.size()) ||
 					set_union_all(local_in, local_out, local_inout).size() > 0) {
-				conds = o.conds;
+				//conds = o.conds;
 			}
 
 			depths local_depths;
@@ -1060,21 +1066,12 @@ struct for_compound_op {
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			xformerlist& nested = node.value.xformations;
-
-			const conditions& outer = conds.back();
 			const conditions& inner = o.conds.back();
 
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
 			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
 			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, local_inout));
-
-			if (conds.size() > 0 && o.conds.size() > 0) {
-				conditions bridge_in = outer;
-				bridge_in.induction = inner.induction;
-				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
-			}
 
 			// TODO:
 			// 	- Optimization if buffer is same size as (stop - start)?
@@ -1087,6 +1084,13 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
+				conds = o.conds;
+				const conditions& outer = conds.back();
+				conditions bridge_in = outer;
+				bridge_in.induction = inner.induction;
+				xformerlist& nested = node.value.xformations;
+				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
+
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
@@ -1186,14 +1190,14 @@ void parse_conditions(ast_node& node, const int expressions_seen, condslist& con
 
 		if (!exists_in(conds, cond)) {
 			conds.push_back(cond);
-			cout << cond.start << " " << cond.induction << " " << cond.stop << " " << cond.step << endl;
 		}
 	}
 }
 
 void serial_for_op::operator()(ast_node& node)
 {
-	if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression)) {
+	if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) && 
+			expressions_seen < 3) {
 		++expressions_seen;
 		parse_conditions(node, expressions_seen, conds, sercond);
 	}
@@ -1231,7 +1235,8 @@ struct parallel_for_op {
 		{}
 	void operator()(ast_node& node)
 	{
-		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression)) {
+		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) &&
+				expressions_seen < 3) {
 			++expressions_seen;
 			parse_conditions(node, expressions_seen, conds, parcond);
 
@@ -1613,7 +1618,6 @@ struct cell_region {
 			for_all(inout, make_assign_set<shared_variable*>(3, max_depths));
 			for_all(priv, make_assign_set<private_variable*>(1, max_depths));
 
-			cout << conds.size() << endl;
 			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
 

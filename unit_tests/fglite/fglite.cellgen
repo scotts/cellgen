@@ -761,7 +761,7 @@ void all_cols_spe(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t 
 				 ((dcol[NROWS - 1] + dbound[2]) / 2) * (ccol1[NROWS - 1] - cbound[2])) / (1000.0 * 1000.0);
 			dcdx[NROWS - 1] = advec_term + diff_term;
 
-			for (i = 0; i < NROWS; i++) {
+			for (i = 0; i < NROWS; ++i) {
 				c[i] += dt * dcdx[i];
 			}
 
