@@ -862,10 +862,12 @@ pair<ast_node*, ast_node::tree_iterator> find_deep(ast_node& node, Pred p)
 	return ret;
 }
 
-struct match_identifier {
+class too_many_expression_statements {};
+
+struct match_node {
 	const string& to_replace;
 	xformer* x;
-	match_identifier(const string& t, xformer* x): 
+	match_node(const string& t, xformer* x): 
 		to_replace(t), x(x)
 	{
 		assert(x);	
@@ -873,7 +875,7 @@ struct match_identifier {
 
 	void operator()(ast_node& node)
 	{
-		if (node_is(node, ids::identifier)) {
+		if (is_ident_or_constant(node)) {
 			if (to_replace == string(node.value.begin(), node.value.end())) {
 				node.value.xformations.push_back(x);
 			}
@@ -883,8 +885,6 @@ struct match_identifier {
 		}
 	}
 };
-
-class too_many_expression_statements {};
 
 struct modify_for_loop {
 	const shared_variable* v;
@@ -899,7 +899,7 @@ struct modify_for_loop {
 			++seen;
 
 			switch (seen) {
-				case 2:	for_all(node.children, match_identifier(conds.stop, new naked_string(full_adaptor(v).name())));
+				case 2:	for_all(node.children, match_node(conds.stop, new naked_string(full_adaptor(v).name())));
 					break;
 				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
 					node.children.clear();
@@ -1218,6 +1218,7 @@ struct multiple_parallel_induction_variables {
 struct parallel_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
+	privset& privs;
 	sharedset& global_in;
 	sharedset& global_out;
 	sharedset& global_inout;
@@ -1227,9 +1228,9 @@ struct parallel_for_op {
 	ast_node& parent;
 	conditions parcond;
 	int expressions_seen;
-	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, 
+	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, privset& ps, sharedset& i, sharedset& o, 
 			sharedset& io, operations& op, condslist& c, bind_xformer& n, ast_node& par): 
-		shared_symbols(s), priv_symbols(p), global_in(i), global_out(o), global_inout(io), 
+		shared_symbols(s), priv_symbols(p), privs(ps), global_in(i), global_out(o), global_inout(io), 
 		ops(op), conds(c), condnodes(n), parent(par), expressions_seen(0)
 		{}
 	void operator()(ast_node& node)
@@ -1239,12 +1240,23 @@ struct parallel_for_op {
 			++expressions_seen;
 			parse_conditions(node, expressions_seen, conds, parcond);
 
+			if (expressions_seen == 1) {
+				for_all(node.children, match_node(parcond.start, new variable_name(SPE_start)));
+				privs.insert(new private_variable(SPE_start.type(), SPE_start.name(), parcond.start));
+			}
+			else if (expressions_seen == 2) {
+				for_all(node.children, match_node(parcond.stop, new variable_name(SPE_stop)));
+				privs.insert(new private_variable(SPE_stop.type(), SPE_stop.name(), parcond.stop));
+			}
+
+			/*
 			if (expressions_seen == 1 && parcond.start != "SPE_start") {
 				throw user_error("start condition is not SPE_start.");	
 			}
 			else if (expressions_seen == 2 && parcond.stop != "SPE_stop") {
 				throw user_error("stop condition is not SPE_stop.");	
 			}
+			*/
 		}
 		else if (node_is(node, ids::compound)) {
 			bind_xformer condnodes_col;
@@ -1404,20 +1416,21 @@ struct wipeout_const_and_pure_declarations {
 struct compound {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
+	privset& privs;
 	sharedset& in;
 	sharedset& out;
 	sharedset& inout;
 	operations& ops;
 	condslist& conds;
 	bind_xformer& condnodes;
-	compound(const shared_symtbl& s, const priv_symtbl& p, sharedset& i, sharedset& o, sharedset& io, operations& op, 
+	compound(const shared_symtbl& s, const priv_symtbl& p, privset& ps, sharedset& i, sharedset& o, sharedset& io, operations& op, 
 			condslist& c, bind_xformer& n): 
-		shared_symbols(s), priv_symbols(p), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n)
+		shared_symbols(s), priv_symbols(p), privs(ps), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node_is(node, ids::for_loop)) {
-			parallel_for_op o(shared_symbols, priv_symbols, in, out, inout, ops, conds, condnodes, node);
+			parallel_for_op o(shared_symbols, priv_symbols, privs, in, out, inout, ops, conds, condnodes, node);
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
@@ -1594,7 +1607,7 @@ struct cell_region {
 		if (node_is(node, ids::compound)) {
 			// Trust me, this enchances readability.
 			sharedset& shared = (*region)->shared();
-			const privset& priv = (*region)->priv();
+			privset& privs = (*region)->priv();
 			const reduceset& reductions = (*region)->reductions();
 			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
 			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
@@ -1608,14 +1621,14 @@ struct cell_region {
 			bind_xformer condnodes_row;
 			operations iteration;
 
-			compound o(shared_symbols, priv_symbols, in, out, inout, iteration, conds, condnodes_row);
+			compound o(shared_symbols, priv_symbols, privs, in, out, inout, iteration, conds, condnodes_row);
 			for_all(node.children, &o);
 
 			depths max_depths;
 			for_all(in, make_assign_set<shared_variable*>(2, max_depths));
 			for_all(out, make_assign_set<shared_variable*>(2, max_depths));
 			for_all(inout, make_assign_set<shared_variable*>(3, max_depths));
-			for_all(priv, make_assign_set<private_variable*>(1, max_depths));
+			for_all(privs, make_assign_set<private_variable*>(1, max_depths));
 
 			const string& par_induction = conds.front().induction;
 			(*region)->induction(par_induction);
@@ -1675,12 +1688,12 @@ struct cell_region {
 			front.push_back(new compute_bounds(least));
 			front.push_back(new define_clipped_range(conds.back().start, conds.back().stop, greatest));
 
-			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), priv));
+			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), privs));
 			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
 			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
-			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), priv));
+			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), privs));
 			append(front, fmap(make_depth_xformer<dma_list_allocation, shared_variable>(max_depths), shared));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
@@ -1688,7 +1701,7 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_rem, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_full, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_reduction, reduction_variable>(), reductions));
-			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), priv));
+			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), privs));
 
 			const sharedset& allins = set_union_all(in, inout);
 			append(front, fmap(
@@ -1700,7 +1713,7 @@ struct cell_region {
 			xformerlist& back = node.children.back().value.xformations;
 			append(back, fmap(make_xformer<reduction_assign, reduction_variable>(), reductions));
 			append(back, fmap(make_xformer<buffer_deallocation, shared_variable>(), shared));
-			append(back, fmap(make_xformer<buffer_deallocation, private_variable>(), priv));
+			append(back, fmap(make_xformer<buffer_deallocation, private_variable>(), privs));
 			append(back, fmap(make_depth_xformer<dma_list_deallocation, shared_variable>(max_depths), shared));
 			back.push_back(new total_timer_stop());
 

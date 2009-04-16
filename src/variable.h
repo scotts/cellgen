@@ -89,6 +89,8 @@ public:
 const variable prev("int", "prev", "0");
 const variable buffer_index("int", "__i__", "0");
 const variable clipped_range("int", "__N__");
+const variable SPE_start("int", "SPE_start");
+const variable SPE_stop("int", "SPE_stop");
 
 class const_variable: public variable {
 public:

@@ -23,10 +23,10 @@ void inout1(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N2) buffer(0) shared(int16b_t* test = test[N1][N2][N3])
+	#pragma cell buffer(0) shared(int16b_t* test = test[N1][N2][N3])
 	{
 		int i, j, k;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < N2; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N1; ++k) {
 					test[k][i][j].num = 2 * test[k][i][j].num;
@@ -59,10 +59,10 @@ void in_and_out2(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	#pragma cell buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
 		int i, j, k;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < N1; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N2; ++k) {
 					out[i][k][j].num = in[i][k][j].num;
@@ -95,10 +95,10 @@ void in_and_out1(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N2) buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
+	#pragma cell buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
 		int i, j, k;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < N2; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N1; ++k) {
 					out[k][i][j].num = in[k][i][j].num;
@@ -131,10 +131,10 @@ void inout2(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N1) buffer(0) shared(int16b_t* test = test[N1][N2][N3])
+	#pragma cell buffer(0) shared(int16b_t* test = test[N1][N2][N3])
 	{
 		int i, j, k;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < N1; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N2; ++k) {
 					test[i][k][j].num = 2 * test[i][k][j].num;
