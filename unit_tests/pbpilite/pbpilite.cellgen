@@ -92,10 +92,10 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2;
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N/4) buffer(0) private(double* tl = tl, double* tr = tr) shared(double* pn = root, double* pl = l, double* pr = r)
+	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr) shared(double* pn = root, double* pl = l, double* pr = r)
 	{
 		int i;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < N/4; ++i) {
 			double t1;
 			double t2;
 
@@ -145,10 +145,10 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2 * t3;
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N/4) buffer(0) private(double* tl = tl, double* tr = tr, double* tp = tp) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
+	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr, double* tp = tp) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
 	{
 		int i;
-		for (i = SPE_start; i < SPE_stop; i++) {
+		for (i = 0; i < N/4; i++) {
 			double t1;
 			double t2;
 			double t3;
@@ -188,10 +188,10 @@ int main()
 		lnL_ref +=  weight[i] * temp;
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(N/4) buffer(0) reduction(+: double l = lnL) private(double* freq = freq) shared(double* sroot = root, int* weight = weight)
+	#pragma cell buffer(0) reduction(+: double l = lnL) private(double* freq = freq) shared(double* sroot = root, int* weight = weight)
 	{
 		int i;
-		for (i = SPE_start; i < SPE_stop; i++) {
+		for (i = 0; i < N/4; i++) {
 			double temp;
 
 			temp = sroot[(i*4)] * freq[0] + sroot[(i*4)+1] * freq[1] + sroot[(i*4)+2] * freq[2] + sroot[(i*4)+3] * freq[3];

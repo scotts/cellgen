@@ -21,11 +21,11 @@ void in_and_out(int16b_t in[ROW][COL], int16b_t out[ROW][COL])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(COL) buffer(0) shared(int16b_t* in = in[ROW][COL], int16b_t* out = out[ROW][COL])
+	#pragma cell shared(int16b_t* in = in[ROW][COL], int16b_t* out = out[ROW][COL])
 	{
 		int count = 0;
 		int i, j;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < COL; ++i) {
 			for (j = 0; j < ROW; ++j) {
 				out[j][i].num = in[j][i].num;
 			}
@@ -55,10 +55,10 @@ void inout(int16b_t ref[ROW][COL], int16b_t test[ROW][COL])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(COL) buffer(0) shared(int16b_t* test = test[ROW][COL])
+	#pragma cell shared(int16b_t* test = test[ROW][COL])
 	{
 		int i, j;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < COL; ++i) {
 			for (j = 0; j < ROW; ++j) {
 				test[j][i].num = 2 * test[j][i].num;
 			}

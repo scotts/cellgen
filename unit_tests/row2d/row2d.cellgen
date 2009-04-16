@@ -19,10 +19,10 @@ void in_and_out(int in[ROW][COL], int out[ROW][COL])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(ROW) buffer(256) shared(int* in = in[ROW][COL], int* out = out[ROW][COL])
+	#pragma cell buffer(256) shared(int* in = in[ROW][COL], int* out = out[ROW][COL])
 	{
 		int i, j;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < ROW; ++i) {
 			for (j = 0; j < COL; ++j) {
 				out[i][j] = in[i][j];
 			}
@@ -51,10 +51,10 @@ void inout(int ref[ROW][COL], int test[ROW][COL])
 		}
 	}
 
-	#pragma cell SPE_start(0) SPE_stop(ROW) buffer(256) shared(int* test = test[ROW][COL])
+	#pragma cell buffer(256) shared(int* test = test[ROW][COL])
 	{
 		int i, j;
-		for (i = SPE_start; i < SPE_stop; ++i) {
+		for (i = 0; i < ROW; ++i) {
 			for (j = 0; j < COL; ++j) {
 				test[i][j] = 2 * test[i][j];
 			}

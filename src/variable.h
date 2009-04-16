@@ -127,7 +127,7 @@ public:
 		variable(t, l, a), region_num(r)
 		{}
 
-	string unique_name() const { return name() + to_string<int>(region_num); }
+	string unique_name() const { return name() + to_string(region_num); }
 	string unique_declare() const { return type() + " " + unique_name(); }
 
 	virtual string actual() const { return pass_var + "." + unique_name(); }

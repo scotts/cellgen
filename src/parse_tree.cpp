@@ -1215,6 +1215,9 @@ struct multiple_parallel_induction_variables {
 	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
 };
 
+// I AM A HACK. Every other method for figuring out which region number we're on is worse.
+int __region_number = 0;
+
 struct parallel_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -1242,11 +1245,12 @@ struct parallel_for_op {
 
 			if (expressions_seen == 1) {
 				for_all(node.children, match_node(parcond.start, new variable_name(SPE_start)));
-				privs.insert(new private_variable(SPE_start.type(), SPE_start.name(), parcond.start));
+				privs.insert(new private_variable(SPE_start.type(), SPE_start.name(), parcond.start, __region_number + 1));
 			}
 			else if (expressions_seen == 2) {
 				for_all(node.children, match_node(parcond.stop, new variable_name(SPE_stop)));
-				privs.insert(new private_variable(SPE_stop.type(), SPE_stop.name(), parcond.stop));
+				privs.insert(new private_variable(SPE_stop.type(), SPE_stop.name(), parcond.stop, __region_number + 1));
+				++__region_number;
 			}
 
 			/*
