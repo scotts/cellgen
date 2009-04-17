@@ -67,9 +67,7 @@ the following example, each SPE executes different parts of the iteration space 
   }
 }
 
-We've introduced two new directives: "SPE_start" and "SPE_stop".  Conceptually, "SPE_start"
-and "SPE_stop" are the starting and stopping conditions for the entire iteration space of the
-loop. Each SPE executes a subset of the iteration space [0--10).
+In this case, each SPE executes a subset of the iteration space [0--10).
 
 Computations with Flat Arrays
 -----------------------------
