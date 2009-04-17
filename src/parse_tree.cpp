@@ -978,7 +978,7 @@ struct max_buffer: unary_function<const region_variable*, void> {
 
 // Need to transform postfix accesses for all non-shared variables.
 void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-		const conditions& conds, const sharedset& seen, const string& buffer_size)
+		const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)
 {
 	const shared_variable* max = for_all(seen, max_buffer(conds.induction)).max;
 	const string& max_factor = max->math().factor(conds.induction);
@@ -988,8 +988,8 @@ void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const
 	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
 	rbrace.push_back(new buffer_loop_stop());
 
-	append(for_loop.value.xformations, fmap(make_reset_rem(conds, max_factor), seen));
-	append(for_loop.value.xformations, fmap(make_reset_full(conds.stop), seen));
+	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
+	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
 
 	for_all(for_loop.children, transform_local_buffers(shared_symbols, priv_symbols, conds, max));
 
@@ -1093,7 +1093,7 @@ struct for_compound_op {
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
-				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
+				loop_mitosis(node, shared_symbols, priv_symbols, inner, inner, seen_all, buffer_size);
 			}
 
 			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
@@ -1301,7 +1301,8 @@ struct parallel_for_op {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, flat_all, buffer_size);
+				conditions specond(SPE_start.name(), parcond.induction, SPE_stop.name(), parcond.step);
+				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, specond, flat_all, buffer_size);
 			}
 
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));

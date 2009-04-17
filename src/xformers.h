@@ -263,7 +263,7 @@ public:
 class variable_name: public xformer {
 	const variable v;
 public:
-	variable_name(const variable v): v(v) {}
+	variable_name(const variable _v): v(_v) {}
 	string operator()(const string&)
 	{
 		return v.name();
