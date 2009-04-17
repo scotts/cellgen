@@ -25,12 +25,12 @@ int main()
 	scalar[0] = 3;
 	scalar[1] = 6;
 
-	#pragma cell reduction(+: int s = sum) private(int N = N, int* sc = scalar) shared(int* x = a, double* y = b, int* z = c)
+	#pragma cell reduction(+: int s = sum) private(int N = N, int* sc = scalar) shared(int* a = a, double* b = b, int* c = c)
 	{
 		int i;
 		for (i = 0; i < N; ++i) {
-			x[i] = y[i] * z[i] + sc[0];
-			s += y[i] + z[i] + sc[1];
+			a[i] = b[i] * c[i] + sc[0];
+			s += b[i] + c[i] + sc[1];
 		}
 	}
 

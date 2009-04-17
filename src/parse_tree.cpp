@@ -1288,9 +1288,12 @@ struct parallel_for_op {
 			const make_conditions<gen_in<row_access> > make_gen_in_row(parcond, local_depths);
 			const make_conditions<gen_out<row_access> > make_gen_out_row(parcond, local_depths);
 
+			const conditions specond(SPE_start.name(), parcond.induction, SPE_stop.name(), parcond.step);
+			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(specond, local_depths), flat_ins));
+
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
-			
+		
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
 				const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
 				const shared_variable* first = *flat_all.begin();
@@ -1301,7 +1304,6 @@ struct parallel_for_op {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				conditions specond(SPE_start.name(), parcond.induction, SPE_stop.name(), parcond.step);
 				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, specond, flat_all, buffer_size);
 			}
 
@@ -1691,7 +1693,19 @@ struct cell_region {
 			front.push_back(new define_variable(buffer_index));
 
 			front.push_back(new compute_bounds(least));
-			front.push_back(new define_clipped_range(conds.back().start, conds.back().stop, greatest));
+
+			string clipped_start;
+			string clipped_stop;
+			int flat = filter(make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), shared).size();
+			if (flat) {
+				clipped_start = SPE_start.name();
+				clipped_stop = SPE_stop.name();
+			}
+			else {
+				clipped_start = conds.back().start;
+				clipped_stop = conds.back().stop;
+			}
+			front.push_back(new define_clipped_range(clipped_start, clipped_stop, greatest));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), privs));
 			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
@@ -1707,11 +1721,6 @@ struct cell_region {
 			append(front, fmap(make_xformer<define_full, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_reduction, reduction_variable>(), reductions));
 			append(front, fmap(make_xformer<init_private_buffer, private_variable>(), privs));
-
-			const sharedset& allins = set_union_all(in, inout);
-			append(front, fmap(
-						make_conditions<gen_in_first<row_access> >(conds.front(), max_depths),
-						filter(make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), allins)));
 
 			front.push_back(new total_timer_start());
 

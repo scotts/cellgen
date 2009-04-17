@@ -14,6 +14,7 @@
 #define __PN 16
 #define __FN 4
 const int N = __N;
+const int QN = __N / 4;
 const int PN = __PN;
 const int FN = __FN;
 
@@ -67,11 +68,11 @@ int main()
 		freq[i] = 0.69 * (i+1);
 	}
 
-	for (i = 0; i < N/4; ++i) {
+	for (i = 0; i < QN; ++i) {
 		weight[i] = i;
 	}
 
-	for (i = 0; i < N/4; ++i) {
+	for (i = 0; i < QN; ++i) {
 		double t1;
 		double t2;
 
@@ -92,10 +93,10 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2;
 	}
 
-	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr) shared(double* pn = root, double* pl = l, double* pr = r)
+	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r)
 	{
 		int i;
-		for (i = 0; i < N/4; ++i) {
+		for (i = 0; i < QN; ++i) {
 			double t1;
 			double t2;
 
@@ -119,7 +120,7 @@ int main()
 
 	assert_equal();
 
-	for (i = 0; i < N/4; i++) {
+	for (i = 0; i < QN; i++) {
 		double t1;
 		double t2;
 		double t3;
@@ -145,10 +146,10 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2 * t3;
 	}
 
-	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr, double* tp = tp) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
+	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr, double* tp = tp, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
 	{
 		int i;
-		for (i = 0; i < N/4; i++) {
+		for (i = 0; i < QN; i++) {
 			double t1;
 			double t2;
 			double t3;
@@ -180,7 +181,7 @@ int main()
 	double lnL = 0.0;
 	double lnL_ref = 0.0;
 
-	for (i = 0; i < N/4; i++) {
+	for (i = 0; i < QN; i++) {
 		double temp;
 
 		temp = root_ref[(i*4)] * freq[0] + root_ref[(i*4)+1] * freq[1] + root_ref[(i*4)+2] * freq[2] + root_ref[(i*4)+3] * freq[3];
@@ -188,10 +189,10 @@ int main()
 		lnL_ref +=  weight[i] * temp;
 	}
 
-	#pragma cell buffer(0) reduction(+: double l = lnL) private(double* freq = freq) shared(double* sroot = root, int* weight = weight)
+	#pragma cell buffer(0) reduction(+: double l = lnL) private(double* freq = freq, int QN = QN) shared(double* sroot = root, int* weight = weight)
 	{
 		int i;
-		for (i = 0; i < N/4; i++) {
+		for (i = 0; i < QN; i++) {
 			double temp;
 
 			temp = sroot[(i*4)] * freq[0] + sroot[(i*4)+1] * freq[1] + sroot[(i*4)+2] * freq[2] + sroot[(i*4)+3] * freq[3];
