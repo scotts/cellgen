@@ -59,10 +59,10 @@ In the previous two examples, the SPEs all behaved the same. While the Cellgen m
 distribute the same code to each SPE, the power comes from giving each SPE different data. In
 the following example, each SPE executes different parts of the iteration space for a loop.
 
-#pragma cell SPE_start(0) SPE_stop(10)
+#pragma cell private(int N = N) 
 {
   int i;
-  for (i = SPE_start; i < SPE_stop; ++i) {
+  for (i = 0; i < N; ++i) {
     printf("iteration %d\n, i);
   }
 }
@@ -81,10 +81,10 @@ array by a constant.
 int vector[N];
 int factor; // presumabley set elsewhere
 
-#pragma cell SPE_start(0) SPE_stop(N) shared(int* v = vector) private(int f = factor)
+#pragma cell shared(int* v = vector) private(int f = factor, int N = N)
 {
   int i;
-  for (i = SPE_start; i < SPE_stop; ++i) {
+  for (i = 0; i < N; ++i) {
     v[i] = v[i] * f;
   }
 }
@@ -110,10 +110,10 @@ where the computation relies on a large dataset, but the result is reduced to a 
 int vector[N];
 int sum = 0;
 
-#pragma cell SPE_start(0) SPE_stop(N) shared(int* v = vector) reduction(+: int s = sum)
+#pragma cell shared(int* v = vector) reduction(+: int s = sum) private(int N = N)
 {
   int i;
-  for (i = SPE_start; i < SPE_stop; ++i) {
+  for (i = 0; i < N; ++i) {
     s += v[i];
   }
 }
@@ -134,11 +134,10 @@ a 3-dimensional array by a constant factor:
 int matrix[N1][N2][N3];
 int factor; 
 
-#pragma cell SPE_start(0) SPE_stop(N1) shared(int* m = matrix[N1][N2][N3]) \
-                                        private(int f = factor)
+#pragma cell shared(int* m = matrix[N1][N2][N3]) private(int f = factor)
 {
   int i, j, k;
-  for (i = SPE_start; i < SPE_stop; ++i) {
+  for (i = 0; i < N1; ++i) {
     for (j = 0; j < N2; ++j) {
       for (k = 0; k < N3; ++k) {
         m[i][j][k] = m[i][j][k] * f;
@@ -165,11 +164,10 @@ typedef struct int16b_t {
 int16b_t matrix[N1][N2][N3];
 int factor; 
 
-#pragma cell SPE_start(0) SPE_stop(N1) shared(int16b_t* m = matrix[N1][N2][N3]) \
-                                        private(int f = factor)
+#pragma cell shared(int16b_t* m = matrix[N1][N2][N3]) private(int f = factor)
 {
   int i, j, k;
-  for (i = SPE_start; i < SPE_stop; ++i) {
+  for (i = 0; i < N1; ++i) {
     for (j = 0; j < N3; ++j) {
       for (k = 0; k < N1; ++k) {
         m[k][i][j].num = m[k][i][j].num * f;
