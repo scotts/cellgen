@@ -846,6 +846,7 @@ public:
 
 	string this_buffer() const
 	{
+		cout << v->name() << endl;
 		if (v->is_flat()) {
 			return v->math().ihs(conds.induction).str();
 		}
@@ -972,7 +973,14 @@ public:
 
 	string final_buffer() const
 	{
-		return v->math().replace_induction(conds.induction, full_adaptor(v).name());
+		string str;
+		try {
+			str = v->math().replace_induction(conds.induction, full_adaptor(v).name());
+		} catch (ivar_not_found e) {
+			str = v->math().str();
+		}
+
+		return str;
 	}
 
 	string remainder_size() const
@@ -982,11 +990,14 @@ public:
 
 	string stride() const
 	{
+		string access = v->math().str();
 		string s;
-		const int total = v->dimensions().size() - v->math().index(conds.induction);
-		list<string>::const_reverse_iterator d = v->dimensions().rbegin();
-		for (int i = 0; i < total; ++i, ++d) {
-			s += *d + "*";
+		for (list<string>::const_iterator i = v->dimensions().begin(); i != v->dimensions().end(); ++i) {
+			size_t pos;
+			if ((pos = access.find(*i)) != string::npos) {
+				access = access.substr(0, access.size() - pos - 1) + access.substr(pos + (*i).size(), access.size());
+				s += *i + "*";
+			}
 		}
 
 		return s;

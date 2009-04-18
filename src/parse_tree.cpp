@@ -964,9 +964,16 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	void operator()(shared_variable* v)
 	{
 		if (max) {
-			int max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
-			int prov = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
-			if (max_int < prov) {
+			int max_int;
+			int prev;
+			try {
+				max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
+				prev = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
+			} catch (ivar_not_found e) {
+				max_int = numeric_limits<int>::max();
+				prev = numeric_limits<int>::min();
+			}
+			if (max_int < prev) {
 				max = v;
 			}
 		}
@@ -975,6 +982,11 @@ struct max_buffer: unary_function<const region_variable*, void> {
 		}
 	}
 };
+
+void print_shared(const shared_variable* v)
+{
+	cout << v->name() << " ";
+}
 
 // Need to transform postfix accesses for all non-shared variables.
 void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 

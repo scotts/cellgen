@@ -1,0 +1,35 @@
+#include <stdio.h>
+
+#define N 64
+
+int a[N][N] __attribute__((aligned(128)));
+int16b_t b[N][N] __attribute__((aligned(128)));
+int16b_t c[N][N] __attribute__((aligned(128)));
+
+int main()
+{
+	int i, j, k;
+	for (i = 0; i < N; ++i) {
+		for (j = 0; j < N; ++j) {
+			a[i][j] = 3;
+			b[i][j].num = 2;
+			c[i][j].num = 0;
+		}
+	}
+
+	#pragma cell buffer(16) shared(int* a = a[N][N], int16b_t* b = b[N][N], int16b_t* c = c[N][N])
+	{
+		int i, j, k;
+
+		for (i = 0; i < N; ++i) {
+			for (j = 0; j < N; ++j) {
+				for (k = 0; k < N; ++k) {
+					 c[i][j].num += a[i][k] * b[k][j].num;
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
