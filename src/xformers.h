@@ -846,7 +846,6 @@ public:
 
 	string this_buffer() const
 	{
-		cout << v->name() << endl;
 		if (v->is_flat()) {
 			return v->math().ihs(conds.induction).str();
 		}

@@ -755,7 +755,6 @@ struct serial_for_op {
 	var_symtbl locals;
 	operations& ops;
 	condslist conds;
-	bind_xformer& condnodes;
 	sharedset in;
 	sharedset out;
 	sharedset inout;
@@ -763,14 +762,14 @@ struct serial_for_op {
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
 	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
-			operations& o, condslist& c, bind_xformer& n):
+			operations& o, condslist& c):
 		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
-		ops(o), conds(c), condnodes(n), expressions_seen(0)
+		ops(o), conds(c), expressions_seen(0)
 		{}
 	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
-			const var_symtbl& l, operations& o, condslist& c, bind_xformer& n):
+			const var_symtbl& l, operations& o, condslist& c):
 		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
-		locals(l), ops(o), conds(c), condnodes(n), expressions_seen(0)
+		locals(l), ops(o), conds(c), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
@@ -983,16 +982,12 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	}
 };
 
-void print_shared(const shared_variable* v)
-{
-	cout << v->name() << " ";
-}
-
 // Need to transform postfix accesses for all non-shared variables.
 void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
 		const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)
 {
 	const shared_variable* max = for_all(seen, max_buffer(conds.induction)).max;
+	cout << "max found: " << max->name() << " induction " << conds.induction << endl;
 	const string& max_factor = max->math().factor(conds.induction);
 	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
 	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
@@ -1015,6 +1010,17 @@ void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd));
 }
 
+void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
+		const conditions& conds, const sharedset& seen, const string& buffer_size)
+{
+	loop_mitosis(for_loop, shared_symbols, priv_symbols, conds, conds, seen, buffer_size);
+}
+
+void print_conditions(const conditions c)
+{
+	cout << "(" << c.start << " " << c.induction << " " << c.stop << " " << c.step << ") ";
+}
+
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
@@ -1027,16 +1033,15 @@ struct for_compound_op {
 	sharedset& global_inout;
 	operations& ops;
 	condslist& conds;
-	bind_xformer& condnodes;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
 			sharedset& i, sharedset& o, sharedset& io, 
 			sharedset& gi, sharedset& go, sharedset& gio, 
-			operations& op, condslist& c, bind_xformer& n): 
+			operations& op, condslist& c): 
 		shared_symbols(s), priv_symbols(p), locals(l), 
 		in(i), out(o), inout(io),
 		global_in(gi), global_out(go), global_inout(gio),
-		ops(op), conds(c), condnodes(n)
+		ops(op), conds(c)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -1060,7 +1065,8 @@ struct for_compound_op {
 			const size_t before_out = global_out.size();
 			const size_t before_inout = global_inout.size();
 
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, locals, ops, conds, condnodes);
+			condslist::const_reverse_iterator curr_scope = conds.rbegin();
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, locals, ops, conds);
 			for_all(node.children, &o);
 			o.merge_inout(global_in, global_out, global_inout);
 
@@ -1096,6 +1102,10 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
+				conditions next_scope = *rnext(curr_scope, conds);
+				print_conditions(next_scope);
+				cout << endl;
+
 				const conditions& outer = conds.back();
 				conditions bridge_in = outer;
 				bridge_in.induction = inner.induction;
@@ -1105,7 +1115,7 @@ struct for_compound_op {
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
-				loop_mitosis(node, shared_symbols, priv_symbols, inner, inner, seen_all, buffer_size);
+				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
 			}
 
 			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
@@ -1213,7 +1223,7 @@ void serial_for_op::operator()(ast_node& node)
 		parse_conditions(node, expressions_seen, conds, sercond);
 	}
 	else if (node_is(node, ids::compound)) {
-		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, global_in, global_out, global_inout, ops, conds, condnodes);
+		for_compound_op o(shared_symbols, priv_symbols, locals, in, out, inout, global_in, global_out, global_inout, ops, conds);
 		for_all(node.children, &o);
 	}
 	else {
@@ -1239,14 +1249,13 @@ struct parallel_for_op {
 	sharedset& global_inout;
 	operations& ops;
 	condslist& conds;
-	bind_xformer& condnodes;
 	ast_node& parent;
 	conditions parcond;
 	int expressions_seen;
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, privset& ps, sharedset& i, sharedset& o, 
-			sharedset& io, operations& op, condslist& c, bind_xformer& n, ast_node& par): 
+			sharedset& io, operations& op, condslist& c, ast_node& par): 
 		shared_symbols(s), priv_symbols(p), privs(ps), global_in(i), global_out(o), global_inout(io), 
-		ops(op), conds(c), condnodes(n), parent(par), expressions_seen(0)
+		ops(op), conds(c), parent(par), expressions_seen(0)
 		{}
 	void operator()(ast_node& node)
 	{
@@ -1275,8 +1284,7 @@ struct parallel_for_op {
 			*/
 		}
 		else if (node_is(node, ids::compound)) {
-			bind_xformer condnodes_col;
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds, condnodes_col);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);
@@ -1441,15 +1449,14 @@ struct compound {
 	sharedset& inout;
 	operations& ops;
 	condslist& conds;
-	bind_xformer& condnodes;
 	compound(const shared_symtbl& s, const priv_symtbl& p, privset& ps, sharedset& i, sharedset& o, sharedset& io, operations& op, 
-			condslist& c, bind_xformer& n): 
-		shared_symbols(s), priv_symbols(p), privs(ps), in(i), out(o), inout(io), ops(op), conds(c), condnodes(n)
+			condslist& c): 
+		shared_symbols(s), priv_symbols(p), privs(ps), in(i), out(o), inout(io), ops(op), conds(c)
 		{}
 	void operator()(ast_node& node)
 	{
 		if (node_is(node, ids::for_loop)) {
-			parallel_for_op o(shared_symbols, priv_symbols, privs, in, out, inout, ops, conds, condnodes, node);
+			parallel_for_op o(shared_symbols, priv_symbols, privs, in, out, inout, ops, conds, node);
 			try {
 				for_all(node.children, &o);
 			} catch (multiple_parallel_induction_variables e) {
@@ -1637,10 +1644,9 @@ struct cell_region {
 			sharedset out;
 			sharedset inout;
 			condslist conds;
-			bind_xformer condnodes_row;
 			operations iteration;
 
-			compound o(shared_symbols, priv_symbols, privs, in, out, inout, iteration, conds, condnodes_row);
+			compound o(shared_symbols, priv_symbols, privs, in, out, inout, iteration, conds);
 			for_all(node.children, &o);
 
 			depths max_depths;

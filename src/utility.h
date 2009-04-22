@@ -146,9 +146,32 @@ I next(I i, const C& c)
 }
 
 template <class I, class C>
+I rnext(I i, const C& c)
+{
+	I nxt = i;
+	++nxt;
+
+	if (nxt != c.rend()) {
+		return nxt;
+	}
+
+	return i;
+}
+
+template <class I, class C>
 I previous(I i, const C& c)
 {
 	if (i == c.begin()) {
+		return i;
+	}
+
+	return --i;
+}
+
+template <class I, class C>
+I rprevious(I i, const C& c)
+{
+	if (i == c.rbegin()) {
 		return i;
 	}
 
