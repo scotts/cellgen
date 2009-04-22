@@ -508,7 +508,7 @@ c_type postfix_postop(ast_node& node, const shared_symtbl& shared_symbols, const
 		}
 		
 		ops.inc(data, construct_c_type(o.shared_var->type()));
-		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, conds.back(), buffer_index));
+		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, conds.back(), index_adapt()(conds.back()).name()));
 
 		// The to_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
@@ -937,7 +937,7 @@ struct transform_local_buffers {
 			for_all(node.children, &o);
 
 			if (!o.found_shared && !o.found_private && exists_in(o.accesses, add_expr(mult_expr(conds.induction)))) {
-				node.value.xformations.push_back(new augment_local(o.local_id, conds.induction, buffer_index, cause));
+				node.value.xformations.push_back(new augment_local(o.local_id, conds.induction, index_adapt()(conds).name(), cause));
 				node.children.clear();
 			}
 		}
@@ -959,25 +959,24 @@ string remove_multop(const string& str)
 struct max_buffer: unary_function<const region_variable*, void> {
 	const string& induction;
 	shared_variable* max;
-	max_buffer(const string& i): induction(i), max(NULL) {}
+	max_buffer(const string& i): induction(i), max(NULL) {cout << "constructor: " << i << endl;}
 	void operator()(shared_variable* v)
 	{
-		if (max) {
-			int max_int;
-			int prev;
-			try {
-				max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
-				prev = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
-			} catch (ivar_not_found e) {
-				max_int = numeric_limits<int>::max();
-				prev = numeric_limits<int>::min();
+		try {
+			int prev = from_string<int>(remove_multop(v->math().non_ihs(induction).str()));
+			if (max) {
+				int max_int = from_string<int>(remove_multop(max->math().non_ihs(induction).str())); 
+				if (max_int < prev) {
+					max = v;
+				}
 			}
-			if (max_int < prev) {
+			else {
 				max = v;
 			}
-		}
-		else {
-			max = v;
+		} catch (ivar_not_found e) {
+			throw user_error("shared variable " + orig_adaptor(v).name() + " is not indexed with "
+					"induction variable " + induction + "; move the access outside of the "
+					"loop it's in if this is your intention.");
 		}
 	}
 };
@@ -986,13 +985,13 @@ struct max_buffer: unary_function<const region_variable*, void> {
 void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
 		const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)
 {
+	cout << "during lp: " << conds.induction << endl;
 	const shared_variable* max = for_all(seen, max_buffer(conds.induction)).max;
-	cout << "max found: " << max->name() << " induction " << conds.induction << endl;
 	const string& max_factor = max->math().factor(conds.induction);
 	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
 	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
 
-	lbrace.push_back(new buffer_loop_start(buffer_index, buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
+	lbrace.push_back(new buffer_loop_start(index_adapt()(conds).name(), buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
 	rbrace.push_back(new buffer_loop_stop());
 
 	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
@@ -1065,7 +1064,8 @@ struct for_compound_op {
 			const size_t before_out = global_out.size();
 			const size_t before_inout = global_inout.size();
 
-			condslist::const_reverse_iterator curr_scope = conds.rbegin();
+			condslist::const_iterator curr_scope = previous(conds.end(), conds);
+			condslist oldconds = conds;
 			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, locals, ops, conds);
 			for_all(node.children, &o);
 			o.merge_inout(global_in, global_out, global_inout);
@@ -1084,7 +1084,10 @@ struct for_compound_op {
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
+			/*
 			const conditions& inner = o.conds.back();
+			*/
+			const conditions inner = *next(curr_scope, conds);
 
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
@@ -1102,11 +1105,14 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				conditions next_scope = *rnext(curr_scope, conds);
-				print_conditions(next_scope);
-				cout << endl;
-
+				/*
 				const conditions& outer = conds.back();
+				*/
+				const conditions outer = *curr_scope;
+
+				cout << "inner: o.conds.back() " << o.conds.back().induction << ", next " << next(curr_scope, conds)->induction << endl;
+				cout << "outer: conds.back()   " << conds.back().induction << ", curr " << curr_scope->induction << endl;
+
 				conditions bridge_in = outer;
 				bridge_in.induction = inner.induction;
 				xformerlist& nested = node.value.xformations;
@@ -1115,6 +1121,7 @@ struct for_compound_op {
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
+				cout << "before lp: " << inner.induction << endl;
 				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
 			}
 
@@ -1273,15 +1280,6 @@ struct parallel_for_op {
 				privs.insert(new private_variable(SPE_stop.type(), SPE_stop.name(), parcond.stop, __region_number + 1));
 				++__region_number;
 			}
-
-			/*
-			if (expressions_seen == 1 && parcond.start != "SPE_start") {
-				throw user_error("start condition is not SPE_start.");	
-			}
-			else if (expressions_seen == 2 && parcond.stop != "SPE_stop") {
-				throw user_error("stop condition is not SPE_stop.");	
-			}
-			*/
 		}
 		else if (node_is(node, ids::compound)) {
 			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds);
@@ -1708,7 +1706,7 @@ struct cell_region {
 			const shared_variable* max = for_all(shared, max_buffer(par_induction)).max;
 
 			front.push_back(new define_variable(prev));
-			front.push_back(new define_variable(buffer_index));
+			append(front, fmap(make_define_variable(), fmap(index_adapt(), conds)));
 
 			front.push_back(new compute_bounds(least));
 

@@ -722,6 +722,13 @@ struct define_variable: public xformer {
 	string class_name() const { return "define_variable(" + var.name() + ")"; }
 };
 
+struct make_define_variable: public unary_function<shared_variable*, xformer*> {
+	xformer* operator()(const variable var)
+	{
+		return new define_variable(var);
+	}
+};
+
 class define_reduction: public xformer {
 	const reduction_variable* v;
 public:
@@ -989,6 +996,7 @@ public:
 
 	string stride() const
 	{
+		/*
 		string access = v->math().str();
 		string s;
 		for (list<string>::const_iterator i = v->dimensions().begin(); i != v->dimensions().end(); ++i) {
@@ -997,6 +1005,16 @@ public:
 				access = access.substr(0, access.size() - pos - 1) + access.substr(pos + (*i).size(), access.size());
 				s += *i + "*";
 			}
+		}
+
+		return s;
+		*/
+
+                string s;
+		const int total = v->dimensions().size() - v->math().index(conds.induction);
+		list<string>::const_reverse_iterator d = v->dimensions().rbegin();
+		for (int i = 0; i < total; ++i, ++d) {
+			s += *d + "*";
 		}
 
 		return s;

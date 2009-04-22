@@ -87,7 +87,6 @@ public:
 };
 
 const variable prev("int", "prev", "0");
-const variable buffer_index("int", "__i__", "0");
 const variable clipped_range("int", "__N__");
 const variable SPE_start("int", "SPE_start");
 const variable SPE_stop("int", "SPE_stop");
@@ -302,6 +301,13 @@ public:
 	string reset(const string& stop) const
 	{
 		return name() + "= " + stop + "-" + rem_adaptor(v).name();
+	}
+};
+
+struct index_adapt: unary_function<const conditions&, variable> {
+	variable operator()(const conditions& cond)
+	{
+		return variable("int", "__" + cond.induction + "__");
 	}
 };
 
