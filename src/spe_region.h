@@ -15,7 +15,6 @@ class spe_region {
 	shared_symtbl _shared_symbols;
 	priv_symtbl _priv_symbols;
 	ast_node* _ast_root;
-	string _induction;
 	string _estimate;
 	int _buffer;
 
@@ -37,15 +36,9 @@ public:
 
 	string reduction_op() const	{ return _reduction_op; }
 	int buffer() const		{ return _buffer; }
-	string induction() const	{ return _induction; }
 
 	void estimate(const string& e) { _estimate = e; }
 	string estimate() const { return _estimate; }
-
-	void induction(const string& i)
-	{
-		_induction = i;
-	}
 
 	void ast_root(ast_node* a)
 	{

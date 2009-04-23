@@ -45,7 +45,7 @@ public:
 	variable(const variable& c): 
 		_type(c._type), _name(c._name), _definition(c._definition) 
 		{}
-	variable(const string& t, const string& l = "", const string& a = ""):
+	variable(const string& t, const string& l, const string& a = ""):
 		_type(t), _name(l), _definition(a) 
 		{}
 	virtual ~variable() {}
@@ -152,6 +152,7 @@ class shared_variable: public region_variable {
 	orientation_t _orientation;
 	bool _in_generated;
 	bool _out_generated;
+	string _induction; // The closest induction variable used for access
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
@@ -181,6 +182,9 @@ public:
 	bool out_not_generated() const { return !_out_generated; }
 	void in_generated() { _in_generated = true; }
 	void out_generated() { _out_generated = true; }
+
+	void induction(const string& str) { _induction = str; }
+	string induction() const { return _induction; }
 };
 
 class reduction_variable: public region_variable {
@@ -305,9 +309,9 @@ public:
 };
 
 struct index_adapt: unary_function<const conditions&, variable> {
-	variable operator()(const conditions& cond)
+	variable operator()(const conditions& cond) const
 	{
-		return variable("int", "__" + cond.induction + "__");
+		return variable("int", "__" + cond.induction + "__", "0");
 	}
 };
 

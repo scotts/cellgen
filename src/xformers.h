@@ -200,6 +200,7 @@ public:
 		index(i), buffer_size(b), remainder_size(l), induction(ind), step(s) {}
 	string operator()(const string& old)
 	{
+		cout << "step: " << step << " induction: " << induction << " index: " << index.name() << endl;
 		return old + "for (" + 
 			index.name() + "= 0;" + 
 			index.name() + "<" + (is_remainder ? remainder_size : buffer_size) + ";" + 
