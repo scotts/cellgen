@@ -25,20 +25,13 @@ void add_xformer_to_node(bind_xformer::value_type pair)
 
 xformerlist_data::xformerlist_data(const xformerlist_data& o): char_data(o)
 {
-	for (xformerlist::const_iterator i = o.xformations.begin(); i != o.xformations.end(); ++i) {
-		xformations.push_back((*i)->clone());
-	}
+	xformations = fmap(mem_fn(&xformer::clone), o.xformations);
 }
 
 xformerlist_data& xformerlist_data::operator=(const xformerlist_data& rhs)
 {
 	char_data::operator=(rhs);
-
-	xformations.clear();
-	for (xformerlist::const_iterator i = rhs.xformations.begin(); i != rhs.xformations.end(); ++i) {
-		xformations.push_back((*i)->clone());
-	}
-
+	xformations = fmap(mem_fn(&xformer::clone), rhs.xformations);
 	return *this;
 }
 
@@ -769,17 +762,17 @@ struct serial_for_op {
 	sharedset& global_out;
 	sharedset& global_inout;
 	condslist conds;
+	conditions curr_cond;
 	operations& ops;
 	sharedset in;
 	sharedset out;
 	sharedset inout;
-	conditions sercond;
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
 	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
-			condslist& c, operations& o):
+			condslist& c, const conditions cc, operations& o):
 		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
-		conds(c), ops(o), expressions_seen(0)
+		conds(c), curr_cond(cc), ops(o), expressions_seen(0)
 		{}
 	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, sharedset& gin, sharedset& gout, 
 			sharedset& ginout, condslist& c, operations& o):
@@ -1245,14 +1238,13 @@ void serial_for_op::operator()(ast_node& node)
 	if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) && 
 			expressions_seen < 3) {
 		++expressions_seen;
-		parse_conditions(node, expressions_seen, conds, sercond);
-		cout << "sercond.step " << sercond.step << endl;
+		parse_conditions(node, expressions_seen, conds, curr_cond);
 	}
 	else if (node_is(node, ids::compound)) {
 		for_compound_op o(shared_symbols, priv_symbols, locals, 
 				in, out, inout, 
 				global_in, global_out, global_inout, 
-				ops, conds, sercond);
+				ops, conds, curr_cond);
 		for_all(node.children, &o);
 	}
 	else {
@@ -1304,7 +1296,7 @@ struct parallel_for_op {
 			}
 		}
 		else if (node_is(node, ids::compound)) {
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, conds, ops);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, conds, parcond, ops);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);

@@ -10,45 +10,13 @@ using namespace std;
 #include "variable.h"
 #include "operations.h"
 
-inline int count_ocurrences(const string& code, const string& find)
-{
-	smatch res;
-	string::const_iterator start = code.begin();
-	const string::const_iterator end = code.end();
-	match_flag_type flags = match_default; 
-	int ocurrences = 0;
-
-	while (regex_search(start, end, res, regex(find), flags)) {
-		++ocurrences;
-
-		start = res[0].second;
-		flags |= boost::match_prev_avail; 
-		flags |= boost::match_not_bob;
-	}
-
-	return ocurrences;
-}
-
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
 	virtual void remainder_me() {} // Sigh. It's a hack to put this here, but it makes life so much easier.
+	virtual void nest_me(const conditions cond) {} // Double sigh, double hack.
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 	virtual string class_name() const = 0; // For debugging purposes only.
-
-	virtual operations cost() 
-	{
-		operations ops;
-		const string code = operator()("");
-
-		ops.add(INT, count_ocurrences(code, "\\+"));
-		ops.sub(INT, count_ocurrences(code, "\\-"));
-		ops.mul(INT, count_ocurrences(code, "\\*"));
-		ops.div(INT, count_ocurrences(code, "\\\\"));
-		ops.mod(INT, count_ocurrences(code, "\\%"));
-
-		return ops;
-	}
 };
 
 typedef list<xformer*> xformerlist;
@@ -111,6 +79,17 @@ public:
 	virtual void remainder_me()
 	{
 		is_remainder = true;
+	}
+};
+
+class nested_xformer: virtual public xformer {
+protected:
+	condslist nests;
+public:
+	nested_xformer() {}
+	virtual void nest_me(const conditions cond)
+	{
+		nests.push_back(cond);
 	}
 };
 
@@ -200,7 +179,6 @@ public:
 		index(i), buffer_size(b), remainder_size(l), induction(ind), step(s) {}
 	string operator()(const string& old)
 	{
-		cout << "step: " << step << " induction: " << induction << " index: " << index.name() << endl;
 		return old + "for (" + 
 			index.name() + "= 0;" + 
 			index.name() + "<" + (is_remainder ? remainder_size : buffer_size) + ";" + 
@@ -762,7 +740,7 @@ public:
 	virtual string final_iteration() const = 0;
 	virtual string next_buffer() const = 0;
 	virtual string this_buffer() const = 0;
-	virtual string first_buffer() const = 0;
+	virtual string first_buffer(const condslist nests) const = 0;
 	virtual string final_buffer() const = 0;
 	virtual string remainder_size() const = 0;
 	virtual string dma_in(const string& address) const = 0;
@@ -862,12 +840,12 @@ public:
 		}
 	}
 
-	string first_buffer() const
+	string first_buffer(const condslist nests) const
 	{
 		string first;
 
 		if (!v->is_flat()) {
-			first = v->math().zero_induction(conds.induction);
+			first = v->math().zero_induction(conds.induction).str();
 		}
 		else {
 			string factor = v->math().factor(conds.induction);
@@ -973,16 +951,16 @@ public:
 		return v->math().str();
 	}
 
-	string first_buffer() const
+	string first_buffer(const condslist nests) const
 	{
-		return v->math().zero_induction(conds.induction);
+		return v->math().zero_induction(conds.induction).str();
 	}
 
 	string final_buffer() const
 	{
 		string str;
 		try {
-			str = v->math().replace_induction(conds.induction, full_adaptor(v).name());
+			str = v->math().replace_induction(conds.induction, full_adaptor(v).name()).str();
 		} catch (ivar_not_found e) {
 			str = v->math().str();
 		}
@@ -1073,14 +1051,14 @@ public:
 };
 
 template <class Access>
-class gen_in_first: public conditions_xformer, public Access {
+class gen_in_first: public conditions_xformer, public nested_xformer, public Access {
 public:
 	gen_in_first(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
 		return old + 
 			"cellgen_dma_prep_start();" + 
-			dma_in("(unsigned long)(" + v->name() + " + (" + Access::first_buffer() + "))") + 
+			dma_in("(unsigned long)(" + v->name() + " + (" + Access::first_buffer(nests) + "))") + 
 			"cellgen_dma_prep_stop();";
 	}
 

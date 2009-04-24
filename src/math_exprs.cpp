@@ -101,20 +101,20 @@ paren_expr::~paren_expr()
 	delete recurse;
 }
 
-string paren_expr::replace_induction(const string& ivar, const string& rep) const
+paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	string s;
+	paren_expr replaced;
 	if (terminal == ivar) {
-		s = rep;
+		replaced = paren_expr(rep);
 	}
 	else if (recurse && recurse->str().find(ivar) != string::npos) {
-		s = recurse->replace_induction(ivar, rep);
+		replaced = paren_expr(new add_expr(recurse->replace_induction(ivar, rep)));
 	}
 	else {
 		throw ivar_not_found();
 	}
 
-	return s;
+	return replaced;
 }
 
 operations paren_expr::cost() const
@@ -189,30 +189,30 @@ paren_expr mult_expr::non_ihs(const string& ivar) const
 	return side(ivar, &_rhs, &_lhs);
 }
 
-string mult_expr::replace_induction(const string& ivar, const string& rep) const
+mult_expr mult_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	string s;
+	mult_expr replaced;
 
 	if (_lhs.str() == ivar) {
-		s = "(" + rep + _op + "(" + _rhs.str() + ")" + ")";	
+		replaced = mult_expr(rep, _op, _rhs);	
 	}
 	else if (_rhs.str() == ivar) {
-		s = "((" + _lhs.str() + ")" + _op + rep + ")";
+		replaced = mult_expr(_lhs, _op, rep);
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		s = "(" + _lhs.replace_induction(ivar, rep) + _op + "(" + _rhs.str() + "))";
+		replaced = mult_expr(_lhs.replace_induction(ivar, rep), _op, _rhs);
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		s = "((" + _lhs.str() + ")" + _op + _lhs.replace_induction(ivar, rep) + ")";
+		replaced = mult_expr(_lhs, _op, _lhs.replace_induction(ivar, rep));
 	}
 	else {
 		throw ivar_not_found();
 	}
 
-	return s;
+	return replaced;
 }
 
-string mult_expr::zero_induction(const string& ivar) const
+mult_expr mult_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
 }
@@ -297,30 +297,30 @@ mult_expr add_expr::non_ihs(const string& ivar) const
 	return side(ivar, &_rhs, &_lhs);
 }
 
-string add_expr::replace_induction(const string& ivar, const string& rep) const
+add_expr add_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	string zeroed;
+	add_expr replaced;
 
 	if (_lhs.str() == ivar) {
-		zeroed = "(" + rep + _op + "(" + _rhs.str() + "))";
+		replaced = add_expr(mult_expr(rep), _op, _rhs);
 	}
 	else if (_rhs.str() == ivar) {
-		zeroed = "((" + _lhs.str() + ")" + _op + rep + ")";
+		replaced = add_expr(_lhs, _op, mult_expr(rep));
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		zeroed = "(" + _lhs.replace_induction(ivar, rep) + _op + "(" + _rhs.str() + "))";
+		replaced = add_expr(_lhs.replace_induction(ivar, rep), _op, _rhs);
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		zeroed = "((" + _lhs.str() + ")" + _op + _rhs.replace_induction(ivar, rep) + ")";
+		replaced = add_expr(_lhs, _op, _rhs.replace_induction(ivar, rep));
 	}
 	else {
 		throw ivar_not_found();
 	}
 
-	return zeroed; 
+	return replaced; 
 }
 
-string add_expr::zero_induction(const string& ivar) const
+add_expr add_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
 }

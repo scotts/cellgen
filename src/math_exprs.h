@@ -35,7 +35,7 @@ public:
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
 	add_expr eval() const;
-	string replace_induction(const string& ivar, const string& rep) const;
+	paren_expr replace_induction(const string& ivar, const string& rep) const;
 
 	operations cost() const;
 };
@@ -53,6 +53,7 @@ public:
 	mult_expr(const string& l, const string& o, const string& r): _lhs(l), _op(o), _rhs(r) {}
 	mult_expr(const paren_expr& l, const string& o, const string& r): _lhs(l), _op(o), _rhs(r) {}
 	mult_expr(const string& l, const string& o, const paren_expr& r): _lhs(l), _op(o), _rhs(r) {}
+	mult_expr(const paren_expr& l, const string& o, const paren_expr& r): _lhs(l), _op(o), _rhs(r) {}
 	mult_expr(const mult_expr& o): _lhs(o._lhs), _op(o._op), _rhs(o._rhs) {}
 
 	void lhs(const string& s)	{ _lhs = s; }
@@ -76,8 +77,8 @@ public:
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
-	string replace_induction(const string& ivar, const string& rep) const;
-	string zero_induction(const string& ivar) const;
+	mult_expr replace_induction(const string& ivar, const string& rep) const;
+	mult_expr zero_induction(const string& ivar) const;
 
 	operations cost() const;
 
@@ -114,8 +115,8 @@ public:
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
-	string replace_induction(const string& ivar, const string& rep) const;
-	string zero_induction(const string& ivar) const;
+	add_expr replace_induction(const string& ivar, const string& rep) const;
+	add_expr zero_induction(const string& ivar) const;
 
 	string factor(const string& ivar) const
 	{
