@@ -764,12 +764,12 @@ struct assignment_search {
 struct serial_for_op {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
+	var_symtbl locals;
 	sharedset& global_in;
 	sharedset& global_out;
 	sharedset& global_inout;
-	var_symtbl locals;
-	operations& ops;
 	condslist conds;
+	operations& ops;
 	sharedset in;
 	sharedset out;
 	sharedset inout;
@@ -777,14 +777,14 @@ struct serial_for_op {
 	int expressions_seen; // used for figuring out if a statement is initializer, test or increment
 
 	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
-			operations& o, condslist& c):
+			condslist& c, operations& o):
 		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
-		ops(o), conds(c), expressions_seen(0)
+		conds(c), ops(o), expressions_seen(0)
 		{}
-	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, sharedset& gin, sharedset& gout, sharedset& ginout, 
-			const var_symtbl& l, operations& o, condslist& c):
-		shared_symbols(s), priv_symbols(p), global_in(gin), global_out(gout), global_inout(ginout), 
-		locals(l), ops(o), conds(c), expressions_seen(0)
+	serial_for_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, sharedset& gin, sharedset& gout, 
+			sharedset& ginout, condslist& c, operations& o):
+		shared_symbols(s), priv_symbols(p), locals(l), global_in(gin), global_out(gout), global_inout(ginout), 
+		conds(c), ops(o), expressions_seen(0)
 		{}
 	void merge_inout(sharedset& g_in, sharedset& g_out, sharedset& g_inout)
 	{
@@ -1093,7 +1093,7 @@ struct for_compound_op {
 
 			condslist::const_iterator curr_scope = previous(conds.end(), conds);
 			condslist oldconds = conds;
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, locals, ops, conds);
+			serial_for_op o(shared_symbols, priv_symbols, locals, global_in, global_out, global_inout, conds, ops);
 			for_all(node.children, &o);
 			o.merge_inout(global_in, global_out, global_inout);
 
@@ -1304,7 +1304,7 @@ struct parallel_for_op {
 			}
 		}
 		else if (node_is(node, ids::compound)) {
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, ops, conds);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, conds, ops);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);
