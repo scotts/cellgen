@@ -1,5 +1,5 @@
 #include "math_exprs.h"
-
+#include "variable.h"
 
 /* class paren_expr
  */
@@ -117,6 +117,22 @@ paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) 
 	return replaced;
 }
 
+paren_expr paren_expr::expand_induction(const string& i) const
+{
+	paren_expr exp;
+	if (terminal == i) {
+		exp = paren_expr(new add_expr(terminal, "+", index_adapt()(i).name()));
+	}
+	else if (recurse && recurse->str().find(i) != string::npos) {
+		exp = paren_expr(new add_expr(recurse->expand_induction(i)));
+	}
+	else {
+		exp = *this;
+	}
+
+	return exp;
+}
+
 operations paren_expr::cost() const
 {
 	operations ops;
@@ -215,6 +231,22 @@ mult_expr mult_expr::replace_induction(const string& ivar, const string& rep) co
 mult_expr mult_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
+}
+
+mult_expr mult_expr::expand_induction(const string& i) const
+{
+	mult_expr exp;
+	if (_lhs.str().find(i) != string::npos) {
+		exp = mult_expr(_lhs.expand_induction(i), _op, _rhs);
+	}
+	else if (_rhs.str().find(i) != string::npos) {
+		exp = mult_expr(_lhs, _op, _rhs.expand_induction(i));
+	}
+	else {
+		exp = *this;
+	}
+
+	return exp;
 }
 
 operations mult_expr::cost() const
@@ -323,6 +355,38 @@ add_expr add_expr::replace_induction(const string& ivar, const string& rep) cons
 add_expr add_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
+}
+
+add_expr add_expr::expand_induction(const string& i) const
+{
+	add_expr exp;
+	if (_lhs.str().find(i) != string::npos) {
+		exp = add_expr(_lhs.expand_induction(i), _op, _rhs);
+	}
+	else if (_rhs.str().find(i) != string::npos) {
+		exp = add_expr(_lhs, _op, _rhs.expand_induction(i));
+	}
+	else {
+		exp = *this;
+	}
+
+	return exp;
+}
+
+struct call_expand_induction {
+	add_expr& add;
+	call_expand_induction(add_expr& a): add(a) {}
+	void operator()(const conditions& cond) const
+	{
+		add = add.expand_induction(cond.induction);
+	}
+};
+
+add_expr add_expr::expand_all_inductions(const condslist& nested) const
+{
+	add_expr exp = *this;
+	for_all(nested, call_expand_induction(exp));
+	return exp;
 }
 
 unsigned int add_expr::index(const string& ivar) const

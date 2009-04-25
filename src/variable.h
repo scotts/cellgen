@@ -10,30 +10,10 @@
 using namespace std;
 
 #include "utility.h"
+#include "conditions.h"
 #include "math_exprs.h"
 
 const string pass_var = "pass";
-
-struct conditions {
-	string start;
-	string induction;
-	string stop;
-	string step;
-
-	conditions()
-		{}
-	conditions(const string& _start, const string& _induction, const string& _stop, const string& _step):
-		start(_start), induction(_induction), stop(_stop), step(_step)
-		{}
-
-	// Not using the step. I should, but I need to do some semantic analysis to make sure that 
-	// "++i" == "i++".
-	bool operator==(const conditions& o) const
-	{
-		return start == o.start && induction == o.induction && stop == o.stop;
-	}
-};
-typedef list<conditions> condslist;
 
 class variable {
 	string _type;
@@ -313,6 +293,11 @@ struct index_adapt: unary_function<const conditions&, variable> {
 	{
 		return variable("int", "__" + cond.induction + "__", "0");
 	}
+	variable operator()(const string& i) const
+	{
+		return variable("int", "__" + i + "__", "0");
+	}
+
 };
 
 typedef set<variable*>			varset;

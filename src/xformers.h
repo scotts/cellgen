@@ -13,7 +13,7 @@ using namespace std;
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
 	virtual void remainder_me() {} // Sigh. It's a hack to put this here, but it makes life so much easier.
-	virtual void nest_me(const conditions cond) {} // Double sigh, double hack.
+	virtual void nest_me(const conditions& cond) {} // Double sigh, double hack.
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 	virtual string class_name() const = 0; // For debugging purposes only.
@@ -87,7 +87,7 @@ protected:
 	condslist nests;
 public:
 	nested_xformer() {}
-	virtual void nest_me(const conditions cond)
+	virtual void nest_me(const conditions& cond)
 	{
 		nests.push_back(cond);
 	}
@@ -738,9 +738,9 @@ public:
 	virtual string next_iteration() const = 0;
 	virtual string bounds_check() const = 0;
 	virtual string final_iteration() const = 0;
-	virtual string next_buffer() const = 0;
-	virtual string this_buffer() const = 0;
-	virtual string first_buffer(const condslist nests) const = 0;
+	virtual string next_buffer(const condslist& nests) const = 0;
+	virtual string this_buffer(const condslist& nests) const = 0;
+	virtual string first_buffer(const condslist& nests) const = 0;
 	virtual string final_buffer() const = 0;
 	virtual string remainder_size() const = 0;
 	virtual string dma_in(const string& address) const = 0;
@@ -817,43 +817,43 @@ public:
 		return "((" + conds.stop + "-" + conds.start + ")" + factor() + ")";
 	}
 
-	string next_buffer() const
+	string next_buffer(const condslist& nests) const
 	{
 		string a;
 		if (v->is_flat()) {
 			a = v->math().ihs(conds.induction).str(); 
 		}
 		else {
-			a = v->math().str();
+			a = v->math().expand_all_inductions(nests).str();
 		}
 
 		return a + "+" + buffer_adaptor(v).size();
 	}
 
-	string this_buffer() const
+	string this_buffer(const condslist& nests) const
 	{
 		if (v->is_flat()) {
 			return v->math().ihs(conds.induction).str();
 		}
 		else {
-			return v->math().str();
+			return v->math().expand_all_inductions(nests).str();
 		}
 	}
 
-	string first_buffer(const condslist nests) const
+	string first_buffer(const condslist& nests) const
 	{
 		string first;
 
-		if (!v->is_flat()) {
-			first = v->math().zero_induction(conds.induction).str();
-		}
-		else {
+		if (v->is_flat()) {
 			string factor = v->math().factor(conds.induction);
 			if (factor != "") {
 				factor = "*" + factor;
 			}
 
 			first = conds.start + factor;
+		}
+		else {
+			first = v->math().zero_induction(conds.induction).expand_all_inductions(nests).str();
 		}
 
 		return first;
@@ -941,19 +941,19 @@ public:
 		return "(" + conds.stop + "-" + conds.start + ")";
 	}
 
-	string next_buffer() const
+	string next_buffer(const condslist& nests) const
 	{
-		return "(" + v->math().add_iteration(conds.induction, buffer_adaptor(v).size()) + ")";
+		return "(" + v->math().expand_all_inductions(nests).add_iteration(conds.induction, buffer_adaptor(v).size()) + ")";
 	}
 
-	string this_buffer() const
+	string this_buffer(const condslist& nests) const
 	{
-		return v->math().str();
+		return v->math().expand_all_inductions(nests).str();
 	}
 
-	string first_buffer(const condslist nests) const
+	string first_buffer(const condslist& nests) const
 	{
-		return v->math().zero_induction(conds.induction).str();
+		return v->math().zero_induction(conds.induction).expand_all_inductions(nests).str();
 	}
 
 	string final_buffer() const
@@ -1067,7 +1067,7 @@ public:
 };
 
 template <class Access>
-struct gen_in: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
+struct gen_in: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
 	gen_in(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
@@ -1090,7 +1090,7 @@ struct gen_in: virtual public conditions_xformer, virtual public remainder_xform
 				prev.name() + "=" + next.name() + ";" +
 				rotate_next + 
 				wait_next +
-				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer() + ")", 
+				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer(nests) + ")", 
 						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + Access::remainder_size() + ")") + 
 				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
 				wait_prev +
@@ -1103,7 +1103,7 @@ struct gen_in: virtual public conditions_xformer, virtual public remainder_xform
 };
 
 template <class Access>
-struct gen_out: virtual public conditions_xformer, virtual public remainder_xformer, public Access {
+struct gen_out: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
 	gen_out(shared_variable* v, const conditions& c, const int d): conditions_xformer(v, c, d), Access(v, c) {}
 	string operator()(const string& old)
 	{
@@ -1125,7 +1125,7 @@ struct gen_out: virtual public conditions_xformer, virtual public remainder_xfor
 			return dma + wait + old;
 		}
 		else {
-			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::this_buffer() + ")", depth);
+			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::this_buffer(nests) + ")", depth);
 			return "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
 		}
 	}

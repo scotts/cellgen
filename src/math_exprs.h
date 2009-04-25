@@ -7,8 +7,9 @@
 #include <cassert>
 using namespace std;
 
-#include "operations.h"
 #include "utility.h"
+#include "operations.h"
+#include "conditions.h"
 
 class ivar_not_found: public exception {};
 
@@ -36,6 +37,7 @@ public:
 	string add_iteration(const string& ivar, const string& size) const;
 	add_expr eval() const;
 	paren_expr replace_induction(const string& ivar, const string& rep) const;
+	paren_expr expand_induction(const string& i) const;
 
 	operations cost() const;
 };
@@ -79,6 +81,7 @@ public:
 	string next_iteration(const string& ivar) const;
 	mult_expr replace_induction(const string& ivar, const string& rep) const;
 	mult_expr zero_induction(const string& ivar) const;
+	mult_expr expand_induction(const string& i) const;
 
 	operations cost() const;
 
@@ -117,6 +120,8 @@ public:
 	string next_iteration(const string& ivar) const;
 	add_expr replace_induction(const string& ivar, const string& rep) const;
 	add_expr zero_induction(const string& ivar) const;
+	add_expr expand_induction(const string& i) const;
+	add_expr expand_all_inductions(const condslist& nests) const;
 
 	string factor(const string& ivar) const
 	{

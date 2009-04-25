@@ -1021,6 +1021,11 @@ void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const
 	pair<ast_node*, ast_node::tree_iterator> left_cmpd = find_shallow(for_loop, is_compound_expression);
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
 
+	ast_node::tree_iterator nested_for_loop = find_shallow(for_loop, is_for_loop).second;
+	if (nested_for_loop != for_loop.children.end()) {
+		call_descend(make_for_all_xformations(bind(&xformer::nest_me, _1, conds)), *nested_for_loop);
+	}
+
 	ast_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 	modify_for_loop(max, conds, buffer_size)(for_loop);
 	remove_xforms<if_clause>(*loop_cmpd); // Hack! hack-hack-hack
