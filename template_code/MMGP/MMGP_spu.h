@@ -50,8 +50,8 @@ volatile struct pass_t pass __attribute__((aligned(128))); // User defined struc
 
 
 /* Function used for waiting for the PPE signal */
-inline int MMGP_SPE_wait(void){
-
+inline int wait_for_ppe()
+{
         while (signal.start==0);
 
         return signal.start;
@@ -77,12 +77,12 @@ inline void cellgen_report(void)
 }
 
 #ifdef PROFILING
-inline void cellgen_DMA_start(void)
+inline void cellgen_dma_start(void)
 {
     dma_time_start = GET_TIME();
 }
 
-inline void cellgen_DMA_stop(int loop)
+inline void cellgen_dma_stop(int loop)
 {
     signal.T_DMA[loop-1] += GET_TIME() - dma_time_start;
 }
@@ -140,12 +140,12 @@ inline void cellgen_idle_stop(void)
     idle_has_begun = 0;                            \
 }
 
-#define MMGP_SPE_dma_wait(TAG_ID, fn_id)           \
+#define dma_wait(TAG_ID, fn_id)           \
 {                                                  \
-    cellgen_DMA_start();                           \
+    cellgen_dma_start();                           \
     mfc_write_tag_mask(1<<((unsigned int)TAG_ID)); \
     mfc_read_tag_status_all();                     \
-    cellgen_DMA_stop(fn_id);                       \
+    cellgen_dma_stop(fn_id);                       \
 }
 
 /*
@@ -199,7 +199,7 @@ inline void cellgen_timer_begin(void)
 
 #define cellgen_timer_begin()
 
-#define MMGP_SPE_dma_wait(TAG_ID, fn_id)           \
+#define dma_wait(TAG_ID, fn_id)           \
 {                                                  \
     mfc_write_tag_mask(1<<((unsigned int)TAG_ID)); \
     mfc_read_tag_status_all();                     \
@@ -211,8 +211,8 @@ inline void cellgen_timer_begin(void)
 /* Function used for establishing the memory
  * regions in LS, used for PPE <-> SPE 
  * communication */
-inline void MMGP_exchange(){
-
+inline void ppe_exchange()
+{
     SPE_threads = spu_read_in_mbox();
     SPE_id = spu_read_in_mbox();
     spu_write_out_mbox((unsigned int)&pass);
@@ -221,15 +221,15 @@ inline void MMGP_exchange(){
 }
 
 /* Function used for signaling the PPE */
-inline void MMGP_SPE_stop(int fn_id){
+inline void spe_stop(int fn_id){
 
     signal.start=0;
     #ifdef PROFILING
-    cellgen_DMA_start();
+    cellgen_dma_start();
     #endif
     spu_dsync();
     #ifdef PROFILING
-    cellgen_DMA_stop(fn_id);
+    cellgen_dma_stop(fn_id);
     #endif
     signal.stop=1;
     #ifdef PROFILING

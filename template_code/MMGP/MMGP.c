@@ -98,9 +98,7 @@ void *pthread_function(void *arg) {
     pthread_exit(NULL);
 }
 
-/* Creates SPE trheads, parameters:
- * 1. SPE_trheads, number of SPE threads to be created */
-void MMGP_create_threads(void)
+void spe_create_threads()
 {
         unsigned int i, rval;
         int rc;
@@ -184,7 +182,7 @@ void MMGP_create_threads(void)
  *            which function should be executed (multiple
  *            SPE functions can reside in the same SPE
  *            module) */
-inline void MMGP_start_SPE(unsigned int num, int value){
+inline void spe_start(unsigned int num, int value){
 
     /* Send starting signal to an SPE,
      * before that set signal.stop to 0 */
@@ -194,7 +192,7 @@ inline void MMGP_start_SPE(unsigned int num, int value){
                
 }
 
-inline void MMGP_offload(void)
+inline void spe_offloads(void)
 {
     profile_start_fn();
 }
@@ -202,7 +200,7 @@ inline void MMGP_offload(void)
 
 /* The same as _wait_SPET(), just without the 
  * timing instructions */
-inline void MMGP_wait_SPE(int fn_id)
+inline void wait_for_spes(int fn_id)
 {
     unsigned int i=0;
     
@@ -269,9 +267,9 @@ inline void cellgen_finish(void)
     */
 
     for (i=0; i<__SPE_threads; i++)
-        MMGP_start_SPE(i, GET_TIMES);
+        spe_start(i, GET_TIMES);
 
-    MMGP_wait_SPE (GET_TIMES);
+    wait_for_spe(GET_TIMES);
 
     for(i = 0; i < __SPE_threads; i++) { 
         T_L_spe[i] =  ((struct signal *)signal[i])->all_fn;
@@ -324,10 +322,10 @@ inline void cellgen_finish(void)
     #endif
 
     for (i=0; i<__SPE_threads; i++)
-        MMGP_start_SPE(i, TERMINATE);
+        spe_start(i, TERMINATE);
 }
 
-void MMGP_init(unsigned int num_threads)
+void spe_init(unsigned int num_threads)
 {
     /*Determine the total number of SPEs*/
     NUM_SPE = spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
@@ -351,8 +349,8 @@ void MMGP_init(unsigned int num_threads)
 
 __attribute__((constructor)) void __initialize()
 {
-	MMGP_init(NUM_THREADS_HOOK);
-	MMGP_create_threads();
+	spe_init(NUM_THREADS_HOOK);
+	spe_create_threads();
 }
 
 __attribute__((destructor)) void __finalize()

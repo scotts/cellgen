@@ -293,7 +293,7 @@ void add_to_dma_list(spe_dma_list_t* list, uint32_t len, uint64_t ea, \
     }
 }
 
-inline void DMA_getl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list, int tag, \
+inline void dma_getl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list, int tag, \
     uint32_t num_dma_cmds_per_element, uint32_t alloc_unit_sz)
 {
     if (list->length > DMA_LIST_LIMIT) {
@@ -319,7 +319,7 @@ inline void DMA_getl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list
     }
 }
 
-inline void DMA_putl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list, int tag, \
+inline void dma_putl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list, int tag, \
     uint32_t num_dma_cmds_per_element, uint32_t alloc_unit_sz)
 {
     if (list->length > DMA_LIST_LIMIT) {
@@ -345,7 +345,7 @@ inline void DMA_putl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list
     }
 }
 
-inline void DMA_get(volatile void* buff, uint64_t addr, unsigned int dma_sz, int tag)
+inline void dma_get(volatile void* buff, uint64_t addr, unsigned int dma_sz, int tag)
 {
     if (dma_sz > DMA_SZ_LIMIT) {
         unsigned int j;
@@ -376,7 +376,7 @@ inline void DMA_get(volatile void* buff, uint64_t addr, unsigned int dma_sz, int
     }
 }
 
-inline void DMA_put(volatile void* buff, uint64_t addr, unsigned int dma_sz, int tag)
+inline void dma_put(volatile void* buff, uint64_t addr, unsigned int dma_sz, int tag)
 {
     if (dma_sz > DMA_SZ_LIMIT) {
         unsigned int j;

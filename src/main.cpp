@@ -55,9 +55,9 @@ const string op_hook			= "OP";
 const string num_threads_hook		= "NUM_THREADS_HOOK";
 
 const string struct_pass_var		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
-const string mmgp_spe_stop		= "MMGP_SPE_stop(";
-const string mmgp_wait			= "MMGP_wait_SPE(" + loop_hook + ");\n";
-const string mmgp_reduction		= "MMGP_reduction(" + var_hook + "," + op_hook + ","; // + loop_hook + ");\n";
+const string spe_stop			= "spe_stop(";
+const string wait_for_spes		= "wait_for_spes(" + loop_hook + ");\n";
+const string spe_reduction		= "spe_reduction(" + var_hook + "," + op_hook + ","; // + loop_hook + ");\n";
 
 struct cmdline_options {
 	string src_name;
@@ -141,7 +141,7 @@ public:
 
 		*casest	<< c.str().replace(c.str().find_last_of(","), strlen(","), "") << "); " << endl
 			<< writebacks << endl
-			<< mmgp_spe_stop << loop_num << "); " << "break;" << endl;
+			<< spe_stop << loop_num << "); " << "break;" << endl;
 		cases.push_back(casest);
 
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
@@ -239,14 +239,14 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 
 			if ((*r)->reduction_op() != "") {
 				string str = regex_replace(
-						mmgp_reduction, 
+						spe_reduction, 
 						regex(var_hook), 
 						"&" + (*((*r)->reductions().begin()))->definition());
                                 str = str + string(id) + ");\n";
 				file << regex_replace(str, regex(op_hook), (*r)->reduction_op());
 			}
 			else {
-				file << regex_replace(mmgp_wait, regex(loop_hook), id);
+				file << regex_replace(wait_for_spes, regex(loop_hook), id);
 			}
 
 			++r;

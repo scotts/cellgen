@@ -672,13 +672,13 @@ public:
 			buffer_adaptor buff(v);
 			orig_adaptor orig(v);
 
-			ret =	"DMA_get(" +
+			ret =	"dma_get(" +
 					buff.name() + "," +
 					"(unsigned long)" + orig.name() + "," +
 					"sizeof(" + buff.type() + ")*" + buff.size() + ","
 					"3); \n" + 
 				orig.name() + "=" + buff.name() + ";"
-				"MMGP_SPE_dma_wait(3, fn_id); \n";
+				"dma_wait(3, fn_id); \n";
 		}
 
 		return old + ret;
@@ -892,7 +892,7 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		return "DMA_get(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+		return "dma_get(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
 				address + ","
 				"sizeof(" + buff.type() + ") *" + tsize + "," +
 				next.name() + ");";
@@ -908,7 +908,7 @@ public:
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		return "DMA_put(" + orig.name() + "," + address + "," + "sizeof(" + buff.type() + ")*" + tsize + "," + next + ");";
+		return "dma_put(" + orig.name() + "," + address + "," + "sizeof(" + buff.type() + ")*" + tsize + "," + next + ");";
 	}
 };
 
@@ -1016,7 +1016,7 @@ public:
 				"sizeof(" + buff.type() + "), " + 
 				stride() + "sizeof(" + buff.type() + "),"
 				"1);" +
-			"DMA_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+			"dma_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
 				address + "," +
 				"&" + lst.name(next.name()) + "," + 
 				next.name() + ","
@@ -1046,7 +1046,7 @@ public:
 		}
 
 		return 	make_list + 
-			"DMA_putl(" + orig.name() + "," + address + "," + "&" + lst.name(next) + "," + next + "," "1," + "sizeof(" + buff.type() + "));";
+			"dma_putl(" + orig.name() + "," + address + "," + "&" + lst.name(next) + "," + next + "," "1," + "sizeof(" + buff.type() + "));";
 	}
 };
 
@@ -1075,8 +1075,8 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		const string wait_next = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
-		const string wait_prev = "MMGP_SPE_dma_wait(" + prev.name() + ", fn_id);";
+		const string wait_next = "dma_wait(" + next.name() + ", fn_id);";
+		const string wait_prev = "dma_wait(" + prev.name() + ", fn_id);";
 		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + to_string(depth) + ";";
 
 		if (is_remainder) {
@@ -1117,7 +1117,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 					orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + "; \n";
 		}
 
-		const string wait = "MMGP_SPE_dma_wait(" + next.name() + ", fn_id);";
+		const string wait = "dma_wait(" + next.name() + ", fn_id);";
 
 		string dma;
 		if (is_remainder) {

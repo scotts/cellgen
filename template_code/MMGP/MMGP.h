@@ -18,16 +18,16 @@ int sched_yield(void);
 #define NUM_FNs		NUM_KERNELS
 #define TB      	79800000UL
 
-void MMGP_init(unsigned int num_threads);
-void cellgen_start(void);
-void cellgen_finish(void);
+void spe_init(unsigned int num_threads);
+void cellgen_start();
+void cellgen_finish();
 
-void MMGP_offload(void);
-void MMGP_start_SPE(unsigned int i, int value);
-void MMGP_wait_SPE(int fn_id);
-void MMGP_create_threads(void);
+void spe_offloads(void);
+void spe_start(unsigned int i, int value);
+void wait_for_spes(int fn_id);
+void spe_create_threads();
 
-#define MMGP_reduction(c, op, fn_id) \
+#define spe_reduction(c, op, fn_id) \
 ({ \
 	int i; \
 	sched_yield(); \

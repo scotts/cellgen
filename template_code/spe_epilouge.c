@@ -61,14 +61,14 @@ int main()
 {
 	int received;
 
-	MMGP_exchange();
+	ppe_exchange();
 
         cellgen_timer_begin();
 
 	while (1) {
 
         	/* MMGP call used for receiving the PPE starting signal */
-        	received = MMGP_SPE_wait();
+        	received = wait_for_ppe();
                 cellgen_timer_reset();
 
 		switch (received) {
