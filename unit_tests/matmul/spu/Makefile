@@ -4,4 +4,4 @@ LIBRARY_embed	= lib_matmul_spu.a
 
 IMPORTS		= -lsync
 
-include /opt/ibm/cell-sdk/prototype/make.footer
+include /opt/cell/sdk/make.footer

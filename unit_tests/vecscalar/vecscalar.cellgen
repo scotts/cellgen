@@ -1,0 +1,38 @@
+#include <stdio.h>
+#include <malloc_align.h>
+#include <free_align.h>
+
+#define ITERATIONS 1000
+#define N 16777216 // 128 MB 
+
+double vecscalar(double* vec)
+{
+	double product = 1;
+
+	#pragma cell reduction(*: double p = product) shared(double* v = vec) private(int N = N)
+	{
+		int i;
+		for (i = 0; i < N; ++i) {
+			p *= v[i];
+		}
+	}
+
+	return product;
+}
+
+int main ()
+{
+	int i;
+	double product;
+	double* vec = _malloc_align(N * sizeof(double), 7);
+	
+	for (i = 0; i < N; ++i) {
+		vec[i] = i;
+	}
+
+	for (i = 0; i < ITERATIONS; ++i) {
+		product = vecscalar(vec);
+	}
+
+	return 0;
+}

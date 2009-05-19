@@ -4,4 +4,5 @@ LIBRARY_embed	= lib_row3d_spu.a
 
 IMPORTS		= -lsync
 
-include /opt/ibm/cell-sdk/prototype/make.footer
+#include /opt/ibm/cell-sdk/prototype/make.footer
+include /opt/cell/sdk/make.footer

@@ -2,24 +2,32 @@
 #include <assert.h>
 
 #define N 16
+#define ITERATIONS 1000
 
-int a_spe[N][N] __attribute__((aligned(128)));
-int16b_t b_spe[N][N] __attribute__((aligned(128)));
-int c_spe[N][N] __attribute__((aligned(128)));
+double a_spe[N][N] __attribute__((aligned(128)));
+double16b_t b_spe[N][N] __attribute__((aligned(128)));
+double c_spe[N][N] __attribute__((aligned(128)));
 
-int a_ppe[N][N];
-int b_ppe[N][N];
-int c_ppe[N][N];
+double a_ppe[N][N];
+double b_ppe[N][N];
+double c_ppe[N][N];
 
-void spe_matmul(int a[N][N], int16b_t b[N][N], int c[N][N])
+int timing = 0;
+
+int double_eq(double a, double b)
 {
-	#pragma cell buffer(16) shared(int* a = a[N][N], int16b_t* b = b[N][N], int* c = c[N][N])
+	return fabs(a - b) < 0.00001;
+}
+
+void spe_matmul(double a[N][N], double16b_t b[N][N], double c[N][N])
+{
+	#pragma cell buffer(16) shared(double* a = a[N][N], double16b_t* b = b[N][N], double* c = c[N][N])
 	{
 		int i, j, k;
 
 		for (i = 0; i < N; ++i) {
 			for (j = 0; j < N; ++j) {
-				int sum = 0;
+				double sum = 0;
 				for (k = 0; k < N; ++k) {
 					 sum += a[i][k] * b[k][j].num;
 				}
@@ -29,25 +37,27 @@ void spe_matmul(int a[N][N], int16b_t b[N][N], int c[N][N])
 	}
 }
 
-void ppe_matmul(int a[N][N], int b[N][N], int c[N][N])
+void ppe_matmul(double a[N][N], double b[N][N], double c[N][N])
 {
 	int i, j, k;
 
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
+			double sum = 0;
 			for (k = 0; k < N; ++k) {
-				 c[i][j] += a[i][k] * b[k][j];
+				 sum += a[i][k] * b[k][j];
 			}
+			c[i][j] = sum;
 		}
 	}
 }
 
-void check_results(int spe[N][N], int ppe[N][N])
+void check_results(double spe[N][N], double ppe[N][N])
 {
 	int i, j;
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
-			if (spe[i][j] != ppe[i][j]) {
+			if (!double_eq(spe[i][j], ppe[i][j])) {
 				printf("failure at (%d,%d); spe %d, ppe %d\n", i, j, spe[i][j], ppe[i][j]);
 				return;
 			}
@@ -55,8 +65,12 @@ void check_results(int spe[N][N], int ppe[N][N])
 	}
 }
 
-int main()
+int main(int argc, char** argv)
 {
+	if (argc > 1) {
+		timing = 1;
+	}
+
 	int i, j;
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
@@ -66,10 +80,14 @@ int main()
 		}
 	}
 
-	spe_matmul(a_spe, b_spe, c_spe);
-	ppe_matmul(a_ppe, b_ppe, c_ppe);
+	for (i = 0; i < ITERATIONS; ++i) {
+		spe_matmul(a_spe, b_spe, c_spe);
 
-	check_results(c_spe, c_ppe);
+		if (!timing) {
+			ppe_matmul(a_ppe, b_ppe, c_ppe);
+			check_results(c_spe, c_ppe);
+		}
+	}
 
 	return 0;
 }
