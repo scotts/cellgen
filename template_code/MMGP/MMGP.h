@@ -27,6 +27,8 @@ void spe_start(unsigned int i, int value);
 void wait_for_spes(int fn_id);
 void spe_create_threads();
 
+unsigned long long estimate_cycles(const unsigned long long n, const unsigned long long iteration_cycles, const size_t elem_sz, int loop);
+
 #define spe_reduction(c, op, fn_id) \
 ({ \
 	int i; \

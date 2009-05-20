@@ -302,15 +302,16 @@ struct reduction_assign: public xformer {
 	string class_name() const { return "reduction_assign"; }
 };
 
-class define_clipped_range: public xformer {
+class define_clipped_range: public depth_xformer {
 	const string start;
 	const string stop;
-	const string max_type;
 public:
-	define_clipped_range(const string& b, const string& e, const string& m): start(b), stop(e), max_type(m) {}
+	define_clipped_range(const string& b, const string& e, const int d): depth_xformer(d), start(b), stop(e) {}
 	string operator()(const string& old)
 	{
-		return old + clipped_range.declare() + "=min((" + stop + "-" + start + "), 16384/sizeof(" + max_type + "));";
+		//return old + clipped_range.declare() + "=min((" + stop + "-" + start + "), 16384/sizeof(" + max_type + "));";
+		return old + clipped_range.declare() + "=((" + stop + "-" + start + ")/" + to_string(depth) + 
+			") - (((" + stop + "-" + start + ")/" + to_string(depth) + ")%16);";
 	}
 
 	xformer* clone() const { return new define_clipped_range(*this); }
@@ -323,10 +324,11 @@ class max_buffer_size: public depth_xformer {
 	const int buffer;
 	const int num_shared;
 	const string par_induction;
+	const string max_type;
 
 public:
-	max_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const int d): 
-		depth_xformer(d), max(m), buffer(b), num_shared(n), par_induction(p) {}
+	max_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const string& mt, const int d): 
+		depth_xformer(d), max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -336,8 +338,11 @@ public:
 				def = to_string(buffer);
 			}
 			else {
+				/*
 				const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 				def = base + "- (" + base + "% 16)";
+				*/
+				def = "min(" + clipped_range.name() + ", 16384 / sizeof(" + max_type + "))";
 			}
 			declaration = const_variable("int", buffer_adaptor(max).size(), def).define() + ";";
 		}
@@ -355,10 +360,11 @@ class shared_buffer_size: public depth_xformer {
 	const int buffer;
 	const int num_shared;
 	const string par_induction;
+	const string max_type;
 
 public:
-	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const int d): 
-		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p) {}
+	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const string& mt, const int d): 
+		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -381,8 +387,11 @@ public:
 					def = to_string(buffer);
 				}
 				else {
+					/*
 					const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 					def = base + "- (" + base + "% 16)";
+					*/
+					def = "min(" + clipped_range.name() + ", 16384 / sizeof(" + max_type + "))";
 				}
 			}
 
@@ -401,13 +410,14 @@ struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*
 	const int buffer;
 	const int num_shared;
 	const string& par_induction;
+	const string& max_type;
 	const depths& local_depths;
-	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const depths& l): 
-		max(m), buffer(b), num_shared(n), par_induction(p), local_depths(l) {}
+	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const string& mt, const depths& l): 
+		max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, local_depths.find(v)->second);
+		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, max_type, local_depths.find(v)->second);
 	}
 };
 

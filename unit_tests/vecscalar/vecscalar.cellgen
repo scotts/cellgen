@@ -5,34 +5,41 @@
 #define ITERATIONS 1000
 #define N 16777216 // 128 MB 
 
-double vecscalar(double* vec)
+double vecscalar(double* vec, unsigned long long* time)
 {
-	double product = 1;
+	double sum = 0;
+	unsigned long long before = get_tb();
 
-	#pragma cell reduction(*: double p = product) shared(double* v = vec) private(int N = N)
+	#pragma cell reduction(+: double s = sum) shared(double* v = vec) private(int N = N)
 	{
 		int i;
 		for (i = 0; i < N; ++i) {
-			p *= v[i];
+			s += v[i];
 		}
 	}
 
-	return product;
+	unsigned long long after = get_tb();
+	*time += after - before;
+
+	return sum;
 }
 
 int main ()
 {
 	int i;
-	double product;
 	double* vec = _malloc_align(N * sizeof(double), 7);
 	
 	for (i = 0; i < N; ++i) {
 		vec[i] = i;
 	}
 
+	double sum = 0;
+	unsigned long long time = 0;
 	for (i = 0; i < ITERATIONS; ++i) {
-		product = vecscalar(vec);
+		sum = vecscalar(vec, &time);
 	}
+
+	printf("%f\n", (double)time / TB);
 
 	return 0;
 }

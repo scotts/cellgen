@@ -44,15 +44,13 @@ spe_mssync_area_t *mssync_ps_area[MAX_NUM_SPEs];
 double model_estimate[NUM_FNs];
 unsigned long long offload_count[NUM_FNs];
 
-inline int max(const int a, const int b)
+inline unsigned long long max(const unsigned long long a, const unsigned long long b)
 {
 	return (a > b) ? a : b;
 }
 
-int linear_model(const int n_bytes)
+unsigned long long linear_model(const unsigned long long n_bytes)
 {
-	assert(n_bytes > 0);
-
 	int cycles = 0;
 
 	if (n_bytes <= 2048) {
@@ -68,19 +66,19 @@ int linear_model(const int n_bytes)
 	return cycles;
 }
 
-int transfer_cycles(const int n_bytes)
+unsigned long long transfer_cycles(const unsigned long long n_bytes)
 {
 	return 128 + linear_model(n_bytes);
 }
 
-int computation_cycles(const int n, const int iteration_cycles)
+unsigned long long computation_cycles(const unsigned long long n, const unsigned long long iteration_cycles)
 {
 	return (n * iteration_cycles) / __SPE_threads;
 }
 
-int estimate_cycles(const int n, const int iteration_cycles, const size_t elem_sz, int loop)
+unsigned long long estimate_cycles(const unsigned long long n, const unsigned long long iteration_cycles, const size_t elem_sz, int loop)
 {
-	const int cycles = max(transfer_cycles(n* elem_sz), computation_cycles(n, iteration_cycles));
+	const unsigned long long cycles = max(transfer_cycles(n* elem_sz), computation_cycles(n, iteration_cycles));
 
 	model_estimate[loop-1] = (model_estimate[loop-1] * offload_count[loop-1] + cycles) / (offload_count[loop-1] + 1);
 	++offload_count[loop-1];

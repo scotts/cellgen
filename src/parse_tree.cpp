@@ -1719,11 +1719,11 @@ struct cell_region {
 				clipped_start = conds.back().start;
 				clipped_stop = conds.back().stop;
 			}
-			front.push_back(new define_clipped_range(clipped_start, clipped_stop, greatest));
+			front.push_back(new define_clipped_range(clipped_start, clipped_stop, max_depths[max]));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), privs));
-			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
-			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths), shared));
+			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, greatest, max_depths[max]));
+			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, greatest, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), privs));

@@ -1,29 +1,26 @@
 #include <stdio.h>
 #include <assert.h>
+#include <math.h>
 
-#define N 1664
-#define ITERATIONS 1
+#define N 1672
+#define ITERATIONS 1000
 
 int double_eq(double a, double b)
 {
 	return fabs(a - b) < 0.00001;
 }
 
-unsigned long long spe_matmul(double (*a)[N], double16b_t (*b)[N], double (*c)[N])
+unsigned long long spe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
 {
 	const unsigned long long before = get_tb();
 
-	#pragma cell shared(double* a = a[N][N], double16b_t* b = b[N][N], double* c = c[N][N])
+	#pragma cell buffer(16) shared(double* a = a[N][N], double* b = b[N][N], double* c = c[N][N])
 	{
-		int i, j, k;
+		int i, j;
 
 		for (i = 0; i < N; ++i) {
 			for (j = 0; j < N; ++j) {
-				double sum = 0;
-				for (k = 0; k < N; ++k) {
-					 sum += a[i][k] * b[k][j].num;
-				}
-				c[i][j] = sum;
+				c[i][j] = a[i][j] + b[i][j];
 			}
 		}
 	}
@@ -35,15 +32,11 @@ unsigned long long spe_matmul(double (*a)[N], double16b_t (*b)[N], double (*c)[N
 
 void ppe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
 {
-	int i, j, k;
+	int i, j;
 
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
-			double sum = 0;
-			for (k = 0; k < N; ++k) {
-				 sum += a[i][k] * b[k][j];
-			}
-			c[i][j] = sum;
+			c[i][j] = a[i][j] + b[i][j];
 		}
 	}
 }
@@ -64,24 +57,24 @@ void check_results(double (*spe)[N], double (*ppe)[N])
 int main(int argc, char** argv)
 {
 	int do_timing = 0;
+
 	if (argc > 1) {
 		do_timing = 1;
 	}
 
 	double (*a_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
-	double16b_t (*b_spe)[N] = _malloc_align(N * N * sizeof(double16b_t), 7);
+	double (*b_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
 	double (*c_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
 
 	double (*a_ppe)[N] = malloc(N * N * sizeof(double));
 	double (*b_ppe)[N] = malloc(N * N * sizeof(double));
 	double (*c_ppe)[N] = malloc(N * N * sizeof(double));
 
-
 	int i, j;
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
 			a_spe[i][j] = a_ppe[i][j] = (i+1)*(j+1);
-			b_spe[i][j].num = b_ppe[i][j] = (i+1)*(j+1);
+			b_spe[i][j] = b_ppe[i][j] = (i+1)*(j+1);
 			c_spe[i][j] = c_ppe[i][j] = 0;
 		}
 	}

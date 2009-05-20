@@ -1,0 +1,47 @@
+#include <stdio.h>
+#include <malloc_align.h>
+#include <free_align.h>
+
+#define ITERATIONS 1000
+#define N 8388608 // 64 MB 
+
+double vecdot(double* v1, double* v2, unsigned long long* time)
+{
+	double dot = 0;
+	unsigned long long before = get_tb();
+
+	#pragma cell reduction(*: double dot = dot) shared(double* v1 = v1, double* v2 = v2) private(int N = N)
+	{
+		int i;
+		for (i = 0; i < N; ++i) {
+			dot += v1[i] * v2[i];
+		}
+	}
+
+	unsigned long long after = get_tb();
+	*time += after - before;
+
+	return dot;
+}
+
+int main()
+{
+	int i;
+	double* v1 = _malloc_align(N * sizeof(double), 7);
+	double* v2 = _malloc_align(N * sizeof(double), 7);
+	
+	for (i = 0; i < N; ++i) {
+		v1[i] = i + 1;
+		v2[i] = 1 / (i+1);
+	}
+
+	double dot;
+	unsigned long long time = 0;
+	for (i = 0; i < ITERATIONS; ++i) {
+		dot = vecdot(v1, v2, &time);
+	}
+
+	printf("%f\n", (double)time / TB);
+
+	return 0;
+}
