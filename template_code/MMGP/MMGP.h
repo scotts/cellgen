@@ -16,7 +16,10 @@ int sched_yield(void);
 #define TERMINATE	0
 #define GET_TIMES	(NUM_KERNELS+1)
 #define NUM_FNs		NUM_KERNELS
-#define TB      	79800000UL
+#define TB        26666666UL
+#if defined(__cplusplus)
+extern "C" {
+#endif
 
 void spe_init(unsigned int num_threads);
 void cellgen_start();
@@ -27,17 +30,19 @@ void spe_start(unsigned int i, int value);
 void wait_for_spes(int fn_id);
 void spe_create_threads();
 
-unsigned long long estimate_cycles(const unsigned long long n, const unsigned long long iteration_cycles, const size_t elem_sz, int loop);
+#if defined(__cplusplus)
+}
+#endif
 
 #define spe_reduction(c, op, fn_id) \
 ({ \
 	int i; \
 	sched_yield(); \
 	for(i=0; i<__SPE_threads; i++) { \
-		while (((struct signal *)signal[i])->stop==0) { \
+		while (((struct signal_t *)sig[i])->stop==0) { \
 			sched_yield(); \
 		} \
-		*c op##= ((struct signal *)signal[i])->result;  \
+		*c op##= ((struct signal_t *)sig[i])->result;  \
 	} \
 })
 
@@ -67,7 +72,7 @@ static inline unsigned long long get_tb() {
 }
 
 /* Structure used for PPE<->SPE signaling */
-struct signal {
+struct signal_t {
 
     int start, stop;
     unsigned long long total_time, loop_time;
@@ -77,17 +82,17 @@ struct signal {
     #ifdef PROFILING
     unsigned long long T_fn[NUM_FNs];
     unsigned long long T_DMA[NUM_FNs];
-    unsigned long long T_comp[NUM_FNs];
+    unsigned long long T_total[NUM_FNs];
     unsigned long long idle_time;
     unsigned long long all_fn;
     unsigned long long all_dma;
     unsigned long long all_dma_prep;
-    unsigned long long all_comp;
+    unsigned long long all_total;
     #endif
 };
 
 volatile unsigned int pass[MAX_NUM_SPEs];
-volatile unsigned int signal[MAX_NUM_SPEs];
+volatile unsigned int sig[MAX_NUM_SPEs];
 
 unsigned long long MPI_calls;
 unsigned long long COMM_rec[10], MPI_total, MPI_count;

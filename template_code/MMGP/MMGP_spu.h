@@ -13,20 +13,31 @@
 #define GET_TIMES	(NUM_KERNELS+1)
 #define NUM_FNs		NUM_KERNELS
 
+#include "../pass_struct.h"
 
 #ifdef PROFILING
+
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 #include "cellgen_timer.h"
+
+#if defined(__cplusplus)
+}
+#endif
+
 #define TB      79800000UL
 unsigned long long total_time_start, loop_time_start;
-unsigned long long dma_time_start, total_time_start, idle_time_start;
+unsigned long long dma_time_start, idle_time_start;
 int idle_has_begun;
 #endif
 
 /* Structure used for PPE <-> SPE communication */
-struct signal {
+struct signal_t {
 
     int start, stop;
-    unsigned long long total_time,loop_time;
+    unsigned long long total_time, loop_time;
     double result;
     int result_int;
 
@@ -42,7 +53,7 @@ struct signal {
     #endif
 };
 
-volatile struct signal signal __attribute__((aligned(128)));
+volatile struct signal_t sig __attribute__((aligned(128)));
 
 int SPE_id; // SPE thread id
 int SPE_threads; // Each SPE trhead knows the total number of SPE threads in use
@@ -52,9 +63,9 @@ volatile struct pass_t pass __attribute__((aligned(128))); // User defined struc
 /* Function used for waiting for the PPE signal */
 inline int wait_for_ppe()
 {
-        while (signal.start==0);
+        while (sig.start==0);
 
-        return signal.start;
+        return sig.start;
 }
 
 /* Function used for main memory <-> LS synchronization */
@@ -65,14 +76,14 @@ inline void cellgen_report(void)
    int i = 0;
 
    for(i=0; i<NUM_FNs; i++) {
-      signal.all_fn += signal.T_fn[i];
-      signal.all_dma += signal.T_DMA[i];
-      signal.all_total += signal.T_total[i];
+      sig.all_fn += sig.T_fn[i];
+      sig.all_dma += sig.T_DMA[i];
+      sig.all_total += sig.T_total[i];
    }
 
-   signal.start=0;
+   sig.start=0;
    spu_dsync();
-   signal.stop=1;
+   sig.stop=1;
    #endif
 }
 
@@ -84,23 +95,27 @@ inline void cellgen_dma_start(void)
 
 inline void cellgen_dma_stop(int loop)
 {
-    signal.T_DMA[loop-1] += GET_TIME() - dma_time_start;
+    sig.T_DMA[loop-1] += GET_TIME() - dma_time_start;
 }
 
-#define cellgen_total_start() {    \
-    total_time_start = GET_TIME(); \
+inline void cellgen_total_start()
+{
+    total_time_start = GET_TIME();
 }
 
-#define cellgen_total_stop(loop) {                           \
-    signal.T_total[loop-1] += GET_TIME() - total_time_start;  \
+inline void cellgen_total_stop(int loop)
+{
+    sig.T_total[loop-1] += GET_TIME() - total_time_start;
 }
 
-#define cellgen_dma_prep_start() { \
-    dma_time_start = GET_TIME();   \
+inline void cellgen_dma_prep_start()
+{
+    dma_time_start = GET_TIME();
 }
 
-#define cellgen_dma_prep_stop() {                        \
-    signal.all_dma_prep += GET_TIME() - dma_time_start;  \
+inline void cellgen_dma_prep_stop()
+{
+    sig.all_dma_prep += GET_TIME() - dma_time_start;
 }
 
 inline void cellgen_idle_start(void)
@@ -114,7 +129,7 @@ inline void cellgen_idle_stop(void)
     unsigned long long idle_time_end = 0;
     if (idle_has_begun) {
        idle_time_end = (unsigned long long) GET_TIME();
-       signal.idle_time += idle_time_end - idle_time_start;
+       sig.idle_time += idle_time_end - idle_time_start;
     }
     idle_has_begun = 0;
 }
@@ -128,15 +143,15 @@ inline void cellgen_idle_stop(void)
 #define cellgen_timer_begin() {                    \
     unsigned int i;                                \
     for(i=0; i<NUM_FNs; i++) {                     \
-       signal.T_fn[i] = 0;                         \
-       signal.T_DMA[i] = 0;                        \
-       signal.T_total[i] = 0;                      \
+       sig.T_fn[i] = 0;                         \
+       sig.T_DMA[i] = 0;                        \
+       sig.T_total[i] = 0;                      \
     }                                              \
-    signal.idle_time = (unsigned long long) 0;     \
-    signal.all_fn = (unsigned long long) 0;        \
-    signal.all_dma = (unsigned long long) 0;       \
-    signal.all_dma_prep = (unsigned long long) 0;  \
-    signal.all_total = (unsigned long long) 0;      \
+    sig.idle_time = (unsigned long long) 0;     \
+    sig.all_fn = (unsigned long long) 0;        \
+    sig.all_dma = (unsigned long long) 0;       \
+    sig.all_dma_prep = (unsigned long long) 0;  \
+    sig.all_total = (unsigned long long) 0;      \
     idle_has_begun = 0;                            \
 }
 
@@ -156,7 +171,7 @@ inline void cellgen_total_start(void)
 
 inline void cellgen_total_stop(int loop)
 {
-    signal.T_total[loop-1] += GET_TIME() - total_time_start;
+    sig.T_total[loop-1] += GET_TIME() - total_time_start;
 }
 
 inline void cellgen_timer_reset(void)
@@ -170,14 +185,14 @@ inline void cellgen_timer_begin(void)
 {
     unsigned int i;
     for(i=0; i<NUM_FNs; i++) {
-       signal.T_fn[i] = 0;
-       signal.T_DMA[i] = 0;
-       signal.T_total[i] = 0;
+       sig.T_fn[i] = 0;
+       sig.T_DMA[i] = 0;
+       sig.T_total[i] = 0;
     }
-    signal.idle_time = (unsigned long long) 0;
-    signal.all_fn = (unsigned long long) 0;
-    signal.all_dma = (unsigned long long) 0;
-    signal.all_total = (unsigned long long) 0;
+    sig.idle_time = (unsigned long long) 0;
+    sig.all_fn = (unsigned long long) 0;
+    sig.all_dma = (unsigned long long) 0;
+    sig.all_total = (unsigned long long) 0;
     idle_has_begun = 0;
     //cellgen_timer_init();
 }
@@ -216,14 +231,14 @@ inline void ppe_exchange()
     SPE_threads = spu_read_in_mbox();
     SPE_id = spu_read_in_mbox();
     spu_write_out_mbox((unsigned int)&pass);
-    spu_write_out_mbox((unsigned int)&signal);
+    spu_write_out_mbox((unsigned int)&sig);
 
 }
 
 /* Function used for signaling the PPE */
 inline void spe_stop(int fn_id){
 
-    signal.start=0;
+    sig.start=0;
     #ifdef PROFILING
     cellgen_dma_start();
     #endif
@@ -231,9 +246,9 @@ inline void spe_stop(int fn_id){
     #ifdef PROFILING
     cellgen_dma_stop(fn_id);
     #endif
-    signal.stop=1;
+    sig.stop=1;
     #ifdef PROFILING
-    signal.T_fn[fn_id-1] += GET_TIME() - total_time_start;
+    sig.T_fn[fn_id-1] += GET_TIME() - total_time_start;
     cellgen_idle_start();
     #endif
 	

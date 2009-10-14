@@ -17,19 +17,26 @@ inline void bounds_assign(int* start, int* stop, const int cutoff_id, const int 
 
 void compute_bounds (int *start, int *stop, size_t element_sz)
 {
-	const int bytes16 = 16 / element_sz;
-	const int total_chunks = (*stop - *start) / bytes16;
-	const int base_chunks = total_chunks / SPE_threads;
-	const int thread_bytes_rem = ((*stop - *start) % (bytes16 * SPE_threads));
-	const int leftover = thread_bytes_rem % bytes16;
-
-	const int cutoff_id = SPE_threads - (thread_bytes_rem / bytes16);
-
-	if (SPE_id == SPE_threads - 1) {
-		bounds_assign(start, stop, cutoff_id, bytes16, base_chunks, leftover);
+	int bytes;
+	if (element_sz > 16) {
+		bytes = element_sz + element_sz % 16;
 	}
 	else {
-		bounds_assign(start, stop, cutoff_id, bytes16, base_chunks, 0);
+		bytes = 16 / element_sz;
+	}
+
+	const int total_chunks = (*stop - *start) / bytes;
+	const int base_chunks = total_chunks / SPE_threads;
+	const int thread_bytes_rem = ((*stop - *start) % (bytes * SPE_threads));
+	const int leftover = thread_bytes_rem % bytes;
+
+	const int cutoff_id = SPE_threads - (thread_bytes_rem / bytes);
+
+	if (SPE_id == SPE_threads - 1) {
+		bounds_assign(start, stop, cutoff_id, bytes, base_chunks, leftover);
+	}
+	else {
+		bounds_assign(start, stop, cutoff_id, bytes, base_chunks, 0);
 	}
 }
 

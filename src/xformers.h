@@ -232,7 +232,7 @@ class total_timer_stop: public xformer {
 public:
 	string operator()(const string& old)
 	{
-		return "cellgen_total_stop();" + old;
+		return "cellgen_total_stop(fn_id);" + old;
 	}
 
 	xformer* clone() const { return new total_timer_stop(*this); }
@@ -302,16 +302,15 @@ struct reduction_assign: public xformer {
 	string class_name() const { return "reduction_assign"; }
 };
 
-class define_clipped_range: public depth_xformer {
+class define_clipped_range: public xformer {
 	const string start;
 	const string stop;
+	const string max_type;
 public:
-	define_clipped_range(const string& b, const string& e, const int d): depth_xformer(d), start(b), stop(e) {}
+	define_clipped_range(const string& b, const string& e, const string& m): start(b), stop(e), max_type(m) {}
 	string operator()(const string& old)
 	{
-		//return old + clipped_range.declare() + "=min((" + stop + "-" + start + "), 16384/sizeof(" + max_type + "));";
-		return old + clipped_range.declare() + "=((" + stop + "-" + start + ")/" + to_string(depth) + 
-			") - (((" + stop + "-" + start + ")/" + to_string(depth) + ")%16);";
+		return old + clipped_range.declare() + "=min((" + stop + "-" + start + "), 16384/sizeof(" + max_type + "));";
 	}
 
 	xformer* clone() const { return new define_clipped_range(*this); }
@@ -324,11 +323,10 @@ class max_buffer_size: public depth_xformer {
 	const int buffer;
 	const int num_shared;
 	const string par_induction;
-	const string max_type;
 
 public:
-	max_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const string& mt, const int d): 
-		depth_xformer(d), max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt) {}
+	max_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const int d): 
+		depth_xformer(d), max(m), buffer(b), num_shared(n), par_induction(p) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -338,13 +336,11 @@ public:
 				def = to_string(buffer);
 			}
 			else {
-				/*
 				const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 				def = base + "- (" + base + "% 16)";
-				*/
-				def = "min(" + clipped_range.name() + ", 16384 / sizeof(" + max_type + "))";
 			}
-			declaration = const_variable("int", buffer_adaptor(max).size(), def).define() + ";";
+			declaration = variable("int", buffer_adaptor(max).size(), def).define() + ";" +
+				const_variable("int", buffer_adaptor(max).abs(), buffer_adaptor(max).size()).define() + ";";
 		}
 
 		return old + declaration;
@@ -360,11 +356,10 @@ class shared_buffer_size: public depth_xformer {
 	const int buffer;
 	const int num_shared;
 	const string par_induction;
-	const string max_type;
 
 public:
-	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const string& mt, const int d): 
-		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt) {}
+	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const int d): 
+		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p) {}
 	string operator()(const string& old)
 	{
 		string declaration;
@@ -387,15 +382,13 @@ public:
 					def = to_string(buffer);
 				}
 				else {
-					/*
 					const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 					def = base + "- (" + base + "% 16)";
-					*/
-					def = "min(" + clipped_range.name() + ", 16384 / sizeof(" + max_type + "))";
 				}
 			}
 
-			declaration = const_variable("int", buffer_adaptor(v).size(), def).define() + ";";
+			declaration = variable("int", buffer_adaptor(v).size(), buffer_adaptor(max).size()).define() + ";" + 
+				const_variable("int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs()).define() + ";";
 		}
 
 		return old + declaration;
@@ -410,14 +403,13 @@ struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*
 	const int buffer;
 	const int num_shared;
 	const string& par_induction;
-	const string& max_type;
 	const depths& local_depths;
-	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const string& mt, const depths& l): 
-		max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt), local_depths(l) {}
+	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const depths& l): 
+		max(m), buffer(b), num_shared(n), par_induction(p), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, max_type, local_depths.find(v)->second);
+		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, local_depths.find(v)->second);
 	}
 };
 
@@ -450,7 +442,7 @@ public:
 		string alloc;
 		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
-			alloc = buff.declare() + "= _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + "*" + buff.size() + ",7);";
+			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + "*" + buff.size() + ",7);";
 		}
 
 		return old + alloc;
@@ -588,6 +580,36 @@ public:
 
 	xformer* clone() const { return new define_full(*this); }
 	string class_name() const { return "define_full"; }
+};
+
+class reset_buf_sz: public xformer {
+	const shared_variable* v;
+	const conditions conds;
+
+public:
+	reset_buf_sz(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
+	string operator()(const string& old)
+	{
+		buffer_adaptor buff(v);
+
+		return	buff.size() + "=" + buff.abs() + ";" + 
+			"if (" + buff.size() + ">" + conds.stop + "-" + conds.start + "&&" + conds.stop + "-" + conds.start + "> 0) {" +
+				buff.size() + "=" + conds.stop + "-" + conds.start + ";}" + 
+			old;
+	}
+
+	xformer* clone() const { return new reset_buf_sz(*this); }
+	string class_name() const { return "reset_buf_sz"; }
+};
+
+struct make_reset_buf_sz: public unary_function<shared_variable*, xformer*> {
+	const conditions& conds;
+	make_reset_buf_sz(const conditions& c): conds(c) {}
+
+	xformer* operator()(shared_variable* v)
+	{
+		return new reset_buf_sz(v, conds);
+	}
 };
 
 class reset_rem: public xformer {
@@ -902,7 +924,7 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		return "dma_get(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+		return "dma_get(" + buff.name() + "+" + buff.abs() + "*" + next.name() + "," +
 				address + ","
 				"sizeof(" + buff.type() + ") *" + tsize + "," +
 				next.name() + ");";
@@ -1026,7 +1048,7 @@ public:
 				"sizeof(" + buff.type() + "), " + 
 				stride() + "sizeof(" + buff.type() + "),"
 				"1);" +
-			"dma_getl(" + buff.name() + "+" + buff.size() + "*" + next.name() + "," +
+			"dma_getl(" + buff.name() + "+" + buff.abs() + "*" + next.name() + "," +
 				address + "," +
 				"&" + lst.name(next.name()) + "," + 
 				next.name() + ","
@@ -1091,7 +1113,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 
 		if (is_remainder) {
 			return old +
-				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + ";" +
+				orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + next.name() + ";" +
 				wait_next;
 		}
 		else {
@@ -1102,7 +1124,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 				wait_next +
 				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer(nests) + ")", 
 						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + Access::remainder_size() + ")") + 
-				orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + prev.name() + ";" +
+				orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";
 		}
@@ -1124,7 +1146,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 		string var_switch;
 		if (depth < 3) {
 			var_switch = next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; \n" +
-					orig.name() + "=" + buff.name() + "+" + buff.size() + "*" + next.name() + "; \n";
+					orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + next.name() + "; \n";
 		}
 
 		const string wait = "dma_wait(" + next.name() + ", fn_id);";

@@ -1013,6 +1013,7 @@ void loop_mitosis(ast_node& for_loop, const shared_symtbl& shared_symbols, const
 	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
 	rbrace.push_back(new buffer_loop_stop());
 
+	append(for_loop.value.xformations, fmap(make_reset_buf_sz(speconds), seen));
 	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
 	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
 
@@ -1674,6 +1675,7 @@ struct cell_region {
 				<< endl;
 			*/
 
+			/*
 			string n = "1";
 			for (condslist::iterator i = conds.begin(); i != conds.end(); ++i) {
 				n += "*(";
@@ -1699,6 +1701,7 @@ struct cell_region {
 			}
 
 			(*region)->estimate("estimate_cycles(" + n + "," + to_string(total.cycles()) + ", sizeof(" + greatest + "),");
+			*/
 
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer()).max;
@@ -1719,11 +1722,11 @@ struct cell_region {
 				clipped_start = conds.back().start;
 				clipped_stop = conds.back().stop;
 			}
-			front.push_back(new define_clipped_range(clipped_start, clipped_stop, max_depths[max]));
+			front.push_back(new define_clipped_range(clipped_start, clipped_stop, greatest));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), privs));
-			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, greatest, max_depths[max]));
-			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, greatest, max_depths), shared));
+			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
+			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), privs));

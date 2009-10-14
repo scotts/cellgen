@@ -6,4 +6,4 @@ IMPORTS = spu/lib_vecdot_spu.a \
       
 CFLAGS = -O3 -DUNIX -fomit-frame-pointer
 INCLUDE = -I/opt/cell/sdk/usr/include/
-include /opt/ibm/cell-sdk/prototype/make.footer
+include /opt/cell/sdk/make.footer

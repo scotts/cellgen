@@ -18,6 +18,6 @@ unsigned int decr_handler(unsigned int status);
 
 unsigned long long GET_TIME(void);
 
-void my_time_init();
+void cellgen_timer_init();
 
 #endif /* _SPU_SLIH_REG_H_ */

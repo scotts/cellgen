@@ -64,7 +64,7 @@ static inline void free_dma_list(spe_dma_list_t* list)
 {
     list->length = 0;
     list->alloclength = 0;
-    _free_align(list->data);
+    _free_align((void*)list->data);
 }
 
 #define add_single_to_dma_list(list, j, ea, sz) { \
@@ -306,7 +306,7 @@ inline void dma_getl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list
 
         for(i = 0 ; i < num_lists ; i ++) {
             mfc_getl(buff, ea_base, L, full_size*sizeof(mfc_list_element_t), tag, 0, 0); 
-            buff += sz_list;
+            buff = (void*)((unsigned long)buff + sz_list);
             L += full_size;
             ea_base += sz_list;
         }
@@ -332,7 +332,7 @@ inline void dma_putl(volatile void* buff, uint64_t ea_base, spe_dma_list_t* list
 
         for(i = 0 ; i < num_lists ; i ++) {
             mfc_putl(buff, ea_base, L, full_size*sizeof(mfc_list_element_t), tag, 0, 0); 
-            buff += sz_list;
+            buff = (void*)((unsigned long)buff + sz_list);
             L += full_size;
             ea_base += sz_list;
         }

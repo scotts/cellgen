@@ -135,7 +135,7 @@ public:
 
 					// Implicitly pass the dimensions as private ints.
 					if (priv_symbols.find(dim) == priv_symbols.end()) {
-						private_variable* p = new private_variable("int", dim, dim, this->regions.size() + 1);
+						private_variable* p = new private_variable("unsigned int", dim, dim, this->regions.size() + 1);
 						privs.insert(p);
 						priv_symbols[dim] = p;
 					}

@@ -96,37 +96,51 @@ void operations::operator+=(const operations& o)
 
 void operations::add(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(add, type, n);
+	*/
 }
 
 void operations::sub(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(sub, type, n);
+	*/
 }
 
 void operations::mul(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(mul, type, n);
+	*/
 }
 
 void operations::div(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(div, type, n);
+	*/
 }
 
 void operations::mod(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(mod, type, n);
+	*/
 }
 
 void operations::load(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(load, type, n);
+	*/
 }
 
 void operations::store(const c_type type, const int n)
 {
+	/*
 	__SWITCH_TYPE_INCREMENT(store, type, n);
+	*/
 }
 
 void operations::inc(const op_type& op, const c_type type)

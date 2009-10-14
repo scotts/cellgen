@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define N 1664
-#define ITERATIONS 1
+#define N 128
+#define ITERATIONS 5
 
 int double_eq(double a, double b)
 {
@@ -19,7 +19,7 @@ unsigned long long spe_matmul(double (*a)[N], double16b_t (*b)[N], double (*c)[N
 
 		for (i = 0; i < N; ++i) {
 			for (j = 0; j < N; ++j) {
-				double sum = 0;
+				double sum = c[i][j];
 				for (k = 0; k < N; ++k) {
 					 sum += a[i][k] * b[k][j].num;
 				}
@@ -39,7 +39,7 @@ void ppe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
 
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
-			double sum = 0;
+			double sum = c[i][j];
 			for (k = 0; k < N; ++k) {
 				 sum += a[i][k] * b[k][j];
 			}
@@ -95,8 +95,6 @@ int main(int argc, char** argv)
 			check_results(c_spe, c_ppe);
 		}
 	}
-
-	printf("%f\n", (double)time / TB);
 
 	return 0;
 }

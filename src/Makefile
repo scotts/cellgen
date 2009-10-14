@@ -2,7 +2,7 @@
 # about a 30s difference in compilation times, and an order of magnitude
 # difference in executable size. Likely caused by debug information for 
 # the nested templates used by Spirit.
-DEBUG = -ggdb
+#DEBUG = -ggdb
 #OPT = -O3
 CXXFLAGS = -Wall $(DEBUG) $(OPT) 
 

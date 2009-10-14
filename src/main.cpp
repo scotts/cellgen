@@ -114,7 +114,7 @@ public:
 
 string reduction_writeback(string val, const region_variable* v)
 {
-	return val + "signal.result = " + pass_var + "." + v->unique_name() + ";\n";
+	return val + "sig.result = " + pass_var + "." + v->unique_name() + ";\n";
 }
 
 class print_region {
@@ -197,7 +197,7 @@ public:
 	void operator()(const region_variable* v)
 	{
 		out	<< struct_pass_var << v->unique_name() 
-			<< " = " << v->definition() << ";" 
+			<< " = (" << v->type() << ")" << v->definition() << ";" 
 			<< endl;
 	}
 };
@@ -226,7 +226,7 @@ void print_ppe(const string& name, sslist& blocks, stringstream& pro, stringstre
 
 			string id = to_string(loop_num);
 
-			file << (*r)->estimate() << loop_num << ");" << endl;
+			//file << (*r)->estimate() << loop_num << ");" << endl;
 
 			stringstream passes;
 			for_all((*r)->priv(), pass_assign(passes));

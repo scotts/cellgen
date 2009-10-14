@@ -44,13 +44,15 @@ spe_mssync_area_t *mssync_ps_area[MAX_NUM_SPEs];
 double model_estimate[NUM_FNs];
 unsigned long long offload_count[NUM_FNs];
 
-inline unsigned long long max(const unsigned long long a, const unsigned long long b)
+inline int max(const int a, const int b)
 {
 	return (a > b) ? a : b;
 }
 
-unsigned long long linear_model(const unsigned long long n_bytes)
+int linear_model(const int n_bytes)
 {
+	assert(n_bytes > 0);
+
 	int cycles = 0;
 
 	if (n_bytes <= 2048) {
@@ -66,23 +68,24 @@ unsigned long long linear_model(const unsigned long long n_bytes)
 	return cycles;
 }
 
-unsigned long long transfer_cycles(const unsigned long long n_bytes)
+int transfer_cycles(const int n_bytes)
 {
 	return 128 + linear_model(n_bytes);
 }
 
-unsigned long long computation_cycles(const unsigned long long n, const unsigned long long iteration_cycles)
+int computation_cycles(const int n, const int iteration_cycles)
 {
 	return (n * iteration_cycles) / __SPE_threads;
 }
 
-unsigned long long estimate_cycles(const unsigned long long n, const unsigned long long iteration_cycles, const size_t elem_sz, int loop)
+int estimate_cycles(const int n, const int iteration_cycles, const size_t elem_sz, int loop)
 {
-	const unsigned long long cycles = max(transfer_cycles(n* elem_sz), computation_cycles(n, iteration_cycles));
+	const int cycles = max(transfer_cycles(n* elem_sz), computation_cycles(n, iteration_cycles));
 
 	model_estimate[loop-1] = (model_estimate[loop-1] * offload_count[loop-1] + cycles) / (offload_count[loop-1] + 1);
 	++offload_count[loop-1];
 	//printf("%d\n", max(transfer_cycles(n * elem_sz), computation_cycles(n, iteration_cycles)));
+	return cycles;
 }
 
 void *pthread_function(void *arg) {
@@ -169,7 +172,7 @@ void spe_create_threads()
 
             while(spe_out_mbox_status(ptdata[i].speid)==0);
             spe_out_mbox_read(ptdata[i].speid, &rval, 1);
-            signal[i] = ls_addr[i] + rval;
+            sig[i] = ls_addr[i] + rval;
         }
 }
 
@@ -184,9 +187,9 @@ inline void spe_start(unsigned int num, int value){
 
     /* Send starting signal to an SPE,
      * before that set signal.stop to 0 */
-    ((struct signal *)signal[num])->stop=0;
+    ((struct signal_t *)sig[num])->stop=0;
     _sync;
-    ((struct signal *)signal[num])->start=value; 
+    ((struct signal_t *)sig[num])->start=value; 
                
 }
 
@@ -205,7 +208,7 @@ inline void wait_for_spes(int fn_id)
     sched_yield();
     for(i=0; i<__SPE_threads; i++){
        
-        while (((struct signal *)signal[i])->stop==0){
+        while (((struct signal_t *)sig[i])->stop==0){
             sched_yield();
         }
     }
@@ -232,13 +235,13 @@ inline void cellgen_finish(void)
 
     unsigned long long T_L[MAX_NUM_SPEs][NUM_FNs];
     unsigned long long T_DMA[MAX_NUM_SPEs][NUM_FNs];
-    unsigned long long T_comp[MAX_NUM_SPEs][NUM_FNs];
+    unsigned long long T_total[MAX_NUM_SPEs][NUM_FNs];
     unsigned long long T_L_spe[__SPE_threads];
     unsigned long long T_DMA_spe[__SPE_threads];
     unsigned long long T_DMA_prep_spe[__SPE_threads];
-    unsigned long long T_comp_spe[__SPE_threads];
+    unsigned long long T_total_spe[__SPE_threads];
     unsigned long long T_idle_spe[__SPE_threads];
-    unsigned long long T_L_all, T_DMA_all, T_comp_all;
+    unsigned long long T_L_all, T_DMA_all, T_total_all;
 
     /*
     printf("\n\nTotal Time: %f (sec)\n\n", (double)(time_cellgen_end-time_cellgen_start) / TB);
@@ -267,45 +270,43 @@ inline void cellgen_finish(void)
     for (i=0; i<__SPE_threads; i++)
         spe_start(i, GET_TIMES);
 
-    wait_for_spe(GET_TIMES);
+    wait_for_spes(GET_TIMES);
 
     for(i = 0; i < __SPE_threads; i++) { 
-        T_L_spe[i] =  ((struct signal *)signal[i])->all_fn;
-        T_comp_spe[i] =  ((struct signal *)signal[i])->all_comp;
-        T_DMA_spe[i] =  ((struct signal *)signal[i])->all_dma;
-        T_DMA_prep_spe[i] =  ((struct signal *)signal[i])->all_dma_prep;
-        T_idle_spe[i] =  ((struct signal *)signal[i])->idle_time;
+        T_L_spe[i] =  ((struct signal_t *)sig[i])->all_fn;
+        T_total_spe[i] =  ((struct signal_t *)sig[i])->all_total;
+        T_DMA_spe[i] =  ((struct signal_t *)sig[i])->all_dma;
+        T_DMA_prep_spe[i] =  ((struct signal_t *)sig[i])->all_dma_prep;
+        T_idle_spe[i] =  ((struct signal_t *)sig[i])->idle_time;
     }
 
     for (loop = 0; loop < NUM_FNs; loop++) {
-        T_L_all = T_DMA_all = T_comp_all = 0;
+        T_L_all = T_DMA_all = T_total_all = 0;
 
-	printf("loop%u model %f\n", loop + 1, model_estimate[loop]);
+	//printf("loop%u model %f\n", loop + 1, model_estimate[loop]);
         //printf("\nL%d :          Loop      DMA     Comp\n", loop+1);
         for (i = 0; i < __SPE_threads; i++) {
-            T_L_all += (T_L[i][loop] = ((struct signal *)signal[i])->T_fn[loop]);
-            T_DMA_all += (T_DMA[i][loop] = ((struct signal *)signal[i])->T_DMA[loop]);
-            T_comp_all += (T_comp[i][loop] = ((struct signal *)signal[i])->T_comp[loop]);
-	    printf("%d %f\n", i, (((double)T_L[i][loop] / TB) * 3.2e9) / offload_count[loop]);
-            //printf("     SPE%u %8.6f %8.6f %8.6f\n",i+1, (double)T_L[i][loop] /TB, (double)T_DMA[i][loop] /TB, (double)T_comp[i][loop] /TB);
+            T_L_all += (T_L[i][loop] = ((struct signal_t *)sig[i])->T_fn[loop]);
+            T_DMA_all += (T_DMA[i][loop] = ((struct signal_t *)sig[i])->T_DMA[loop]);
+            T_total_all += (T_total[i][loop] = ((struct signal_t *)sig[i])->T_total[loop]);
+	    //printf("%d %f\n", i, (((double)T_L[i][loop] / TB) * 3.2e9) / offload_count[loop]);
+            //printf("     SPE%u %8.6f %8.6f %8.6f\n",i+1, (double)T_L[i][loop] /TB, (double)T_DMA[i][loop] /TB, (double)T_total[i][loop] /TB);
         }
-	/*
-        printf("\n");
-        printf("avg L%u loop time: %8.6f (sec)\n", loop+1, (double)(T_L_all)/ TB / __SPE_threads);
-        printf("avg L%u DMA wait time: %8.6f (sec)\n", loop+1, (double)(T_DMA_all)/ TB / __SPE_threads);
-        printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_comp_all)/ TB / __SPE_threads);
-	*/
+        //printf("\n");
+        printf("%e ", (double)(T_total_all)/ TB / __SPE_threads / cnt_loop[loop]);
+        printf("%e\n", (double)(T_DMA_all)/ TB / __SPE_threads / cnt_loop[loop]);
+        //printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_total_all)/ TB / __SPE_threads);
     }
     //printf("\n\n           --- Summary ---            \n");
     #ifndef DMA_PREP_REPORT
     //printf("SPE         fn fn_kernel   DMA_all      idle\n");
     for (i = 0; i < __SPE_threads; i++) {
-        //printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_comp_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_idle_spe[i] / TB);
+        //printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_total_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_idle_spe[i] / TB);
     }
     #else
     //printf("SPE         fn fn_kernel   DMA_all      DMA_prep  idle\n");
     for (i = 0; i < __SPE_threads; i++) {
-        //printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_comp_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_DMA_prep_spe[i] /TB, (double)T_idle_spe[i] / TB);
+        //printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_total_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_DMA_prep_spe[i] /TB, (double)T_idle_spe[i] / TB);
     }
     #endif
     /*

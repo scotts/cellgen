@@ -67,6 +67,7 @@ public:
 };
 
 const variable prev("int", "prev", "0");
+const variable clipped_range("int", "__N__");
 const variable SPE_start("int", "SPE_start");
 const variable SPE_stop("int", "SPE_stop");
 
@@ -84,7 +85,6 @@ const const_variable buff_size("int", "buff_size", "16");
 */
 
 const const_variable leftover("int", "leftover");
-const const_variable clipped_range("int", "__N__");
 
 class pound_define: public variable {
 public:
@@ -191,6 +191,7 @@ public:
 	string name() const { return v->region_variable::name() + "_buf"; }
 	string declare() const { return type() + "* " + name(); }
 	string size() const { return name() + "_sz"; }
+	string abs() const { return name() + "_abs"; }
 
 	string type() const
 	{
