@@ -9,9 +9,9 @@
 #ifndef MMGP_SPU_H
 #define MMGP_SPU_H
 
-#define TERMINATE	0
-#define GET_TIMES	(NUM_KERNELS+1)
-#define NUM_FNs		NUM_KERNELS
+#define TERMINATE 0
+#define GET_TIMES (NUM_KERNELS+1)
+#define NUM_FNs NUM_KERNELS
 
 #include "../pass_struct.h"
 
@@ -27,30 +27,30 @@ extern "C" {
 }
 #endif
 
-#define TB      79800000UL
+#define TB 79800000UL
 unsigned long long total_time_start, loop_time_start;
 unsigned long long dma_time_start, idle_time_start;
 int idle_has_begun;
-#endif
+
+#endif // PROFILING
 
 /* Structure used for PPE <-> SPE communication */
 struct signal_t {
+	int start, stop;
+	unsigned long long total_time, loop_time;
+	double result;
+	int result_int;
 
-    int start, stop;
-    unsigned long long total_time, loop_time;
-    double result;
-    int result_int;
-
-    #ifdef PROFILING
-    unsigned long long T_fn[NUM_FNs];
-    unsigned long long T_DMA[NUM_FNs];
-    unsigned long long T_total[NUM_FNs];
-    unsigned long long idle_time;
-    unsigned long long all_fn;
-    unsigned long long all_dma;
-    unsigned long long all_dma_prep;
-    unsigned long long all_total;
-    #endif
+	#ifdef PROFILING
+	unsigned long long T_fn[NUM_FNs];
+	unsigned long long T_DMA[NUM_FNs];
+	unsigned long long T_total[NUM_FNs];
+	unsigned long long idle_time;
+	unsigned long long all_fn;
+	unsigned long long all_dma;
+	unsigned long long all_dma_prep;
+	unsigned long long all_total;
+	#endif
 };
 
 volatile struct signal_t sig __attribute__((aligned(128)));
@@ -58,7 +58,6 @@ volatile struct signal_t sig __attribute__((aligned(128)));
 int SPE_id; // SPE thread id
 int SPE_threads; // Each SPE trhead knows the total number of SPE threads in use
 volatile struct pass_t pass __attribute__((aligned(128))); // User defined structure used for PPE <-> SPE comm.
-
 
 /* Function used for waiting for the PPE signal */
 inline int wait_for_ppe()
@@ -72,186 +71,144 @@ inline int wait_for_ppe()
 
 inline void cellgen_report(void)
 {
-   #ifdef PROFILING
-   int i = 0;
+	#ifdef PROFILING
+	int i = 0;
 
-   for(i=0; i<NUM_FNs; i++) {
-      sig.all_fn += sig.T_fn[i];
-      sig.all_dma += sig.T_DMA[i];
-      sig.all_total += sig.T_total[i];
-   }
+	for (i = 0; i < NUM_FNs; i++) {
+		sig.all_fn += sig.T_fn[i];
+		sig.all_dma += sig.T_DMA[i];
+		sig.all_total += sig.T_total[i];
+	}
 
-   sig.start=0;
-   spu_dsync();
-   sig.stop=1;
-   #endif
+	sig.start=0;
+	spu_dsync();
+	sig.stop=1;
+	#endif
 }
 
-#ifdef PROFILING
-inline void cellgen_dma_start(void)
+inline void cellgen_dma_start()
 {
-    dma_time_start = GET_TIME();
+	#ifdef PROFILING
+	dma_time_start = GET_TIME();
+	#endif
 }
 
 inline void cellgen_dma_stop(int loop)
 {
-    sig.T_DMA[loop-1] += GET_TIME() - dma_time_start;
+	#ifdef PROFILING
+	sig.T_DMA[loop-1] += GET_TIME() - dma_time_start;
+	#endif
 }
 
 inline void cellgen_total_start()
 {
-    total_time_start = GET_TIME();
+	#ifdef PROFILING
+	total_time_start = GET_TIME();
+	#endif
 }
 
 inline void cellgen_total_stop(int loop)
 {
-    sig.T_total[loop-1] += GET_TIME() - total_time_start;
+	#ifdef PROFILING
+	sig.T_total[loop-1] += GET_TIME() - total_time_start;
+	#endif
 }
 
 inline void cellgen_dma_prep_start()
 {
-    dma_time_start = GET_TIME();
+	#ifdef PROFILING
+	dma_time_start = GET_TIME();
+	#endif
 }
 
 inline void cellgen_dma_prep_stop()
 {
-    sig.all_dma_prep += GET_TIME() - dma_time_start;
+	#ifdef PROFILING
+	sig.all_dma_prep += GET_TIME() - dma_time_start;
+	#endif
 }
 
-inline void cellgen_idle_start(void)
+inline void cellgen_idle_start()
 {
-    idle_time_start = (unsigned long long) GET_TIME();
-    idle_has_begun = 1;
+	#ifdef PROFILING
+	idle_time_start = (unsigned long long) GET_TIME();
+	idle_has_begun = 1;
+	#endif
 }
 
-inline void cellgen_idle_stop(void)
+inline void cellgen_idle_stop()
 {
-    unsigned long long idle_time_end = 0;
-    if (idle_has_begun) {
-       idle_time_end = (unsigned long long) GET_TIME();
-       sig.idle_time += idle_time_end - idle_time_start;
-    }
-    idle_has_begun = 0;
+	#ifdef PROFILING
+	unsigned long long idle_time_end = 0;
+	if (idle_has_begun) {
+		idle_time_end = (unsigned long long) GET_TIME();
+		sig.idle_time += idle_time_end - idle_time_start;
+	}
+	idle_has_begun = 0;
+	#endif
 }
 
-#define cellgen_timer_reset() {                    \
-    cellgen_idle_stop();                           \
-    cellgen_timer_init();                          \
-    total_time_start = GET_TIME();                 \
+inline void dma_wait(int TAG_ID, int fn_id)
+{ 
+	cellgen_dma_start();
+	mfc_write_tag_mask(1 << ((unsigned int)TAG_ID));
+	mfc_read_tag_status_all(); 
+	cellgen_dma_stop(fn_id); 
 }
 
-#define cellgen_timer_begin() {                    \
-    unsigned int i;                                \
-    for(i=0; i<NUM_FNs; i++) {                     \
-       sig.T_fn[i] = 0;                         \
-       sig.T_DMA[i] = 0;                        \
-       sig.T_total[i] = 0;                      \
-    }                                              \
-    sig.idle_time = (unsigned long long) 0;     \
-    sig.all_fn = (unsigned long long) 0;        \
-    sig.all_dma = (unsigned long long) 0;       \
-    sig.all_dma_prep = (unsigned long long) 0;  \
-    sig.all_total = (unsigned long long) 0;      \
-    idle_has_begun = 0;                            \
-}
-
-#define dma_wait(TAG_ID, fn_id)           \
-{                                                  \
-    cellgen_dma_start();                           \
-    mfc_write_tag_mask(1<<((unsigned int)TAG_ID)); \
-    mfc_read_tag_status_all();                     \
-    cellgen_dma_stop(fn_id);                       \
-}
-
-/*
-inline void cellgen_total_start(void)
+inline void cellgen_timer_reset()
 {
-    total_time_start = GET_TIME();
+	#ifdef PROFILING
+	cellgen_idle_stop();
+	cellgen_timer_init();
+	total_time_start = GET_TIME();
+	#endif
 }
 
-inline void cellgen_total_stop(int loop)
+inline void cellgen_timer_begin()
 {
-    sig.T_total[loop-1] += GET_TIME() - total_time_start;
+	#ifdef PROFILING
+	unsigned int i;
+	for (i = 0; i < NUM_FNs; i++) {
+		sig.T_fn[i] = 0;
+		sig.T_DMA[i] = 0;
+		sig.T_total[i] = 0;
+	}
+	sig.idle_time = (unsigned long long) 0;
+	sig.all_fn = (unsigned long long) 0;
+	sig.all_dma = (unsigned long long) 0;
+	sig.all_total = (unsigned long long) 0;
+	idle_has_begun = 0;
+	#endif
 }
-
-inline void cellgen_timer_reset(void)
-{
-    cellgen_idle_stop();
-    cellgen_timer_init();
-    total_time_start = GET_TIME();
-}
-
-inline void cellgen_timer_begin(void)
-{
-    unsigned int i;
-    for(i=0; i<NUM_FNs; i++) {
-       sig.T_fn[i] = 0;
-       sig.T_DMA[i] = 0;
-       sig.T_total[i] = 0;
-    }
-    sig.idle_time = (unsigned long long) 0;
-    sig.all_fn = (unsigned long long) 0;
-    sig.all_dma = (unsigned long long) 0;
-    sig.all_total = (unsigned long long) 0;
-    idle_has_begun = 0;
-    //cellgen_timer_init();
-}
-
-*/
-
-#else   // no profiling
-
-
-#define cellgen_total_start()
-
-#define cellgen_total_stop(fn_id)
-
-#define cellgen_dma_prep_start() 
-
-#define cellgen_dma_prep_stop() 
-
-#define cellgen_timer_reset()
-
-#define cellgen_timer_begin()
-
-#define dma_wait(TAG_ID, fn_id)           \
-{                                                  \
-    mfc_write_tag_mask(1<<((unsigned int)TAG_ID)); \
-    mfc_read_tag_status_all();                     \
-}
-
-#endif  // end of no profiling
-
 
 /* Function used for establishing the memory
  * regions in LS, used for PPE <-> SPE 
  * communication */
 inline void ppe_exchange()
 {
-    SPE_threads = spu_read_in_mbox();
-    SPE_id = spu_read_in_mbox();
-    spu_write_out_mbox((unsigned int)&pass);
-    spu_write_out_mbox((unsigned int)&sig);
-
+	SPE_threads = spu_read_in_mbox();
+	SPE_id = spu_read_in_mbox();
+	spu_write_out_mbox((unsigned int)&pass);
+	spu_write_out_mbox((unsigned int)&sig);
 }
 
 /* Function used for signaling the PPE */
-inline void spe_stop(int fn_id){
-
-    sig.start=0;
-    #ifdef PROFILING
-    cellgen_dma_start();
-    #endif
-    spu_dsync();
-    #ifdef PROFILING
-    cellgen_dma_stop(fn_id);
-    #endif
-    sig.stop=1;
-    #ifdef PROFILING
-    sig.T_fn[fn_id-1] += GET_TIME() - total_time_start;
-    cellgen_idle_start();
-    #endif
-	
+inline void spe_stop(int fn_id)
+{
+	sig.start=0;
+	#ifdef PROFILING
+	cellgen_dma_start();
+	#endif
+	spu_dsync();
+	#ifdef PROFILING
+	cellgen_dma_stop(fn_id);
+	#endif
+	sig.stop=1;
+	#ifdef PROFILING
+	sig.T_fn[fn_id-1] += GET_TIME() - total_time_start;
+	cellgen_idle_start();
+	#endif
 }
 
 #endif
