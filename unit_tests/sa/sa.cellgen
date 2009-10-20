@@ -1,0 +1,34 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
+
+typedef struct {
+	unsigned int next;
+	char send;
+	double16b_t result;
+} meta_t __attribute__((aligned(16)));
+
+const unsigned int N = 128
+
+void init_matrix(double16b_t** matrix, meta_t* meta)
+{
+	int i;
+	for (i = 0; i < N; ++i) {
+		int j;
+		int entries = ((double)rand() / RAND_MAX) * N;
+		for (j = 0; j < entries; ++j) {
+			matrix[i][j] = (i+1) * (j+1);
+		}
+	}
+}
+
+int main()
+{
+	double16b_t** matrix = (double16b_t**)_malloc_align(N * N * sizeof(double16b_t), 7);	
+	meta_t* meta = (meta_t*)_malloc_align(N * sizeof(double16b_t), 7);
+
+	srand(1);
+	init_matrix(matrix, meta);
+
+	return 0;
+}
