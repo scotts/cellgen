@@ -13,4 +13,4 @@ inline int min(const int a, const int b)
 	return (a < b) ? a : b;
 }
 
-void compute_bounds (int *start, int *stop, size_t element_sz);
+void compute_bounds (unsigned int *start, unsigned int *stop, size_t element_sz);

@@ -339,8 +339,8 @@ public:
 				const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 				def = base + "- (" + base + "% 16)";
 			}
-			declaration = variable("int", buffer_adaptor(max).size(), def).define() + ";" +
-				const_variable("int", buffer_adaptor(max).abs(), buffer_adaptor(max).size()).define() + ";";
+			declaration = variable("unsigned int", buffer_adaptor(max).size(), def).define() + ";" +
+				const_variable("unsigned int", buffer_adaptor(max).abs(), buffer_adaptor(max).size()).define() + ";";
 		}
 
 		return old + declaration;
@@ -387,8 +387,8 @@ public:
 				}
 			}
 
-			declaration = variable("int", buffer_adaptor(v).size(), buffer_adaptor(max).size()).define() + ";" + 
-				const_variable("int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs()).define() + ";";
+			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size()).define() + ";" + 
+				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs()).define() + ";";
 		}
 
 		return old + declaration;

@@ -68,8 +68,8 @@ public:
 
 const variable prev("int", "prev", "0");
 const variable clipped_range("int", "__N__");
-const variable SPE_start("int", "SPE_start");
-const variable SPE_stop("int", "SPE_stop");
+const variable SPE_start("unsigned int", "SPE_start");
+const variable SPE_stop("unsigned int", "SPE_stop");
 
 class const_variable: public variable {
 public:
@@ -249,7 +249,7 @@ public:
 	string name() const { return v->region_variable::name() + "_rem"; }
 	string declare() const
 	{
-		return "int " + name();
+		return "unsigned int " + name();
 	}
 
 	string reset(const conditions& conds, const string& max_factor) const
@@ -280,7 +280,7 @@ public:
 	string name() const { return v->region_variable::name() + "_ful"; }
 	string declare() const
 	{
-		return "int " + name(); 
+		return "unsigned int " + name(); 
 	}
 
 	string reset(const string& stop) const
@@ -292,26 +292,26 @@ public:
 struct index_adapt: unary_function<const conditions&, variable> {
 	variable operator()(const conditions& cond) const
 	{
-		return variable("int", "__" + cond.induction + "__", "0");
+		return variable("unsigned int", "__" + cond.induction + "__", "0");
 	}
 	variable operator()(const string& i) const
 	{
-		return variable("int", "__" + i + "__", "0");
+		return variable("unsigned int", "__" + i + "__", "0");
 	}
 
 };
 
-typedef set<variable*>			varset;
-typedef set<private_variable*>		privset;
-typedef set<shared_variable*>		sharedset;
-typedef set<reduction_variable*>	reduceset;
-typedef map<string, variable*>		var_symtbl;
-typedef map<string, shared_variable*>	shared_symtbl;
-typedef map<string, private_variable*>	priv_symtbl;
-typedef map<string, reduction_variable*>	reduc_symtbl;
-typedef set<string>			symset;
-typedef list<string>			symlist;
-typedef map<const region_variable*, int>	depths;
+typedef set<variable*> varset;
+typedef set<private_variable*> privset;
+typedef set<shared_variable*> sharedset;
+typedef set<reduction_variable*> reduceset;
+typedef map<string, variable*> var_symtbl;
+typedef map<string, shared_variable*> shared_symtbl;
+typedef map<string, private_variable*> priv_symtbl;
+typedef map<string, reduction_variable*> reduc_symtbl;
+typedef set<string> symset;
+typedef list<string> symlist;
+typedef map<const region_variable*, int> depths;
 
 #endif // VARIABLE_H
 

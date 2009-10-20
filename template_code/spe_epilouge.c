@@ -1,5 +1,5 @@
 
-inline void bounds_assign(int* start, int* stop, const int cutoff_id, const int bytes16, const int base_chunks, const int leftover)
+inline void bounds_assign(unsigned int* start, unsigned int* stop, const int cutoff_id, const int bytes16, const int base_chunks, const int leftover)
 {
       *start = *start + (SPE_id * base_chunks * bytes16);
 
@@ -15,7 +15,7 @@ inline void bounds_assign(int* start, int* stop, const int cutoff_id, const int 
       }
 }
 
-void compute_bounds (int *start, int *stop, size_t element_sz)
+void compute_bounds(unsigned int *start, unsigned int *stop, size_t element_sz)
 {
 	int bytes;
 	if (element_sz > 16) {

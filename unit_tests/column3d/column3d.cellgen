@@ -25,7 +25,7 @@ void inout1(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 
 	#pragma cell buffer(0) shared(int16b_t* test = test[N1][N2][N3])
 	{
-		int i, j, k;
+		unsigned int i, j, k;
 		for (i = 0; i < N2; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N1; ++k) {
@@ -61,7 +61,7 @@ void in_and_out2(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 
 	#pragma cell buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
-		int i, j, k;
+		unsigned int i, j, k;
 		for (i = 0; i < N1; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N2; ++k) {
@@ -97,7 +97,7 @@ void in_and_out1(int16b_t in[N1][N2][N3], int16b_t out[N1][N2][N3])
 
 	#pragma cell buffer(0) shared(int16b_t* in = in[N1][N2][N3], int16b_t* out = out[N1][N2][N3])
 	{
-		int i, j, k;
+		unsigned int i, j, k;
 		for (i = 0; i < N2; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N1; ++k) {
@@ -133,7 +133,7 @@ void inout2(int16b_t ref[N1][N2][N3], int16b_t test[N1][N2][N3])
 
 	#pragma cell buffer(0) shared(int16b_t* test = test[N1][N2][N3])
 	{
-		int i, j, k;
+		unsigned int i, j, k;
 		for (i = 0; i < N1; ++i) {
 			for (j = 0; j < N3; ++j) {
 				for (k = 0; k < N2; ++k) {

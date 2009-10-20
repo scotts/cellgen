@@ -12,7 +12,7 @@ double vecdot(double* v1, double* v2, unsigned long long* time)
 
 	#pragma cell reduction(*: double dot = dot) shared(double* v1 = v1, double* v2 = v2) private(int N = N)
 	{
-		int i;
+		unsigned int i;
 		for (i = 0; i < N; ++i) {
 			dot += v1[i] * v2[i];
 		}
