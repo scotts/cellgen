@@ -105,6 +105,12 @@ class case_sig {
 
 public:
 	case_sig(stringstream& f, stringstream& c): file(f), casest(c) {}
+	void operator()(const reduction_variable* v)
+	{
+		casest	<< "(" << v->type() << "*)" << v->actual() << ",";
+		file	<< v->formal() << ",";
+	}
+
 	void operator()(const region_variable* v)
 	{
 		casest	<< v->actual() << ",";

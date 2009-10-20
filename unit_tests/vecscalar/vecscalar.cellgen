@@ -10,7 +10,7 @@ double vecscalar(double* vec, unsigned long long* time)
 	double sum = 0;
 	unsigned long long before = get_tb();
 
-	#pragma cell reduction(+: double s = sum) shared(double* v = vec) private(int N = N)
+	#pragma cell reduction(+: double s = sum) shared(double* v = vec)
 	{
 		int i;
 		for (i = 0; i < N; ++i) {
