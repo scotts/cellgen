@@ -138,7 +138,7 @@ static inline void profile_start_fn()
 	#endif
 }
 
-static inline void profile_end_fn(unsigned int fn_id)
+static inline void profile_end_fn(unsigned int fn_id __attribute__((unused)))
 {
 	#ifdef PROFILING
 	cnt_loop[fn_id-1]++;

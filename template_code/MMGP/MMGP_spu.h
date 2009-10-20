@@ -80,9 +80,9 @@ inline void cellgen_report(void)
 		sig.all_total += sig.T_total[i];
 	}
 
-	sig.start=0;
+	sig.start = 0;
 	spu_dsync();
-	sig.stop=1;
+	sig.stop = 1;
 	#endif
 }
 
@@ -93,7 +93,7 @@ inline void cellgen_dma_start()
 	#endif
 }
 
-inline void cellgen_dma_stop(int loop)
+inline void cellgen_dma_stop(int loop __attribute__((unused)))
 {
 	#ifdef PROFILING
 	sig.T_DMA[loop-1] += GET_TIME() - dma_time_start;
@@ -107,7 +107,7 @@ inline void cellgen_total_start()
 	#endif
 }
 
-inline void cellgen_total_stop(int loop)
+inline void cellgen_total_stop(int loop __attribute__((unused)))
 {
 	#ifdef PROFILING
 	sig.T_total[loop-1] += GET_TIME() - total_time_start;
@@ -194,9 +194,9 @@ inline void ppe_exchange()
 }
 
 /* Function used for signaling the PPE */
-inline void spe_stop(int fn_id)
+inline void spe_stop(int fn_id __attribute__((unused)))
 {
-	sig.start=0;
+	sig.start = 0;
 	#ifdef PROFILING
 	cellgen_dma_start();
 	#endif
