@@ -13,4 +13,14 @@ inline int min(const int a, const int b)
 	return (a < b) ? a : b;
 }
 
+inline unsigned int prev16(const unsigned int x)
+{
+	if (x <= 16) {
+		return 16;
+	}
+	else {
+		return x - (x % 16);
+	}
+}
+
 void compute_bounds (unsigned int *start, unsigned int *stop, size_t element_sz);

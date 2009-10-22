@@ -2,33 +2,122 @@
 #include <stdio.h>
 #include <assert.h>
 
-typedef struct {
-	unsigned int next;
-	char send;
-	double16b_t result;
-} meta_t __attribute__((aligned(16)));
+const unsigned int N = 2000;
+const unsigned int W = 4000;
 
-const unsigned int N = 128
-
-void init_matrix(double16b_t** matrix, meta_t* meta)
+void init_matrix(int16b_t (*matrix)[W], meta_t* meta, partial_t* partials)
 {
-	int i;
+	srand(1);
+
+	unsigned int i;
 	for (i = 0; i < N; ++i) {
-		int j;
-		int entries = ((double)rand() / RAND_MAX) * N;
+		unsigned int j;
+		unsigned int entries = ((double)rand() / RAND_MAX) * W;
 		for (j = 0; j < entries; ++j) {
-			matrix[i][j] = (i+1) * (j+1);
+			matrix[i][j].num = (i+1) * (j+1);
 		}
+		meta[i].next = entries;
+		meta[i].send = 0;
+		meta[i].result = 0;
+
+		partials[i].count = 0;
+		partials[i].partial = 0;
+	}
+}
+
+void ppe_aggregation(int16b_t (*matrix)[W], meta_t* meta, partial_t* partials)
+{
+	unsigned int i;
+	for (i = 0; i < N; ++i) {
+		unsigned int j;
+		for (j = 0; j < meta[i].next; ++j) {
+			partials[i].partial += matrix[i][j].num;
+			++partials[i].count;
+
+			if (partials[i].count == W) {
+				meta[i].result = partials[i].partial;
+				meta[i].send = 1;
+
+				partials[i].count = 0;
+				partials[i].partial = 0;
+			}
+		}
+
+		meta[i].next = 0;
+	}
+}
+
+void spe_aggregation(int16b_t (*matrix)[W], meta_t* meta, partial_t* partials)
+{
+	#pragma cell shared(int16b_t* matrix = matrix[N][W], meta_t* meta = meta, partial_t* partials = partials)
+	{
+		unsigned int i, j;
+
+		for (i = 0; i < N; ++i) {
+			unsigned int next = meta[i].next;
+
+			unsigned int count = partials[i].count;
+			int partial = partials[i].partial;
+
+			int result = 0;
+			char send = 0;
+
+			if (next == 0) {
+				continue;
+			}
+
+			for (j = 0; j < next; ++j) {
+				partial += matrix[i][j].num;
+				++count;
+
+				if (count == W) {
+					result = partial;
+					send = 1;
+					partial = 0;
+					count = 0;
+				}
+			}
+
+			meta[i].result = result;
+			meta[i].send = send;
+			meta[i].next = 0;
+
+			partials[i].partial = partial;
+			partials[i].count = count;
+		}
+	}
+}
+
+void check_results(meta_t* meta_p, partial_t* partials_p, meta_t* meta_s, partial_t* partials_s)
+{
+	unsigned int i;
+	for (i = 0; i < N; ++i) {
+		assert(meta_p[i].next == meta_s[i].next);
+		assert(meta_p[i].send == meta_s[i].send);
+		assert(meta_p[i].result == meta_s[i].result);
+
+		assert(partials_p[i].count == partials_s[i].count);
+		assert(partials_p[i].partial == partials_s[i].partial);
 	}
 }
 
 int main()
 {
-	double16b_t** matrix = (double16b_t**)_malloc_align(N * N * sizeof(double16b_t), 7);	
-	meta_t* meta = (meta_t*)_malloc_align(N * sizeof(double16b_t), 7);
+	int16b_t (*matrix_p)[W] = malloc(N * W * sizeof(int16b_t));
+	partial_t* partials_p = malloc(N * sizeof(partial_t));
+	meta_t* meta_p = malloc(N * sizeof(meta_t));
 
-	srand(1);
-	init_matrix(matrix, meta);
+	int16b_t (*matrix_s)[W] = _malloc_align(N * W * sizeof(int16b_t), 7);	
+	partial_t* partials_s = _malloc_align(N * sizeof(partial_t), 7);
+	meta_t* meta_s = _malloc_align(N * sizeof(meta_t), 7);
+
+	init_matrix(matrix_p, meta_p, partials_p);
+	init_matrix(matrix_s, meta_s, partials_s);
+
+	ppe_aggregation(matrix_p, meta_p, partials_p);
+	spe_aggregation(matrix_s, meta_s, partials_s);
+
+	check_results(meta_p, partials_p, meta_s, partials_s);
 
 	return 0;
 }

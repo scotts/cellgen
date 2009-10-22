@@ -336,8 +336,7 @@ public:
 				def = to_string(buffer);
 			}
 			else {
-				const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
-				def = base + "- (" + base + "% 16)";
+				def = "prev16(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
 			}
 			declaration = variable("unsigned int", buffer_adaptor(max).size(), def).define() + ";" +
 				const_variable("unsigned int", buffer_adaptor(max).abs(), buffer_adaptor(max).size()).define() + ";";
@@ -364,29 +363,6 @@ public:
 	{
 		string declaration;
 		if (depth > 0 && v != max) {
-			string this_factor;
-			try {
-				this_factor = v->math().factor(par_induction);
-			}
-			catch (ivar_not_found) {
-				this_factor = "1";
-			}
-
-			const string& max_factor = max->math().factor(par_induction);
-			string def;
-			if (from_string<int>(this_factor) < from_string<int>(max_factor)) {
-				def = buffer_adaptor(max).size() + "/" + max_factor;
-			}
-			else {
-				if (buffer) {
-					def = to_string(buffer);
-				}
-				else {
-					const string base = "(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
-					def = base + "- (" + base + "% 16)";
-				}
-			}
-
 			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size()).define() + ";" + 
 				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs()).define() + ";";
 		}
