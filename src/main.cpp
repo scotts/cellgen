@@ -61,11 +61,11 @@ const string spe_reduction		= "spe_reduction(" + var_hook + "," + op_hook + ",";
 
 struct cmdline_options {
 	string src_name;
-	bool print_ast;
+	bool print_pt;
 	int num_threads;
 	string inc_name;
 
-	cmdline_options(): print_ast(false), num_threads(6) {}
+	cmdline_options(): print_pt(false), num_threads(6) {}
 };
 
 void file_to_stream(stringstream& in, istream& file) 
@@ -91,7 +91,7 @@ class codeout {
 
 public:
 	codeout(ostream& o): out(o) {}
-	void operator()(const ast_node& node)
+	void operator()(const pt_node& node)
 	{
 		out	<< inv_accumulate_all(node.value.xformations, string(node.value.begin(), node.value.end()))
 			<< " ";
@@ -153,7 +153,7 @@ public:
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
 		file << ") " << endl;
 
-		for_all(region->ast_root()->children, codeout(file));
+		for_all(region->pt_root()->children, codeout(file));
 
 		++loop_num;
 	}
@@ -305,7 +305,7 @@ cmdline_options parse_command_line(int argc, char* argv[])
 		desc.add_options()
 		("help,h", "print usage message")
 		("infile,i", value<string>(&options.src_name), "input filename")
-		("astout,a", value<bool>(&options.print_ast)->zero_tokens()->default_value(false), "print the ast")
+		("ptout,p", value<bool>(&options.print_pt)->zero_tokens()->default_value(false), "print the pt")
 		("Include,I", value<string>(&options.inc_name), "filename to include in ppe and spe source")
 		("num_threads,n", value<int>(&options.num_threads)->default_value(6), "set number of SPE threads");
 
@@ -338,7 +338,7 @@ int main(int argc, char* argv[])
 		sslist ppe_src_blocks;
 		spelist spe_regions;
 
-		parse_src(opts.src_name, ppe_src_blocks, spe_regions, opts.print_ast);
+		parse_src(opts.src_name, ppe_src_blocks, spe_regions, opts.print_pt);
 
 		stringstream ppe_fork;
 		stringstream ppe_prolouge;

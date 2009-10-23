@@ -14,7 +14,7 @@ class spe_region {
 	string _reduction_op;
 	shared_symtbl _shared_symbols;
 	priv_symtbl _priv_symbols;
-	ast_node* _ast_root;
+	pt_node* _pt_root;
 	string _estimate;
 	int _buffer;
 
@@ -40,16 +40,16 @@ public:
 	void estimate(const string& e) { _estimate = e; }
 	string estimate() const { return _estimate; }
 
-	void ast_root(ast_node* a)
+	void pt_root(pt_node* a)
 	{
 		assert(a);
-		_ast_root = a;
+		_pt_root = a;
 	}
 
-	ast_node* ast_root() const
+	pt_node* pt_root() const
 	{
-		assert(_ast_root);
-		return _ast_root;
+		assert(_pt_root);
+		return _pt_root;
 	}
 };
 

@@ -66,13 +66,13 @@ struct xformer_factory {
 };
 
 typedef file_iterator<char>				fileiter;
-typedef tree_parse_info<fileiter, xformer_factory>	ast_parse_file;
+typedef tree_parse_info<fileiter, xformer_factory>	pt_parse_file;
 typedef tree_match<fileiter, xformer_factory>		file_match;
-typedef file_match::tree_iterator			ast_iterator;
-typedef file_match::container_t				ast;
-typedef file_match::node_t				ast_node;
+typedef file_match::tree_iterator			pt_iterator;
+typedef file_match::container_t				pt;
+typedef file_match::node_t				pt_node;
 
-typedef tree_parse_info<string::const_iterator>		ast_parse_string;
+typedef tree_parse_info<string::const_iterator>		pt_parse_string;
 typedef tree_match<string::const_iterator>		string_match;
 typedef string_match::node_t				string_node;
 
@@ -84,7 +84,7 @@ inline ostream& operator<<(ostream& out, const parser_id& rid)
 	return out;
 }
 
-void traverse_ast(ast& trees, spelist& regions);
+void traverse_pt(pt& trees, spelist& regions);
 
 #endif	// PARSE_TREE_H
 

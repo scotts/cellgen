@@ -23,13 +23,13 @@ void print_xform_names(xformer* x)
 	cout << x->class_name() << " ";
 }
 
-class astout {
+class ptout {
 	int level;
 	string tabs;
 
 public:
-	astout(int l, string t): level(l), tabs(t) {}
-	void operator()(const ast_node& node)
+	ptout(int l, string t): level(l), tabs(t) {}
+	void operator()(const pt_node& node)
 	{
 		cout << tabs << level	<< ":" 
 					<< string(node.value.begin(), node.value.end()) 
@@ -38,7 +38,7 @@ public:
 		for_all(node.value.xformations, print_xform_names);
 		cout << ")" << endl;
 
-		for_all(node.children, astout(level + 1, tabs + "  "));
+		for_all(node.children, ptout(level + 1, tabs + "  "));
 	}
 };
 
@@ -447,7 +447,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	};
 };
 
-void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions, bool print_ast)
+void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions, bool print_pt)
 {
 	fileiter first(src_name);
 	if (!first) {
@@ -456,23 +456,23 @@ void parse_src(const string& src_name, sslist& ppe_blocks, spelist& spe_regions,
 	fileiter last = first.make_end();
 
 	cellgen_grammar cg(ppe_blocks, spe_regions);
-	ast_parse_file* parse = new ast_parse_file(); // need to make sure the ast persists
+	pt_parse_file* parse = new pt_parse_file(); // need to make sure the ast persists
 	*parse = ast_parse<xformer_factory>(first, last, cg, skip);
 
 	if (!parse->full) {
 		throw user_error(string("parse of ") + src_name + " failed.");
 	}
 
-	traverse_ast(parse->trees, spe_regions);
+	traverse_pt(parse->trees, spe_regions);
 
-	if (print_ast) {
-		for_all(parse->trees, astout(0, ""));
+	if (print_pt) {
+		for_all(parse->trees, ptout(0, ""));
 	}
 
 	spelist::iterator s = spe_regions.begin();
-	for (ast_iterator a = (*parse->trees.begin()).children.begin(); a != (*parse->trees.begin()).children.end(); ++a) {
+	for (pt_iterator a = (*parse->trees.begin()).children.begin(); a != (*parse->trees.begin()).children.end(); ++a) {
 		if ((*a).value.id() == ids::cell_region) {
-			(*s)->ast_root(&(*a));	
+			(*s)->pt_root(&(*a));	
 			++s;
 		}
 	}

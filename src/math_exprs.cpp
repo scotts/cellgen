@@ -1,6 +1,8 @@
 #include "math_exprs.h"
 #include "variable.h"
 
+#include <boost/regex.hpp>
+
 /* class paren_expr
  */
 paren_expr::paren_expr(const paren_expr& o): terminal(o.terminal)
@@ -104,13 +106,14 @@ paren_expr::~paren_expr()
 paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) const
 {
 	paren_expr replaced;
-	if (terminal == ivar) {
-		replaced = paren_expr(rep);
+	if (terminal.find(ivar) != string::npos) {
+		replaced = paren_expr(regex_replace(terminal, regex(ivar), rep));
 	}
 	else if (recurse && recurse->str().find(ivar) != string::npos) {
 		replaced = paren_expr(new add_expr(recurse->replace_induction(ivar, rep)));
 	}
 	else {
+		std::cerr << terminal << " " << ivar << std::endl;
 		throw ivar_not_found();
 	}
 
@@ -120,7 +123,7 @@ paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) 
 paren_expr paren_expr::expand_induction(const string& i) const
 {
 	paren_expr exp;
-	if (terminal == i) {
+	if (terminal.find(i) != string::npos) {
 		exp = paren_expr(new add_expr(terminal, "+", index_adapt()(i).name()));
 	}
 	else if (recurse && recurse->str().find(i) != string::npos) {
