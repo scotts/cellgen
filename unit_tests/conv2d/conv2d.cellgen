@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 
 const int I = 16;
 const int J = 16;
@@ -8,12 +9,25 @@ const int V = 16;
 const int X = 16 + 16 - 1;
 const int Y = 16 + 16 - 1;
 
-int main()
+void ppe_convolution(int a[X][Y], int h[U][V], int c[I][J])
 {
-	int16b_t a[X][Y] __attribute__((aligned(128)));
-	int16b_t h[U][V] __attribute__((aligned(128)));
-	int16b_t c[I][J] __attribute__((aligned(128)));
+	int i, j, u, v;
+	for (i = 0; i < I; ++i) {
+		for (j = 0; j < J; ++j) {
+			int sum = 0;
+			for (u = 0; u < U; ++u) {
+				for (v = 0; v < V; ++v) {
+					sum += h[u][v] * a[i + u][j + v];
 
+				}
+			}
+			c[i][j] = sum;
+		}
+	}
+}
+
+void spe_convolution(int16b_t a[X][Y], int16b_t h[U][V], int16b_t c[I][J])
+{
 	#pragma cell shared(int16b_t* c = c[I][J], int16b_t* h = h[U][V], int16b_t* a = a[X][Y])
 	{
 		int i, j, u, v;
@@ -30,6 +44,33 @@ int main()
 			}
 		}
 	}
+}
+
+void correctness_check(int c_p[I][J], int16b_t c_s[I][J])
+{
+	int i, j;
+
+	for (i = 0; i < I; ++i) {
+		for (j = 0; j < J; ++j) {
+			assert(c_p[i][j] == c_s[i][j].num);
+		}
+	}
+}
+
+int main()
+{
+	int a_p[X][Y];
+	int h_p[U][V];
+	int c_p[I][J];
+
+	int16b_t a_s[X][Y] __attribute__((aligned(128)));
+	int16b_t h_s[U][V] __attribute__((aligned(128)));
+	int16b_t c_s[I][J] __attribute__((aligned(128)));
+
+	ppe_convolution(a_p, h_p, c_p);
+	spe_convolution(a_s, h_s, c_s);
+
+	correctness_check(c_p, c_s);
 
 	return 0;
 }
