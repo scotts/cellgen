@@ -1,0 +1,35 @@
+#include <stdlib.h>
+#include <stdio.h>
+
+const int I = 16;
+const int J = 16;
+const int U = 16;
+const int V = 16;
+const int X = 16 + 16 - 1;
+const int Y = 16 + 16 - 1;
+
+int main()
+{
+	int16b_t a[X][Y] __attribute__((aligned(128)));
+	int16b_t h[U][V] __attribute__((aligned(128)));
+	int16b_t c[I][J] __attribute__((aligned(128)));
+
+	#pragma cell shared(int16b_t* c = c[I][J], int16b_t* h = h[U][V], int16b_t* a = a[X][Y])
+	{
+		int i, j, u, v;
+		for (i = 0; i < I; ++i) {
+			for (j = 0; j < J; ++j) {
+				int sum = 0;
+				for (u = 0; u < U; ++u) {
+					for (v = 0; v < V; ++v) {
+						sum += h[u][v].num * a[i + u][j + v].num;
+
+					}
+				}
+				c[i][j].num = sum;
+			}
+		}
+	}
+
+	return 0;
+}

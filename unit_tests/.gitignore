@@ -1,10 +1,16 @@
 column2d
 column3d
+conv2d
 fglite
 pbpilite
 row2d
 row3d
 sum
+vecscalar
+vecdot
+sa
+matadd
+matmul
 *.c
 *.d
 *.o
