@@ -2,14 +2,14 @@
 #include <stdio.h>
 #include <assert.h>
 
-const int I = 16;
-const int J = 16;
-const int U = 16;
-const int V = 16;
-const int X = 16 + 16 - 1;
-const int Y = 16 + 16 - 1;
+const int I = 100;
+const int J = 100;
+const int U = 100;
+const int V = 100;
+const int X = 100 + 100 - 1;
+const int Y = 100 + 100 - 1;
 
-void ppe_convolution(int a[X][Y], int h[U][V], int c[I][J])
+void ppe_convolution(int (*a)[Y], int (*h)[V], int (*c)[J])
 {
 	int i, j, u, v;
 	for (i = 0; i < I; ++i) {
@@ -26,11 +26,11 @@ void ppe_convolution(int a[X][Y], int h[U][V], int c[I][J])
 	}
 }
 
-void spe_convolution(int16b_t a[X][Y], int16b_t h[U][V], int16b_t c[I][J])
+void spe_convolution_padded(int16b_t (*a)[Y], int16b_t (*h)[V], int16b_t (*c)[J])
 {
 	#pragma cell shared(int16b_t* c = c[I][J], int16b_t* h = h[U][V], int16b_t* a = a[X][Y])
 	{
-		int i, j, u, v;
+		unsigned int i, j, u, v;
 		for (i = 0; i < I; ++i) {
 			for (j = 0; j < J; ++j) {
 				int sum = 0;
@@ -46,7 +46,27 @@ void spe_convolution(int16b_t a[X][Y], int16b_t h[U][V], int16b_t c[I][J])
 	}
 }
 
-void correctness_check(int c_p[I][J], int16b_t c_s[I][J])
+void spe_convolution_buffer(int (*a)[Y], int (*h)[V], int (*c)[J])
+{
+	#pragma cell buffer(16) shared(int* c = c[I][J], int* h = h[U][V], int* a = a[X][Y])
+	{
+		unsigned int i, j, u, v;
+		for (i = 0; i < I; ++i) {
+			for (j = 0; j < J; ++j) {
+				int sum = 0;
+				for (u = 0; u < U; ++u) {
+					for (v = 0; v < V; ++v) {
+						sum += h[u][v] * a[i + u][j + v];
+
+					}
+				}
+				c[i][j] = sum;
+			}
+		}
+	}
+}
+
+void correctness_check(int (*c_p)[J], int16b_t (*c_s)[J])
 {
 	int i, j;
 
@@ -59,16 +79,17 @@ void correctness_check(int c_p[I][J], int16b_t c_s[I][J])
 
 int main()
 {
-	int a_p[X][Y];
-	int h_p[U][V];
-	int c_p[I][J];
+	int (*a_p)[Y] = malloc(X * Y * sizeof(int));
+	int (*h_p)[V] = malloc(U * V * sizeof(int));
+	int (*c_p)[J] = malloc(I * J * sizeof(int));
 
-	int16b_t a_s[X][Y] __attribute__((aligned(128)));
-	int16b_t h_s[U][V] __attribute__((aligned(128)));
-	int16b_t c_s[I][J] __attribute__((aligned(128)));
+	int16b_t (*a_s)[Y] = _malloc_align(X * Y * sizeof(int16b_t), 7);
+	int16b_t (*h_s)[V] = _malloc_align(U * V * sizeof(int16b_t), 7);
+	int16b_t (*c_s)[J] = _malloc_align(I * J * sizeof(int16b_t), 7);
 
 	ppe_convolution(a_p, h_p, c_p);
-	spe_convolution(a_s, h_s, c_s);
+	spe_convolution_padded(a_s, h_s, c_s);
+	spe_convolution_buffer(a_s, h_s, c_s);
 
 	correctness_check(c_p, c_s);
 

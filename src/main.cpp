@@ -28,6 +28,8 @@ const string pass_struct_oname		= "pass_struct.h";
 
 // TEMPLATE_DIR is fed from the makefile
 const string path			= TEMPLATE_DIR;
+const string cellgen_lib_c		= path + "cellgen.c";
+const string cellgen_lib_h		= path + "cellgen.h";
 const string ppe_fork_iname		= path + "ppe_fork.c";
 const string ppe_prolouge_iname		= path + "ppe_prolouge.c";
 const string spe_declarations_iname	= path + "spe_prolouge.c";
@@ -374,6 +376,8 @@ int main(int argc, char* argv[])
 	
 		system(string("cp " + spe_profiler + " spu/").c_str());
 		system(string("cp " + cellstrider_dma_iname + " spu/").c_str());
+		system(string("cp " + cellgen_lib_c + " .").c_str());
+		system(string("cp " + cellgen_lib_h + " .").c_str());
 
 		system(string("indent " + ppe_oname + " " + spe_oname).c_str());
 		system("rm *~ spu/*~");

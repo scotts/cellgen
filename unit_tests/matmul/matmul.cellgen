@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <assert.h>
+#include "cellgen.h"
 
 #define N 128
 #define ITERATIONS 5
@@ -68,9 +69,9 @@ int main(int argc, char** argv)
 		do_timing = 1;
 	}
 
-	double (*a_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
-	double16b_t (*b_spe)[N] = _malloc_align(N * N * sizeof(double16b_t), 7);
-	double (*c_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
+	double (*a_spe)[N] = cellgen_malloc(N * N * sizeof(double));
+	double16b_t (*b_spe)[N] = cellgen_malloc(N * N * sizeof(double16b_t));
+	double (*c_spe)[N] = cellgen_malloc(N * N * sizeof(double));
 
 	double (*a_ppe)[N] = malloc(N * N * sizeof(double));
 	double (*b_ppe)[N] = malloc(N * N * sizeof(double));
