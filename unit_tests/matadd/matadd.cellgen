@@ -2,8 +2,10 @@
 #include <assert.h>
 #include <math.h>
 
+#include "cellgen.h"
+
 #define N 1672
-#define ITERATIONS 1000
+#define ITERATIONS 10
 
 int double_eq(double a, double b)
 {
@@ -62,9 +64,9 @@ int main(int argc, char** argv)
 		do_timing = 1;
 	}
 
-	double (*a_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
-	double (*b_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
-	double (*c_spe)[N] = _malloc_align(N * N * sizeof(double), 7);
+	double (*a_spe)[N] = cellgen_malloc(N * N * sizeof(double));
+	double (*b_spe)[N] = cellgen_malloc(N * N * sizeof(double));
+	double (*c_spe)[N] = cellgen_malloc(N * N * sizeof(double));
 
 	double (*a_ppe)[N] = malloc(N * N * sizeof(double));
 	double (*b_ppe)[N] = malloc(N * N * sizeof(double));

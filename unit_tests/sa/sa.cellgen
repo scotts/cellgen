@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "cellgen.h"
+
 const unsigned int N = 2000;
 const unsigned int W = 4000;
 
@@ -107,9 +109,9 @@ int main()
 	partial_t* partials_p = malloc(N * sizeof(partial_t));
 	meta_t* meta_p = malloc(N * sizeof(meta_t));
 
-	int16b_t (*matrix_s)[W] = _malloc_align(N * W * sizeof(int16b_t), 7);	
-	partial_t* partials_s = _malloc_align(N * sizeof(partial_t), 7);
-	meta_t* meta_s = _malloc_align(N * sizeof(meta_t), 7);
+	int16b_t (*matrix_s)[W] = cellgen_malloc(N * W * sizeof(int16b_t));	
+	partial_t* partials_s = cellgen_malloc(N * sizeof(partial_t));
+	meta_t* meta_s = cellgen_malloc(N * sizeof(meta_t));
 
 	init_matrix(matrix_p, meta_p, partials_p);
 	init_matrix(matrix_s, meta_s, partials_s);

@@ -27,7 +27,7 @@ double vecscalar(double* vec, unsigned long long* time)
 int main ()
 {
 	int i;
-	double* vec = _malloc_align(N * sizeof(double), 7);
+	double* vec = cellgen_malloc(N * sizeof(double));
 	
 	for (i = 0; i < N; ++i) {
 		vec[i] = i;

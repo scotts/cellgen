@@ -1,8 +1,7 @@
 DIRS = spu  
 PROGRAM_ppu = vecdot
 
-IMPORTS = spu/lib_vecdot_spu.a \
-	  -lpthread -lspe2 -lm -lc
+IMPORTS = spu/lib_vecdot_spu.a -lpthread -lspe2 -lm -lc -lnuma
       
 CFLAGS = -O3 -DUNIX -fomit-frame-pointer
 INCLUDE = -I/opt/cell/sdk/usr/include/

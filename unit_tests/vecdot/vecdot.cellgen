@@ -27,8 +27,8 @@ double vecdot(double* v1, double* v2, unsigned long long* time)
 int main()
 {
 	int i;
-	double* v1 = _malloc_align(N * sizeof(double), 7);
-	double* v2 = _malloc_align(N * sizeof(double), 7);
+	double* v1 = cellgen_malloc(N * sizeof(double));
+	double* v2 = cellgen_malloc(N * sizeof(double));
 	
 	for (i = 0; i < N; ++i) {
 		v1[i] = i + 1;

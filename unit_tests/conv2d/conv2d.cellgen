@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "cellgen.h"
+
 const int I = 100;
 const int J = 100;
 const int U = 100;
@@ -83,9 +85,9 @@ int main()
 	int (*h_p)[V] = malloc(U * V * sizeof(int));
 	int (*c_p)[J] = malloc(I * J * sizeof(int));
 
-	int16b_t (*a_s)[Y] = _malloc_align(X * Y * sizeof(int16b_t), 7);
-	int16b_t (*h_s)[V] = _malloc_align(U * V * sizeof(int16b_t), 7);
-	int16b_t (*c_s)[J] = _malloc_align(I * J * sizeof(int16b_t), 7);
+	int16b_t (*a_s)[Y] = cellgen_malloc(X * Y * sizeof(int16b_t));
+	int16b_t (*h_s)[V] = cellgen_malloc(U * V * sizeof(int16b_t));
+	int16b_t (*c_s)[J] = cellgen_malloc(I * J * sizeof(int16b_t));
 
 	ppe_convolution(a_p, h_p, c_p);
 	spe_convolution_padded(a_s, h_s, c_s);

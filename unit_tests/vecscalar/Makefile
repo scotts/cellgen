@@ -1,8 +1,7 @@
 DIRS = spu  
 PROGRAM_ppu = vecscalar
 
-IMPORTS = spu/lib_vecscalar_spu.a \
-	  -lpthread -lspe2 -lm -lc
+IMPORTS = spu/lib_vecscalar_spu.a -lpthread -lspe2 -lm -lc -lnuma
       
 CFLAGS = -O3 -DUNIX -fomit-frame-pointer
 INCLUDE = -I/opt/cell/sdk/usr/include/
