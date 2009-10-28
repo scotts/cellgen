@@ -26,9 +26,9 @@ void cellgen_numify(void* adr, size_t sz)
 		nodemask_zero(&node);
 		nodemask_set(&node, i);
 
-		int res = mbind((unsigned long)adr + i * node_sz, 
+		int res = mbind(adr + i * node_sz, 
 				(i == n_regions - 1 ? node_sz + node_rm : node_sz),
-				MPOL_BIND, &node, n_regions, MPOL_MF_MOVE | MPOL_MF_STRICT);
+				MPOL_BIND, (unsigned long*)&node, n_regions, MPOL_MF_MOVE | MPOL_MF_STRICT);
 
 		if (res != 0) {
 			perror("mbind");

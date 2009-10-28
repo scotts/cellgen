@@ -68,8 +68,8 @@ public:
 
 const variable prev("int", "prev", "0");
 const variable clipped_range("int", "__N__");
-const variable SPE_start("unsigned int", "SPE_start");
-const variable SPE_stop("unsigned int", "SPE_stop");
+const variable spe_start("unsigned int", "spe_start");
+const variable spe_stop("unsigned int", "spe_stop");
 
 class const_variable: public variable {
 public:

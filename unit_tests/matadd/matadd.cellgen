@@ -5,7 +5,7 @@
 #include "cellgen.h"
 
 #define N 1672
-#define ITERATIONS 10
+#define ITERATIONS 1000
 
 int double_eq(double a, double b)
 {

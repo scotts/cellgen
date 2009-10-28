@@ -55,8 +55,8 @@ struct signal_t {
 
 volatile struct signal_t sig __attribute__((aligned(128)));
 
-int SPE_id; // SPE thread id
-int SPE_threads; // Each SPE trhead knows the total number of SPE threads in use
+int spe_id; // SPE thread id
+int spe_threads; // Each SPE trhead knows the total number of SPE threads in use
 volatile struct pass_t pass __attribute__((aligned(128))); // User defined structure used for PPE <-> SPE comm.
 
 /* Function used for waiting for the PPE signal */
@@ -187,8 +187,8 @@ inline void cellgen_timer_begin()
  * communication */
 inline void ppe_exchange()
 {
-	SPE_threads = spu_read_in_mbox();
-	SPE_id = spu_read_in_mbox();
+	spe_threads = spu_read_in_mbox();
+	spe_id = spu_read_in_mbox();
 	spu_write_out_mbox((unsigned int)&pass);
 	spu_write_out_mbox((unsigned int)&sig);
 }

@@ -57,7 +57,7 @@ const string op_hook			= "OP";
 const string num_threads_hook		= "NUM_THREADS_HOOK";
 
 const string struct_pass_var		= "((struct pass_t *)" + pass_var + "[__i" + loop_hook + "])->";
-const string spe_stop			= "spe_stop(";
+const string spe_stop_fn		= "spe_stop(";
 const string wait_for_spes		= "wait_for_spes(" + loop_hook + ");\n";
 const string spe_reduction		= "spe_reduction(" + var_hook + "," + op_hook + ","; // + loop_hook + ");\n";
 
@@ -67,7 +67,7 @@ struct cmdline_options {
 	int num_threads;
 	string inc_name;
 
-	cmdline_options(): print_pt(false), num_threads(6) {}
+	cmdline_options(): print_pt(false), num_threads(0) {}
 };
 
 void file_to_stream(stringstream& in, istream& file) 
@@ -149,7 +149,7 @@ public:
 
 		*casest	<< c.str().replace(c.str().find_last_of(","), strlen(","), "") << "); " << endl
 			<< writebacks << endl
-			<< spe_stop << loop_num << "); " << "break;" << endl;
+			<< spe_stop_fn << loop_num << "); " << "break;" << endl;
 		cases.push_back(casest);
 
 		file << f.str().replace(f.str().find_last_of(","), strlen(","), "");
@@ -309,7 +309,7 @@ cmdline_options parse_command_line(int argc, char* argv[])
 		("infile,i", value<string>(&options.src_name), "input filename")
 		("ptout,p", value<bool>(&options.print_pt)->zero_tokens()->default_value(false), "print the pt")
 		("Include,I", value<string>(&options.inc_name), "filename to include in ppe and spe source")
-		("num_threads,n", value<int>(&options.num_threads)->default_value(6), "set number of SPE threads");
+		("num_threads,n", value<int>(&options.num_threads)->default_value(0), "set number of SPE threads; default is all physical");
 
 		positional_options_description p;
 		p.add("infile", -1);

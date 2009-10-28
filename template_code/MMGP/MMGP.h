@@ -14,13 +14,46 @@
 #include <malloc_align.h>
 #include <sched.h>
 
-int sched_yield();
-
 #define MAX_NUM_SPEs 20
 #define TERMINATE 0
 #define GET_TIMES (NUM_KERNELS+1)
 #define NUM_FNs	NUM_KERNELS
 #define TB 79800000UL
+
+/* Structure used for PPE<->SPE signaling */
+struct signal_t {
+	int start, stop;
+	unsigned long long total_time, loop_time;
+	double result;
+	int result_int;
+    
+	#ifdef PROFILING
+	unsigned long long T_fn[NUM_FNs];
+	unsigned long long T_DMA[NUM_FNs];
+	unsigned long long T_total[NUM_FNs];
+	unsigned long long idle_time;
+	unsigned long long all_fn;
+	unsigned long long all_dma;
+	unsigned long long all_dma_prep;
+	unsigned long long all_total;
+	#endif
+};
+
+volatile unsigned int pass[MAX_NUM_SPEs];
+volatile unsigned int sig[MAX_NUM_SPEs];
+
+unsigned int spe_threads;
+unsigned int num_physical_spes;
+
+#ifdef PROFILING
+unsigned long long time_loop[NUM_FNs];
+unsigned long long loop_time;
+unsigned int cnt_loop[NUM_FNs];
+unsigned int loop_started;
+unsigned long long time_ppu_start;
+unsigned long long time_ppu_between_loops;
+unsigned long long time_cellgen_start;
+#endif
 
 #if defined(__cplusplus)
 extern "C" {
@@ -39,11 +72,13 @@ void spe_create_threads();
 }
 #endif
 
+int sched_yield();
+
 #define spe_reduction(c, op, fn_id) \
 ({ \
 	unsigned int i; \
 	sched_yield(); \
-	for (i = 0; i < __SPE_threads; i++) { \
+	for (i = 0; i < spe_threads; i++) { \
 		while (((struct signal_t *)sig[i])->stop==0) { \
 			sched_yield(); \
 		} \
@@ -72,7 +107,7 @@ static inline unsigned long mftbu()
 	return rval;
 }
 
-#define _sync    __asm__ __volatile("sync")
+#define _sync __asm__ __volatile("sync")
 
 /* Timing instruction for Power arch. */
 static inline unsigned long long get_tb()
@@ -87,43 +122,6 @@ static inline unsigned long long get_tb()
      
 	return ((unsigned long long)tbhi << 32) | tblo;
 }
-
-/* Structure used for PPE<->SPE signaling */
-struct signal_t {
-	int start, stop;
-	unsigned long long total_time, loop_time;
-	double result;
-	int result_int;
-    
-	#ifdef PROFILING
-	unsigned long long T_fn[NUM_FNs];
-	unsigned long long T_DMA[NUM_FNs];
-	unsigned long long T_total[NUM_FNs];
-	unsigned long long idle_time;
-	unsigned long long all_fn;
-	unsigned long long all_dma;
-	unsigned long long all_dma_prep;
-	unsigned long long all_total;
-	#endif
-};
-
-volatile unsigned int pass[MAX_NUM_SPEs];
-volatile unsigned int sig[MAX_NUM_SPEs];
-
-unsigned long long MPI_calls;
-unsigned long long COMM_rec[10], MPI_total, MPI_count;
-unsigned int __SPE_threads;
-unsigned int NUM_SPE;
-
-#ifdef PROFILING
-unsigned long long time_loop[NUM_FNs];
-unsigned long long loop_time;
-unsigned int cnt_loop[NUM_FNs];
-unsigned int loop_started;
-unsigned long long time_ppu_start;
-unsigned long long time_ppu_between_loops;
-unsigned long long time_cellgen_start;
-#endif
 
 static inline void profile_start_fn()
 {

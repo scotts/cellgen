@@ -6,14 +6,21 @@
  *	Email: filip@cs.vt.edu
 */
 
-#include <libspe2.h>
-#include "MMGP.h"
 #include <stdio.h>
-#include <sched.h>
-#include <sys/sysinfo.h>
 #include <string.h>
-#include <pthread.h>
 #include <assert.h>
+#include <sched.h>
+#include <unistd.h>
+#include <sys/sysinfo.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <libspe2.h>
+
+#include "MMGP.h"
+
+pid_t getpid(void);
 
 typedef struct pthread_data {
 	spe_context_ptr_t speid;
@@ -23,23 +30,16 @@ typedef struct pthread_data {
 	pthread_attr_t attr;
 } pthread_data_t;
 
-/* Sending mail to an SPE. Parameters:
- * id - id of the targeting SPE,
- * data - 32 bit data that is sent. */
-void send_mail(spe_context_ptr_t speid, unsigned int data)
-{ 
-	void *data_addr = (void*) &data;
-	spe_in_mbox_write(speid, data_addr, 1, SPE_MBOX_ANY_NONBLOCKING);
-}
-
 extern spe_program_handle_t PROGRAM_NAME_spe;
 
 volatile unsigned int ls_addr[MAX_NUM_SPEs];
 pthread_data_t ptdata[MAX_NUM_SPEs];
-spe_mfc_command_area_t *mfc_ps_area[MAX_NUM_SPEs];
-spe_spu_control_area_t *mbox_ps_area[MAX_NUM_SPEs];
-spe_sig_notify_1_area_t *sig_notify_ps_area[MAX_NUM_SPEs];
-spe_mssync_area_t *mssync_ps_area[MAX_NUM_SPEs];
+spe_mfc_command_area_t* mfc_ps_area[MAX_NUM_SPEs];
+spe_spu_control_area_t* mbox_ps_area[MAX_NUM_SPEs];
+spe_sig_notify_1_area_t* sig_notify_ps_area[MAX_NUM_SPEs];
+spe_mssync_area_t* mssync_ps_area[MAX_NUM_SPEs];
+
+unsigned int phys_map[MAX_NUM_SPEs];
 
 double model_estimate[NUM_FNs];
 unsigned long long offload_count[NUM_FNs];
@@ -47,6 +47,15 @@ unsigned long long offload_count[NUM_FNs];
 inline int max(const int a, const int b)
 {
 	return (a > b) ? a : b;
+}
+
+/* Sending mail to an SPE. Parameters:
+ * id - id of the targeting SPE,
+ * data - 32 bit data that is sent. */
+void send_mail(spe_context_ptr_t speid, unsigned int data)
+{ 
+	void *data_addr = (void*) &data;
+	spe_in_mbox_write(speid, data_addr, 1, SPE_MBOX_ANY_NONBLOCKING);
 }
 
 int linear_model(const int n_bytes)
@@ -75,7 +84,7 @@ int transfer_cycles(const int n_bytes)
 
 int computation_cycles(const int n, const int iteration_cycles)
 {
-	return (n * iteration_cycles) / __SPE_threads;
+	return (n * iteration_cycles) / spe_threads;
 }
 
 int estimate_cycles(const int n, const int iteration_cycles, const size_t elem_sz, int loop)
@@ -107,13 +116,13 @@ void spe_create_threads()
 
 	/* If the number SPE trheads is larger than 
 	 * the number of SPEs */
-	if (__SPE_threads>NUM_SPE) {
-		printf("Error: not enough SPEs %d %d\n",__SPE_threads,NUM_SPE);
+	if (spe_threads > num_physical_spes) {
+		printf("Error: not enough SPEs %d %d\n", spe_threads, num_physical_spes);
 		exit(0);
 	}
 
 	/* Forking SPE threads */
-	for (i = 0; i<__SPE_threads; i++) {
+	for (i = 0; i < spe_threads; i++) {
 		if ((ptdata[i].speid = spe_context_create (SPE_MAP_PS | SPE_CFG_SIGNOTIFY1_OR, NULL)) == NULL) {
 			fprintf(stderr, "Error: spe_context_create (errno=%d strerror=%s)\n", errno, strerror(errno));
 			exit(1);
@@ -124,7 +133,7 @@ void spe_create_threads()
 			exit(1);
 		}
 
-		if ((rc=pthread_create(&(ptdata[i].pthread), NULL, &pthread_function, &ptdata[i])) != 0) {
+		if ((rc = pthread_create(&(ptdata[i].pthread), NULL, &pthread_function, &ptdata[i])) != 0) {
 			fprintf (stderr, "Error: pthread_create() (errno=%d strerror=%s)\n", errno, strerror(errno));
 			exit(1);
 		}
@@ -154,17 +163,12 @@ void spe_create_threads()
 			exit(1);
 		}
 
-		send_mail(ptdata[i].speid, __SPE_threads);
+		send_mail(ptdata[i].speid, spe_threads);
 		send_mail(ptdata[i].speid, i);
-	}
-        
-       
-	/* Getting the LS addresses of all SPE threads */
-	for (i = 0; i < __SPE_threads; i++) {
-		ls_addr[i] = (unsigned long) spe_ls_area_get(ptdata[i].speid);
-	}
 
-	for (i = 0; i < __SPE_threads; i++) {
+		/* Getting the LS addresses of all SPE threads */
+		ls_addr[i] = (unsigned long) spe_ls_area_get(ptdata[i].speid);
+
 		/* Getting the addresses of the communication parameters of the SPE threads */
 		while (spe_out_mbox_status(ptdata[i].speid) == 0);
 		spe_out_mbox_read(ptdata[i].speid, &rval, 1);
@@ -173,6 +177,29 @@ void spe_create_threads()
 		while (spe_out_mbox_status(ptdata[i].speid) == 0);
 		spe_out_mbox_read(ptdata[i].speid, &rval, 1);
 		sig[i] = ls_addr[i] + rval;
+
+		/* Construct logical-physical SPE mapping. */
+		char filename[256];
+		sprintf(filename, "/spu/spethread-%d-%lu/phys-id", getpid(), (unsigned long)ptdata[i].speid);
+		int fd = open(filename, O_RDONLY, 0);
+		if (fd < 0) {
+			perror("open /spu/spethread\n");
+		}
+		else {
+			int res = read(fd, filename, 255);
+			if (res < 0) {
+				perror("read /spu/spethread\n");
+			}
+			else if (res > 0 && res < 256) {
+				filename[res - 1] = '\0';
+				unsigned int phys = strtol(filename, NULL, 0);
+				phys_map[i] = phys;
+			}
+			else {
+				fprintf(stderr, "EOF in read /spu/spethread\n");
+			}
+			close(fd);
+		}
         }
 }
 
@@ -187,9 +214,9 @@ inline void spe_start(unsigned int num, int value)
 {
 	/* Send starting signal to an SPE,
 	* before that set signal.stop to 0 */
-	((struct signal_t *)sig[num])->stop=0;
+	((struct signal_t *)sig[num])->stop = 0;
 	_sync;
-	((struct signal_t *)sig[num])->start=value; 
+	((struct signal_t *)sig[num])->start = value; 
 }
 
 inline void spe_offloads(void)
@@ -202,11 +229,11 @@ inline void spe_offloads(void)
  * timing instructions */
 inline void wait_for_spes(int fn_id)
 {
-	unsigned int i=0;
+	unsigned int i = 0;
     
 	sched_yield();
-	for (i = 0; i < __SPE_threads; i++) {
-		while (((struct signal_t *)sig[i])->stop==0){
+	for (i = 0; i < spe_threads; i++) {
+		while (((struct signal_t *)sig[i])->stop == 0) {
 			sched_yield();
 		}
 	}
@@ -235,11 +262,11 @@ inline void cellgen_finish(void)
 	unsigned long long T_L[MAX_NUM_SPEs][NUM_FNs];
 	unsigned long long T_DMA[MAX_NUM_SPEs][NUM_FNs];
 	unsigned long long T_total[MAX_NUM_SPEs][NUM_FNs];
-	unsigned long long T_L_spe[__SPE_threads];
-	unsigned long long T_DMA_spe[__SPE_threads];
-	unsigned long long T_DMA_prep_spe[__SPE_threads];
-	unsigned long long T_total_spe[__SPE_threads];
-	unsigned long long T_idle_spe[__SPE_threads];
+	unsigned long long T_L_spe[spe_threads];
+	unsigned long long T_DMA_spe[spe_threads];
+	unsigned long long T_DMA_prep_spe[spe_threads];
+	unsigned long long T_total_spe[spe_threads];
+	unsigned long long T_idle_spe[spe_threads];
 	unsigned long long T_L_all, T_DMA_all, T_total_all;
 
 	/*
@@ -266,13 +293,13 @@ inline void cellgen_finish(void)
 	printf("\n========== SPE stats ==========\n");
 	*/
 
-	for (i=0; i<__SPE_threads; i++) {
+	for (i = 0; i < spe_threads; i++) {
 		spe_start(i, GET_TIMES);
 	}
 
 	wait_for_spes(GET_TIMES);
 
-	for (i = 0; i < __SPE_threads; i++) { 
+	for (i = 0; i < spe_threads; i++) { 
 		T_L_spe[i] =  ((struct signal_t *)sig[i])->all_fn;
 		T_total_spe[i] =  ((struct signal_t *)sig[i])->all_total;
 		T_DMA_spe[i] =  ((struct signal_t *)sig[i])->all_dma;
@@ -285,7 +312,7 @@ inline void cellgen_finish(void)
 
 		//printf("loop%u model %f\n", loop + 1, model_estimate[loop]);
 		//printf("\nL%d :          Loop      DMA     Comp\n", loop+1);
-		for (i = 0; i < __SPE_threads; i++) {
+		for (i = 0; i < spe_threads; i++) {
 			T_L_all += (T_L[i][loop] = ((struct signal_t *)sig[i])->T_fn[loop]);
 			T_DMA_all += (T_DMA[i][loop] = ((struct signal_t *)sig[i])->T_DMA[loop]);
 			T_total_all += (T_total[i][loop] = ((struct signal_t *)sig[i])->T_total[loop]);
@@ -293,20 +320,20 @@ inline void cellgen_finish(void)
 			//printf("     SPE%u %8.6f %8.6f %8.6f\n",i+1, (double)T_L[i][loop] /TB, (double)T_DMA[i][loop] /TB, (double)T_total[i][loop] /TB);
 		}
 		//printf("\n");
-		printf("%e ", (double)(T_total_all)/ TB / __SPE_threads / cnt_loop[loop]);
-		printf("%e\n", (double)(T_DMA_all)/ TB / __SPE_threads / cnt_loop[loop]);
-		//printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_total_all)/ TB / __SPE_threads);
+		printf("%e ", (double)(T_total_all)/ TB / spe_threads / cnt_loop[loop]);
+		printf("%e\n", (double)(T_DMA_all)/ TB / spe_threads / cnt_loop[loop]);
+		//printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_total_all)/ TB / spe_threads);
 	}
 
 	//printf("\n\n           --- Summary ---            \n");
 	#ifndef DMA_PREP_REPORT
 	//printf("SPE         fn fn_kernel   DMA_all      idle\n");
-	for (i = 0; i < __SPE_threads; i++) {
+	for (i = 0; i < spe_threads; i++) {
 		//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_total_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_idle_spe[i] / TB);
 	}
 	#else
 	//printf("SPE         fn fn_kernel   DMA_all      DMA_prep  idle\n");
-	for (i = 0; i < __SPE_threads; i++) {
+	for (i = 0; i < spe_threads; i++) {
 	//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_total_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_DMA_prep_spe[i] /TB, (double)T_idle_spe[i] / TB);
 	}
 	#endif // DMA_PREP_REPORT
@@ -321,7 +348,7 @@ inline void cellgen_finish(void)
 	*/
 	#endif // PROFILING
 
-	for (i=0; i<__SPE_threads; i++) {
+	for (i = 0; i < spe_threads; i++) {
 		spe_start(i, TERMINATE);
 	}
 }
@@ -329,8 +356,13 @@ inline void cellgen_finish(void)
 void spe_init(unsigned int num_threads)
 {
 	/*Determine the total number of SPEs*/
-	NUM_SPE = spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
-	__SPE_threads = num_threads;
+	num_physical_spes = spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
+	if (!num_threads) {
+		spe_threads = num_physical_spes;
+	}
+	else {
+		spe_threads = num_threads;
+	}
 
 	#ifdef PROFILING
 	unsigned int i;

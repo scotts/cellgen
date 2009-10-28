@@ -1294,12 +1294,12 @@ struct parallel_for_op {
 			parse_conditions(node, expressions_seen, conds, parcond);
 
 			if (expressions_seen == 1) {
-				for_all(node.children, match_node(parcond.start, new variable_name(SPE_start)));
-				privs.insert(new private_variable(SPE_start.type(), SPE_start.name(), parcond.start, __region_number + 1));
+				for_all(node.children, match_node(parcond.start, new variable_name(spe_start)));
+				privs.insert(new private_variable(spe_start.type(), spe_start.name(), parcond.start, __region_number + 1));
 			}
 			else if (expressions_seen == 2) {
-				for_all(node.children, match_node(parcond.stop, new variable_name(SPE_stop)));
-				privs.insert(new private_variable(SPE_stop.type(), SPE_stop.name(), parcond.stop, __region_number + 1));
+				for_all(node.children, match_node(parcond.stop, new variable_name(spe_stop)));
+				privs.insert(new private_variable(spe_stop.type(), spe_stop.name(), parcond.stop, __region_number + 1));
 				++__region_number;
 			}
 		}
@@ -1328,7 +1328,7 @@ struct parallel_for_op {
 			const make_conditions<gen_in<row_access> > make_gen_in_row(parcond, local_depths);
 			const make_conditions<gen_out<row_access> > make_gen_out_row(parcond, local_depths);
 
-			const conditions specond(SPE_start.name(), parcond.induction, SPE_stop.name(), parcond.step);
+			const conditions specond(spe_start.name(), parcond.induction, spe_stop.name(), parcond.step);
 			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(specond, local_depths), flat_ins));
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
@@ -1717,8 +1717,8 @@ struct cell_region {
 			string clipped_stop;
 			int flat = filter(make_fn_and(&shared_variable::is_row, &shared_variable::is_flat), shared).size();
 			if (flat) {
-				clipped_start = SPE_start.name();
-				clipped_stop = SPE_stop.name();
+				clipped_start = spe_start.name();
+				clipped_stop = spe_stop.name();
 			}
 			else {
 				clipped_start = conds.back().start;

@@ -283,7 +283,7 @@ public:
 	compute_bounds(const string& l): least(l) {}
 	string operator()(const string& old)
 	{
-		return old + "compute_bounds(&SPE_start, &SPE_stop, sizeof(" + least + "));";
+		return old + "compute_bounds(&spe_start, &spe_stop, sizeof(" + least + "));";
 	}
 
 	xformer* clone() const { return new compute_bounds(*this); }

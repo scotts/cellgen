@@ -56,7 +56,7 @@ static inline void allocate_dma_list(spe_dma_list_t* list, uint32_t len, uint32_
     }
 
     #ifdef DEBUG
-    printf("SPE%d num_dma_cmds_per_element: %u   list.length: %u (%lu bytes)\n", SPE_id, num_dma_cmds_per_element, list->length, list->length*sizeof(mfc_list_element_t));
+    printf("SPE%d num_dma_cmds_per_element: %u   list.length: %u (%lu bytes)\n", spe_id, num_dma_cmds_per_element, list->length, list->length*sizeof(mfc_list_element_t));
     #endif
 }
 

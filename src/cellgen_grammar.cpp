@@ -309,8 +309,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		buffer(0),
 		ppe_op(ppe),
 		priv_op(privs, private_symbols, regions),
-		start_op(priv_op, private_symbols, "SPE_start", regions),
-		stop_op(priv_op, private_symbols, "SPE_stop", regions),
+		start_op(priv_op, private_symbols, "spe_start", regions),
+		stop_op(priv_op, private_symbols, "spe_stop", regions),
 		shared_op(shared, shared_symbols, privs, private_symbols, regions),
 		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),
@@ -367,14 +367,14 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 			;
 
 			start_code = 
-				no_node_d[strlit<>("SPE_start(")] >> start_priv >> no_node_d[chlit<>(')')];
+				no_node_d[strlit<>("spe_start(")] >> start_priv >> no_node_d[chlit<>(')')];
 
 			start_priv = no_node_d[
 					lexeme_d[ (*(anychar_p - ')')) ]
 					[self.start_op]
 				];
 
-			stop_code = no_node_d[strlit<>("SPE_stop(")] >> stop_priv >> no_node_d[chlit<>(')')];
+			stop_code = no_node_d[strlit<>("spe_stop(")] >> stop_priv >> no_node_d[chlit<>(')')];
 
 			stop_priv = no_node_d[
 					lexeme_d[ (*(anychar_p - ')')) ]
