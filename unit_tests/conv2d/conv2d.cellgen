@@ -91,7 +91,7 @@ int main()
 
 	ppe_convolution(a_p, h_p, c_p);
 	spe_convolution_padded(a_s, h_s, c_s);
-	spe_convolution_buffer(a_s, h_s, c_s);
+	//spe_convolution_buffer(a_s, h_s, c_s);
 
 	correctness_check(c_p, c_s);
 

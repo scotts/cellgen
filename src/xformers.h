@@ -861,7 +861,7 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			first = v->math().zero_induction(conds.induction).expand_all_inductions(nests).str();
+			first = v->math().replace_induction(conds.induction, conds.start).expand_all_inductions(nests).str();
 		}
 
 		return first;
@@ -961,7 +961,7 @@ public:
 
 	string first_buffer(const condslist& nests) const
 	{
-		return v->math().zero_induction(conds.induction).expand_all_inductions(nests).str();
+		return v->math().replace_induction(conds.induction, conds.start).expand_all_inductions(nests).str();
 	}
 
 	string final_buffer() const
@@ -983,20 +983,6 @@ public:
 
 	string stride() const
 	{
-		/*
-		string access = v->math().str();
-		string s;
-		for (list<string>::const_iterator i = v->dimensions().begin(); i != v->dimensions().end(); ++i) {
-			size_t pos;
-			if ((pos = access.find(*i)) != string::npos) {
-				access = access.substr(0, access.size() - pos - 1) + access.substr(pos + (*i).size(), access.size());
-				s += *i + "*";
-			}
-		}
-
-		return s;
-		*/
-
                 string s;
 		const int total = v->dimensions().size() - v->math().index(conds.induction);
 		list<string>::const_reverse_iterator d = v->dimensions().rbegin();

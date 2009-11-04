@@ -1112,9 +1112,6 @@ struct for_compound_op {
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			/*
-			const conditions& inner = o.conds.back();
-			*/
 			const conditions inner = *next(curr_scope, conds);
 
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
@@ -1163,7 +1160,7 @@ struct operator_wedge {
 		{}
 	void operator()(pt_node& node)
 	{
-		if (node_is(node, ids::identifier) || is_constant(node)) {
+		if (node_is(node, ids::identifier) || is_constant(node) || is_expression(node)) {
 			if (!seen_operator) {
 				lhs = &node;
 			}
@@ -1224,16 +1221,14 @@ void parse_conditions(pt_node& node, const int expressions_seen, condslist& cond
 
 		if (expressions_seen == 1) {
 			cond.induction = string(conditional.lhs->value.begin(), conditional.lhs->value.end());
-			cond.start = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
+			call_descend(build_string(cond.start), *conditional.rhs);
 		}
 		else if (expressions_seen == 2) {
-			cond.stop = string(conditional.rhs->value.begin(), conditional.rhs->value.end());
+			call_descend(build_string(cond.stop), *conditional.rhs);
 		}
 	}
 	else {
-		string str;
-		call_descend(build_string(str), node);
-		cond.step = str;
+		call_descend(build_string(cond.step), node);
 
 		if (!exists_in(conds, cond)) {
 			conds.push_back(cond);

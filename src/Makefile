@@ -4,10 +4,10 @@
 # the nested templates used by Spirit.
 DEBUG = -ggdb
 #OPT = -O3
-CXXFLAGS = -Wall $(DEBUG) $(OPT) 
+CXXFLAGS = -Wall -DUNIX $(DEBUG) $(OPT) 
 
 BOOST_LIBS = -lboost_program_options -lboost_regex
-LDFLAGS = -lstdc++ $(BOOST_LIBS)
+LDFLAGS = -lstdc++ $(BOOST_LIBS) -DUNIX
 
 OBJS = main.o cellgen_grammar.o parse_tree.o math_exprs.o operations.o
 
