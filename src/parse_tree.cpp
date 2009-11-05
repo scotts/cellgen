@@ -186,6 +186,12 @@ bool is_expression(const pt_node& node)
 		node.value.id() == ids::additive_expression;
 }
 
+bool is_math_expression(const pt_node& node)
+{
+	return node.value.id() == ids::multiplicative_expression ||
+		node.value.id() == ids::additive_expression;
+}
+
 bool is_for_loop(pt_node& node)
 {
 	return node_is(node, ids::for_loop);
@@ -894,21 +900,36 @@ pair<pt_node*, pt_node::tree_iterator> find_shallow(pt_node& node, Pred p)
 
 class too_many_expression_statements {};
 
-struct match_node {
+class build_string {
+	string& str;
+public:
+	build_string(string& s): str(s) {}
+	void operator()(pt_node& node)
+	{
+		str += string(node.value.begin(), node.value.end());
+	}
+};
+
+struct replace_node {
 	const string& to_replace;
 	xformer* x;
-	match_node(const string& t, xformer* x): 
-		to_replace(t), x(x)
+	pt_node* matched;
+	replace_node(const string& t, xformer* x): 
+		to_replace(t), x(x), matched(NULL)
 	{
 		assert(x);	
 	}
 
 	void operator()(pt_node& node)
 	{
-		if (is_ident_or_constant(node)) {
-			if (to_replace == string(node.value.begin(), node.value.end())) {
+		if (is_math_expression(node) || is_ident_or_constant(node)) {
+			string str;
+			call_descend(build_string(str), node);
+			if (to_replace == str) {
 				node.value.xformations.push_back(x);
 			}
+
+			node.children.clear();
 		}
 		else {
 			for_all(node.children, this);
@@ -928,8 +949,9 @@ struct modify_for_loop {
 		if (is_expression(node)) {
 			++seen;
 
+			
 			switch (seen) {
-				case 2:	for_all(node.children, match_node(conds.stop, new naked_string(full_adaptor(v).name())));
+				case 2:	replace_node(conds.stop, new naked_string(full_adaptor(v).name()))(node);
 					break;
 				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
 					node.children.clear();
@@ -1195,16 +1217,6 @@ struct conditional_search {
 	}
 };
 
-class build_string {
-	string& str;
-public:
-	build_string(string& s): str(s) {}
-	void operator()(pt_node& node)
-	{
-		str += string(node.value.begin(), node.value.end());
-	}
-};
-
 void parse_conditions(pt_node& node, const int expressions_seen, condslist& conds, conditions& cond)
 {
 	if (expressions_seen >= 4) {
@@ -1289,11 +1301,11 @@ struct parallel_for_op {
 			parse_conditions(node, expressions_seen, conds, parcond);
 
 			if (expressions_seen == 1) {
-				for_all(node.children, match_node(parcond.start, new variable_name(spe_start)));
+				for_all(node.children, replace_node(parcond.start, new variable_name(spe_start)));
 				privs.insert(new private_variable(spe_start.type(), spe_start.name(), parcond.start, __region_number + 1));
 			}
 			else if (expressions_seen == 2) {
-				for_all(node.children, match_node(parcond.stop, new variable_name(spe_stop)));
+				for_all(node.children, replace_node(parcond.stop, new variable_name(spe_stop)));
 				privs.insert(new private_variable(spe_stop.type(), spe_stop.name(), parcond.stop, __region_number + 1));
 				++__region_number;
 			}

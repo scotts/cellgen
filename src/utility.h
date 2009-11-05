@@ -292,6 +292,25 @@ fn_and<T> make_fn_and(bool (T::*f1)() const, bool (T::*f2)() const)
 }
 
 template <class T>
+struct fn_or: public unary_function<bool, const T*> {
+	bool (T::*func1)() const;
+	bool (T::*func2)() const;
+	fn_or(bool (T::*f1)() const, bool (T::*f2)() const): 
+		func1(f1), func2(f2)
+		{}
+	bool operator()(const T* v) const
+	{
+		return (v->*func1)() || (v->*func2)();
+	}
+};
+
+template <class T>
+fn_or<T> make_fn_or(bool (T::*f1)() const, bool (T::*f2)() const)
+{
+	return fn_or<T>(f1, f2);
+}
+
+template <class T>
 struct acc_or: public binary_function<bool, bool, const T*> {
 	bool (T::*func)() const;
 	acc_or(bool (T::*f)() const): func(f) {}
