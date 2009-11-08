@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <malloc_align.h>
 #include <free_align.h>
+#include "cellgen.h"
 
 #define ITERATIONS 1000
-#define N 8388608 // 64 MB 
+//#define N 8388608 // 64 MB 
+#define N 26214400
 
 double vecdot(double* v1, double* v2, unsigned long long* time)
 {
@@ -29,6 +31,9 @@ int main()
 	int i;
 	double* v1 = cellgen_malloc(N * sizeof(double));
 	double* v2 = cellgen_malloc(N * sizeof(double));
+
+	cellgen_numify(v1, N * sizeof(double));
+	cellgen_numify(v2, N * sizeof(double));
 	
 	for (i = 0; i < N; ++i) {
 		v1[i] = i + 1;

@@ -40,6 +40,7 @@ spe_sig_notify_1_area_t* sig_notify_ps_area[MAX_NUM_SPEs];
 spe_mssync_area_t* mssync_ps_area[MAX_NUM_SPEs];
 
 unsigned int phys_map[MAX_NUM_SPEs];
+int has_numa = 1;
 
 double model_estimate[NUM_FNs];
 unsigned long long offload_count[NUM_FNs];
@@ -163,9 +164,6 @@ void spe_create_threads()
 			exit(1);
 		}
 
-		send_mail(ptdata[i].speid, spe_threads);
-		send_mail(ptdata[i].speid, i);
-
 		/* Getting the LS addresses of all SPE threads */
 		ls_addr[i] = (unsigned long) spe_ls_area_get(ptdata[i].speid);
 
@@ -200,6 +198,9 @@ void spe_create_threads()
 			}
 			close(fd);
 		}
+
+		send_mail(ptdata[i].speid, spe_threads);
+		send_mail(ptdata[i].speid, i);
         }
 }
 
@@ -381,6 +382,11 @@ void spe_init(unsigned int num_threads)
 
 __attribute__((constructor)) void __initialize()
 {
+	if (numa_available() < 0) {
+		fprintf(stderr, "numa is not available.\n");
+		has_numa = 0;
+	}
+
 	spe_init(NUM_THREADS_HOOK);
 	spe_create_threads();
 }

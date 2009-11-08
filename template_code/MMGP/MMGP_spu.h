@@ -187,10 +187,10 @@ inline void cellgen_timer_begin()
  * communication */
 inline void ppe_exchange()
 {
-	spe_threads = spu_read_in_mbox();
-	spe_id = spu_read_in_mbox();
 	spu_write_out_mbox((unsigned int)&pass);
 	spu_write_out_mbox((unsigned int)&sig);
+	spe_threads = spu_read_in_mbox();
+	spe_id = spu_read_in_mbox();
 }
 
 /* Function used for signaling the PPE */

@@ -18,7 +18,7 @@
 #define TERMINATE 0
 #define GET_TIMES (NUM_KERNELS+1)
 #define NUM_FNs	NUM_KERNELS
-#define TB 79800000UL
+#define TB 14318000UL
 
 /* Structure used for PPE<->SPE signaling */
 struct signal_t {
@@ -44,6 +44,9 @@ volatile unsigned int sig[MAX_NUM_SPEs];
 
 unsigned int spe_threads;
 unsigned int num_physical_spes;
+
+extern unsigned int phys_map[MAX_NUM_SPEs];
+extern int has_numa;
 
 #ifdef PROFILING
 unsigned long long time_loop[NUM_FNs];

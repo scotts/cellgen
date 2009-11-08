@@ -336,7 +336,10 @@ public:
 				def = to_string(buffer);
 			}
 			else {
-				def = "prev16(" + clipped_range.name() + "/" + to_string(depth + 1) + ")";
+				const string depth1 = to_string(depth + 1);
+				def = clipped_range.name() + "*" + depth1 + "<" + spe_stop.name() + "-" + spe_start.name() + "?" + 
+					clipped_range.name() + ":" +
+					"prev16(" + clipped_range.name() + "/" + depth1 + ")";
 			}
 			declaration = variable("unsigned int", buffer_adaptor(max).size(), def).define() + ";" +
 				const_variable("unsigned int", buffer_adaptor(max).abs(), buffer_adaptor(max).size()).define() + ";";
