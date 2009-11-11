@@ -11,12 +11,14 @@
 #include <assert.h>
 #include <sched.h>
 #include <unistd.h>
+#include <math.h>
 #include <sys/sysinfo.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <libspe2.h>
+#include <numa.h>
 
 #include "MMGP.h"
 
@@ -41,6 +43,8 @@ spe_mssync_area_t* mssync_ps_area[MAX_NUM_SPEs];
 
 unsigned int phys_map[MAX_NUM_SPEs];
 int has_numa = 1;
+unsigned int page_shift;
+unsigned long long timebase;
 
 double model_estimate[NUM_FNs];
 unsigned long long offload_count[NUM_FNs];
@@ -354,7 +358,7 @@ inline void cellgen_finish(void)
 	}
 }
 
-void spe_init(unsigned int num_threads)
+static void spe_init(unsigned int num_threads)
 {
 	/*Determine the total number of SPEs*/
 	num_physical_spes = spe_cpu_info_get(SPE_COUNT_PHYSICAL_SPES, -1);
@@ -380,12 +384,32 @@ void spe_init(unsigned int num_threads)
 	#endif
 }
 
+static unsigned long long get_timebase()
+{
+	unsigned long long val;
+	unsigned int val_h, val_l;
+	unsigned long long promoted_val_h, promoted_val_l;
+
+	asm volatile ("mftb  %0" : "=r" (val));
+	asm volatile ("mr    %0, %1" : "=r" (val_l) : "r" (val));
+	asm volatile ("sldi  %0, %1, 32" : "=r" (val_h) : "r" (val));
+
+	promoted_val_h = ((unsigned long long) val_h) << 32;
+	promoted_val_l = (unsigned long long) val_l;
+
+	return promoted_val_h | promoted_val_l;
+}
+
 __attribute__((constructor)) void __initialize()
 {
 	if (numa_available() < 0) {
 		fprintf(stderr, "numa is not available.\n");
 		has_numa = 0;
 	}
+
+	page_shift = log2(getpagesize());
+	timebase = get_timebase();
+	printf("%llu\n", timebase);
 
 	spe_init(NUM_THREADS_HOOK);
 	spe_create_threads();

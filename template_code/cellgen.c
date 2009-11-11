@@ -6,7 +6,7 @@
 
 void* cellgen_malloc(size_t sz)
 {
-	return _malloc_align(sz, 16);
+	return _malloc_align(sz, page_shift);
 }
 
 void cellgen_free(void* adr)
@@ -17,31 +17,20 @@ void cellgen_free(void* adr)
 void cellgen_numify(void* adr, size_t sz)
 {
 	if (has_numa) {
-		const int n_regions = numa_max_node();
-		const size_t node_sz = sz / n_regions;
-		const size_t node_rm = sz % n_regions;
+		unsigned int i;
+		for (i = 0; i < spe_threads; ++i) {
+			const int spe = phys_map[i];
+			unsigned long node = (spe / 8) + 1;
+			size_t node_sz = sz / spe_threads;
+			if (i == spe_threads - 1) {
+				node_sz += sz % spe_threads;
+			}
 
-		unsigned long node = 1UL | 2UL;
-		int res = mbind(adr, sz,
-				MPOL_INTERLEAVE, &node, sizeof(unsigned long) * 8, MPOL_MF_STRICT | MPOL_MF_MOVE);
-
-		if (res < 0) {
-			perror("mbind");
-		}
-
-		/*
-		int i;
-		for (i = 0; i < n_regions + 1; ++i) {
-			unsigned long node = 1; //(1UL << i); // 0th node is indicated with first bit set
-			int res = mbind(adr + i * node_sz, 
-					(i == n_regions - 1 ? node_sz + node_rm : node_sz),
-					MPOL_BIND, &node, sizeof(unsigned long) * 8, MPOL_MF_STRICT | MPOL_MF_MOVE);
-
+			int res = mbind(adr + i * node_sz, node_sz, MPOL_BIND, &node, sizeof(unsigned long) * 8, MPOL_MF_STRICT | MPOL_MF_MOVE);
 			if (res < 0) {
 				perror("mbind");
 			}
 		}
-		*/
 	}
 }
 

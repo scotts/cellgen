@@ -47,6 +47,8 @@ unsigned int num_physical_spes;
 
 extern unsigned int phys_map[MAX_NUM_SPEs];
 extern int has_numa;
+extern unsigned int page_shift;
+extern unsigned long long timebase;
 
 #ifdef PROFILING
 unsigned long long time_loop[NUM_FNs];
@@ -62,7 +64,6 @@ unsigned long long time_cellgen_start;
 extern "C" {
 #endif
 
-void spe_init(unsigned int num_threads);
 void cellgen_start();
 void cellgen_finish();
 
