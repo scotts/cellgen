@@ -5,7 +5,7 @@
  *	Virgnia Tech, Blacksburg, VA 24060 
  *	Email: filip@cs.vt.edu
 */
-
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -275,7 +275,7 @@ inline void cellgen_finish(void)
 	unsigned long long T_L_all, T_DMA_all, T_total_all;
 
 	/*
-	printf("\n\nTotal Time: %f (sec)\n\n", (double)(time_cellgen_end-time_cellgen_start) / TB);
+	printf("\n\nTotal Time: %f (sec)\n\n", (double)(time_cellgen_end-time_cellgen_start) / timebase);
 	printf("\n========== PPE stats ==========\n\n");
 	*/
 
@@ -287,13 +287,13 @@ inline void cellgen_finish(void)
 	//printf("fn count total = %u\n\n", loop_cnt_all);
 
 	for (i=0; i<NUM_FNs; i++) {
-		//printf("L%u: %.6f (sec)\n", i+1, ((double)time_loop[i])/TB);
+		//printf("L%u: %.6f (sec)\n", i+1, ((double)time_loop[i])/timbebase);
 		loop_time_all += time_loop[i];
 	}
 
 	/*
-	printf("time spent on PPU workload between offloaded loops: %.6f (sec)\n",((double)time_ppu_between_loops)/TB);
-	printf("time spend on prolog and epilog: %.6f (sec)\n", ((double)(time_cellgen_end-time_cellgen_start)-(loop_time_all+time_ppu_between_loops))/TB );
+	printf("time spent on PPU workload between offloaded loops: %.6f (sec)\n",((double)time_ppu_between_loops)/timebase);
+	printf("time spend on prolog and epilog: %.6f (sec)\n", ((double)(time_cellgen_end-time_cellgen_start)-(loop_time_all+time_ppu_between_loops))/timebase );
 
 	printf("\n========== SPE stats ==========\n");
 	*/
@@ -321,25 +321,27 @@ inline void cellgen_finish(void)
 			T_L_all += (T_L[i][loop] = ((struct signal_t *)sig[i])->T_fn[loop]);
 			T_DMA_all += (T_DMA[i][loop] = ((struct signal_t *)sig[i])->T_DMA[loop]);
 			T_total_all += (T_total[i][loop] = ((struct signal_t *)sig[i])->T_total[loop]);
-			//printf("%d %f\n", i, (((double)T_L[i][loop] / TB) * 3.2e9) / offload_count[loop]);
-			//printf("     SPE%u %8.6f %8.6f %8.6f\n",i+1, (double)T_L[i][loop] /TB, (double)T_DMA[i][loop] /TB, (double)T_total[i][loop] /TB);
+			//printf("%d %f\n", i, (((double)T_L[i][loop] / timebase) * 3.2e9) / offload_count[loop]);
+			//printf("     SPE%u %8.6f %8.6f %8.6f\n",i+1, (double)T_L[i][loop] /timebase, (double)T_DMA[i][loop] /timebase, (double)T_total[i][loop] /timebase);
 		}
 		//printf("\n");
-		printf("%e ", (double)(T_total_all)/ TB / spe_threads / cnt_loop[loop]);
-		printf("%e\n", (double)(T_DMA_all)/ TB / spe_threads / cnt_loop[loop]);
-		//printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_total_all)/ TB / spe_threads);
+		printf("%e ", (double)(T_total_all)/ timebase / spe_threads / cnt_loop[loop]);
+		printf("%e\n", (double)(T_DMA_all)/ timebase / spe_threads / cnt_loop[loop]);
+		//printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_total_all)/ timebase / spe_threads);
 	}
 
 	//printf("\n\n           --- Summary ---            \n");
 	#ifndef DMA_PREP_REPORT
 	//printf("SPE         fn fn_kernel   DMA_all      idle\n");
 	for (i = 0; i < spe_threads; i++) {
-		//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_total_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_idle_spe[i] / TB);
+		//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
+		//(double)T_DMA_spe[i] / timebase, (double)T_idle_spe[i] / timebase);
 	}
 	#else
 	//printf("SPE         fn fn_kernel   DMA_all      DMA_prep  idle\n");
 	for (i = 0; i < spe_threads; i++) {
-	//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] /TB, (double)T_total_spe[i] /TB, (double)T_DMA_spe[i] /TB, (double)T_DMA_prep_spe[i] /TB, (double)T_idle_spe[i] / TB);
+	//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
+	//(double)T_DMA_spe[i] / timebase, (double)T_DMA_prep_spe[i] / timebase, (double)T_idle_spe[i] / timebase);
 	}
 	#endif // DMA_PREP_REPORT
 	/*
@@ -386,18 +388,33 @@ static void spe_init(unsigned int num_threads)
 
 static unsigned long long get_timebase()
 {
-	unsigned long long val;
-	unsigned int val_h, val_l;
-	unsigned long long promoted_val_h, promoted_val_l;
+	unsigned long long tb = 1;
 
-	asm volatile ("mftb  %0" : "=r" (val));
-	asm volatile ("mr    %0, %1" : "=r" (val_l) : "r" (val));
-	asm volatile ("sldi  %0, %1, 32" : "=r" (val_h) : "r" (val));
+	FILE* fp = fopen("/proc/cpuinfo", "r");
+	if (!fp) {
+		perror("open /proc/cpuinfo\n");
+	}
+	else {
+		char* line = NULL;
+		size_t len = 0;
+		unsigned long long ul;
 
-	promoted_val_h = ((unsigned long long) val_h) << 32;
-	promoted_val_l = (unsigned long long) val_l;
+		while (getline(&line, &len, fp) != -1) {
+			if (sscanf(line, "timebase : %llu", &ul) == 1) {
+				tb = ul;
+			}
+		}
 
-	return promoted_val_h | promoted_val_l;
+		if (tb == 1) {
+			fprintf(stderr, "timebase not found.\n");
+		}
+
+		if (line) {
+			free(line);
+		}
+	}
+
+	return tb;
 }
 
 __attribute__((constructor)) void __initialize()
@@ -409,7 +426,6 @@ __attribute__((constructor)) void __initialize()
 
 	page_shift = log2(getpagesize());
 	timebase = get_timebase();
-	printf("%llu\n", timebase);
 
 	spe_init(NUM_THREADS_HOOK);
 	spe_create_threads();

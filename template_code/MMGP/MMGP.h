@@ -18,7 +18,6 @@
 #define TERMINATE 0
 #define GET_TIMES (NUM_KERNELS+1)
 #define NUM_FNs	NUM_KERNELS
-#define TB 14318000UL
 
 /* Structure used for PPE<->SPE signaling */
 struct signal_t {
