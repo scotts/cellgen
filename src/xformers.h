@@ -366,8 +366,13 @@ public:
 	{
 		string declaration;
 		if (depth > 0 && v != max) {
-			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size()).define() + ";" + 
-				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs()).define() + ";";
+			string factor;
+			const string max_factor = max->math().factor(par_induction);
+			if (max_factor != v->math().factor(par_induction)) {
+				factor = "/ " + max_factor;	
+			}
+			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size() + factor).define() + ";" + 
+				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs() + factor).define() + ";";
 		}
 
 		return old + declaration;
