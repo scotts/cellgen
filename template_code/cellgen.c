@@ -27,7 +27,7 @@ void cellgen_numify(void* adr, size_t sz)
 			}
 
 			void* page_aligned = (void*)((unsigned long)(adr + i * node_sz) & ~((1 << page_shift) - 1));
-			int res = mbind(adr + i * node_sz, node_sz, MPOL_BIND, &node, sizeof(unsigned long) * 8, MPOL_MF_STRICT | MPOL_MF_MOVE);
+			int res = mbind(page_aligned, node_sz, MPOL_BIND, &node, sizeof(unsigned long) * 8, MPOL_MF_STRICT | MPOL_MF_MOVE);
 			if (res < 0) {
 				perror("mbind");
 			}
