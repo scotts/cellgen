@@ -11,6 +11,7 @@ vecdot
 sa
 matadd
 matmul
+jacobi
 *.c
 *.d
 *.o
@@ -19,3 +20,5 @@ matmul
 pass_struct.h
 cellgen_timer.h
 cellstrider_dma.h
+MMGP.c
+MMGP.h
