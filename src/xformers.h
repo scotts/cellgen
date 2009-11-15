@@ -369,7 +369,8 @@ public:
 			string factor;
 			try {
 				const string max_factor = max->math().factor(par_induction);
-				if (max_factor != v->math().factor(par_induction)) {
+				const string v_factor = v->math().factor(par_induction);
+				if (from_string<int>(v_factor) < from_string<int>(max_factor)) {
 					factor = "/ " + max_factor;	
 				}
 			} catch (ivar_not_found e) {
