@@ -14,7 +14,7 @@ void cellgen_free(void* adr)
 	_free_align(adr);
 }
 
-void cellgen_numify(void* adr, size_t sz)
+void cellgen_numify_local(void* adr, size_t sz)
 {
 	if (has_numa) {
 		unsigned int i;
@@ -32,6 +32,15 @@ void cellgen_numify(void* adr, size_t sz)
 				perror("mbind");
 			}
 		}
+	}
+}
+
+void cellgen_numify_interleave(void* adr, size_t sz)
+{
+	unsigned long both = 3;
+	int res = mbind(adr, sz, MPOL_INTERLEAVE, &both, sizeof(unsigned long) * 8, MPOL_MF_STRICT | MPOL_MF_MOVE);
+	if (res < 0) {
+		perror("mbind");
 	}
 }
 

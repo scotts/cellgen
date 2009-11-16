@@ -8,6 +8,7 @@
 
 void* cellgen_malloc(size_t sz);
 void cellgen_free(void* adr);
-void cellgen_numify(void* adr, size_t sz);
+void cellgen_numify_local(void* adr, size_t sz);
+void cellgen_numify_interleave(void* adr, size_t sz);
 
 #endif // CELLGEN_H
