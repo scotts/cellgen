@@ -132,9 +132,14 @@ bool is_operation(const string& s)
 	return is_kind_of_add(s) || is_kind_of_mul(s);
 }
 
+bool is_ident(const pt_node& node)
+{
+	return node_is(node, ids::identifier);
+}
+
 bool is_ident_or_constant(const pt_node& node)
 {
-	return node_is(node, ids::identifier) || is_constant(node);
+	return is_ident(node) || is_constant(node);
 }
 
 bool is_equals(const pt_node& node)
@@ -724,6 +729,22 @@ struct assignment_split {
 	};
 };
 
+void try_assignment_split(pt_iterator begin, pt_iterator end, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, const var_symtbl& locals,
+		const condslist& conds, const conditions curr, operations& ops, op_type data, sharedset& vars)
+{
+	try {
+		for_each(begin, end, assignment_split(shared_symbols, priv_symbols, locals, conds, curr, ops, data, vars));
+	}
+	catch (shared_variable_double_orientation e) {
+		throw user_error("Shared variables can only be accessed in row major or column "
+				"major format, not both. Make your own alias to get around this "
+				"limitation.");
+	}
+	catch (local_variable_not_found e) {
+		cerr << "error: local variable not found: " << e.name << endl;
+	}
+}
+
 struct assignment_search {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -743,18 +764,11 @@ struct assignment_search {
 		if (node_is(node, ids::assignment_expression)) {
 			pt_iterator eqs = find_if_all(node.children, is_equals);
 
-			try {
-				for_each(node.children.begin(), eqs, assignment_split(shared_symbols, priv_symbols, locals, conds, outer, ops, STORE, out));
-				for_each(eqs, node.children.end(), assignment_split(shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in));
-			}
-			catch (shared_variable_double_orientation e) {
-				throw user_error("Shared variables can only be accessed in row major or column "
-						"major format, not both. Make your own alias to get around this "
-						"limitation.");
-			}
-			catch (local_variable_not_found e) {
-				cerr << "error: local variable not found: " << e.name << endl;
-			}
+			try_assignment_split(node.children.begin(), eqs, shared_symbols, priv_symbols, locals, conds, outer, ops, STORE, out);
+			try_assignment_split(eqs, node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
+		}
+		else if (node_is(node, ids::relational_expression)) {
+			try_assignment_split(node.children.begin(), node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
 		}
 		else {
 			for_all(node.children, this);
@@ -843,7 +857,10 @@ struct declaration_op {
 		}
 		else if (node_is(node, ids::init_declarator)) {
 			pair<pt_iterator, pt_node*> p = find_equals(node);
-			for_each(p.first, p.second->children.end(), assignment_split(shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in)); 
+			try_assignment_split(p.first, p.second->children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in); 
+
+			string name = string(node.children.front().value.begin(), node.children.front().value.end());
+			locals[name] = new variable(type, name);
 		}
 		else if (node_is(node, ids::identifier)) {
 			string name = string(node.value.begin(), node.value.end());
@@ -949,7 +966,6 @@ struct modify_for_loop {
 		if (is_expression(node)) {
 			++seen;
 
-			
 			switch (seen) {
 				case 2:	replace_node(conds.stop, new naked_string(full_adaptor(v).name()))(node);
 					break;
