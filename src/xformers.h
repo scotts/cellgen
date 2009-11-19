@@ -133,14 +133,12 @@ public:
 	string class_name() const { return "to_buffer_space"; }
 };
 
-class augment_local: public remainder_xformer {
-	const string id;
-	const string induction;
+class augment_induction: public remainder_xformer {
 	const variable index;
 	const shared_variable* cause;
 public:
-	augment_local(const string& d, const string& n, const variable& x, const shared_variable* c): 
-		id(d), induction(n), index(x), cause(c) {}
+	augment_induction(const variable& x, const shared_variable* c): 
+		index(x), cause(c) {}
 	string operator()(const string& old)
 	{
 		string offset;
@@ -148,13 +146,13 @@ public:
 			offset = full_adaptor(cause).name();
 		}
 		else {
-			offset = induction;
+			offset = old;
 		}
 
-		return old + id + "[" + offset + "+" + index.name() + "]";
+		return offset + "+" + index.name();
 	}
-	xformer* clone() const { return new augment_local(*this); }
-	string class_name() const { return "augment_local"; }
+	xformer* clone() const { return new augment_induction(*this); }
+	string class_name() const { return "augment_induction"; }
 };
 
 class total_timer_start: public xformer {

@@ -986,27 +986,38 @@ void remove_xforms(pt_node& node)
 	node.value.xformations.remove_if(is_type<X, xformer>);
 }
 
-struct transform_local_buffers {
-	const shared_symtbl& shared_symbols; 
-	const priv_symtbl& priv_symbols;
+struct find_induction {
 	const conditions& conds;
 	const shared_variable* cause;
-	transform_local_buffers(const shared_symtbl& s, const priv_symtbl& p, const conditions& c, const shared_variable* ca):
-		shared_symbols(s), priv_symbols(p), conds(c), cause(ca)
+	find_induction(const conditions& c, const shared_variable* ca):
+		conds(c), cause(ca)
 		{}
 	void operator()(pt_node& node)
 	{
-		if (node_is(node, ids::postfix_expression)) {
-			sharedset vars;
-			condslist box;	
-			box.push_back(conds);
-			postfix_op o(shared_symbols, priv_symbols, box, vars);
-			for_all(node.children, &o);
+		if (node_is(node, ids::identifier)) {
+			const string val = string(node.value.begin(), node.value.end());
 
-			if (!o.found_shared && !o.found_private && exists_in(o.accesses, add_expr(mult_expr(conds.induction)))) {
-				node.value.xformations.push_back(new augment_local(o.local_id, conds.induction, index_adapt()(conds), cause));
+			if (val == conds.induction) {
+				node.value.xformations.push_back(new augment_induction(index_adapt()(conds), cause));
 				node.children.clear();
 			}
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+struct find_compound {
+	const conditions& conds;
+	const shared_variable* cause;
+	find_compound(const conditions& c, const shared_variable* ca):
+		conds(c), cause(ca)
+		{}
+	void operator()(pt_node& node)
+	{
+		if (node_is(node, ids::compound)) {
+			for_all(node.children, find_induction(conds, cause));
 		}
 		else {
 			for_all(node.children, this);
@@ -1057,7 +1068,7 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
 	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
 
-	for_all(for_loop.children, transform_local_buffers(shared_symbols, priv_symbols, conds, max));
+	for_all(for_loop.children, find_compound(conds, max));
 
 	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(for_loop, is_compound_expression);
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
