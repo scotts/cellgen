@@ -356,14 +356,16 @@ class shared_buffer_size: public depth_xformer {
 	const int buffer;
 	const int num_shared;
 	const string par_induction;
+	const string max_type;
 
 public:
-	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const int d): 
-		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p) {}
+	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const int d, const string& mt): 
+		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt) {}
 	string operator()(const string& old)
 	{
 		string declaration;
-		if (depth > 0 && v != max) {
+		if (depth > 0 /*&& v != max*/) {
+			/*
 			string factor;
 			try {
 				const string max_factor = max->math().factor(par_induction);
@@ -377,6 +379,17 @@ public:
 
 			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size() + factor).define() + ";" + 
 				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs() + factor).define() + ";";
+			*/
+			const const_variable range("unsigned int", v->name() + "_rng", 
+					"min(((" + v->conds().stop + ")-(" + v->conds().start + ")), 16384/sizeof(" + max_type + "))");
+			const string depth1 = to_string(depth + 1);
+			const string def = range.name() + "*" + depth1 + "< (" + v->conds().stop + ") - (" + v->conds().start + ") ?" + 
+				range.name() + ":" +
+				"prev16(" + range.name() + "/" + depth1 + ")";
+
+			declaration = range.define() + ";" +
+				variable("unsigned int", buffer_adaptor(v).size(), def).define() + ";" + 
+				const_variable("unsigned int", buffer_adaptor(v).abs(), def).define() + ";";
 		}
 
 		return old + declaration;
@@ -392,12 +405,13 @@ struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*
 	const int num_shared;
 	const string& par_induction;
 	const depths& local_depths;
-	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const depths& l): 
-		max(m), buffer(b), num_shared(n), par_induction(p), local_depths(l) {}
+	const string& max_type;
+	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const depths& l, const string& mt): 
+		max(m), buffer(b), num_shared(n), par_induction(p), local_depths(l), max_type(mt) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, local_depths.find(v)->second);
+		return new shared_buffer_size(v, max, buffer, num_shared, par_induction, local_depths.find(v)->second, max_type);
 	}
 };
 
@@ -581,8 +595,8 @@ public:
 		buffer_adaptor buff(v);
 
 		return	buff.size() + "=" + buff.abs() + ";" + 
-			"if (" + buff.size() + ">" + conds.stop + "-" + conds.start + "&&" + conds.stop + "-" + conds.start + "> 0) {" +
-				buff.size() + "=" + conds.stop + "-" + conds.start + ";}" + 
+			"if (" + buff.size() + "> (" + conds.stop + ") - (" + conds.start + ") && (" + conds.stop + ") - (" + conds.start + ") > 0) {" +
+				buff.size() + "= (" + conds.stop + ") - (" + conds.start + ") ;}" + 
 			old;
 	}
 
@@ -834,7 +848,7 @@ public:
 
 	string final_iteration() const
 	{
-		return "((" + conds.stop + "-" + conds.start + ")" + factor() + ")";
+		return "(((" + conds.stop + ") - (" + conds.start + "))" + factor() + ")";
 	}
 
 	string next_buffer(const condslist& nests) const
@@ -958,7 +972,7 @@ public:
 
 	string final_iteration() const
 	{
-		return "(" + conds.stop + "-" + conds.start + ")";
+		return "((" + conds.stop + ") - (" + conds.start + "))";
 	}
 
 	string next_buffer(const condslist& nests) const

@@ -500,7 +500,7 @@ c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
 		o.shared_var->math(add);
-		o.shared_var->induction(outer.induction);
+		o.shared_var->conds(outer);
 
 		// Column or row access?
 		if (o.accesses.back().str().find(outer.induction) != string::npos) {
@@ -696,7 +696,7 @@ struct additive_op {
 	}
 };
 
-struct assignment_split {
+struct expression_analysis {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
 	const var_symtbl& locals;
@@ -705,7 +705,7 @@ struct assignment_split {
 	operations& ops;
 	op_type data;
 	sharedset& vars;
-	assignment_split(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, const condslist& c, const conditions out, 
+	expression_analysis(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l, const condslist& c, const conditions out, 
 			operations& o, op_type d, sharedset& v):
 		shared_symbols(s), priv_symbols(p), locals(l), conds(c), outer(out), ops(o), data(d), vars(v)
 		{}
@@ -729,11 +729,11 @@ struct assignment_split {
 	};
 };
 
-void try_assignment_split(pt_iterator begin, pt_iterator end, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, const var_symtbl& locals,
+void try_expression_analysis(pt_iterator begin, pt_iterator end, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, const var_symtbl& locals,
 		const condslist& conds, const conditions curr, operations& ops, op_type data, sharedset& vars)
 {
 	try {
-		for_each(begin, end, assignment_split(shared_symbols, priv_symbols, locals, conds, curr, ops, data, vars));
+		for_each(begin, end, expression_analysis(shared_symbols, priv_symbols, locals, conds, curr, ops, data, vars));
 	}
 	catch (shared_variable_double_orientation e) {
 		throw user_error("Shared variables can only be accessed in row major or column "
@@ -764,11 +764,11 @@ struct assignment_search {
 		if (node_is(node, ids::assignment_expression)) {
 			pt_iterator eqs = find_if_all(node.children, is_equals);
 
-			try_assignment_split(node.children.begin(), eqs, shared_symbols, priv_symbols, locals, conds, outer, ops, STORE, out);
-			try_assignment_split(eqs, node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
+			try_expression_analysis(node.children.begin(), eqs, shared_symbols, priv_symbols, locals, conds, outer, ops, STORE, out);
+			try_expression_analysis(eqs, node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
 		}
 		else if (node_is(node, ids::relational_expression)) {
-			try_assignment_split(node.children.begin(), node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
+			try_expression_analysis(node.children.begin(), node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
 		}
 		else {
 			for_all(node.children, this);
@@ -857,7 +857,7 @@ struct declaration_op {
 		}
 		else if (node_is(node, ids::init_declarator)) {
 			pair<pt_iterator, pt_node*> p = find_equals(node);
-			try_assignment_split(p.first, p.second->children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in); 
+			try_expression_analysis(p.first, p.second->children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in); 
 
 			string name = string(node.children.front().value.begin(), node.children.front().value.end());
 			locals[name] = new variable(type, name);
@@ -1040,8 +1040,8 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	void operator()(shared_variable* v)
 	{
 		if (max) {
-			int prev = from_string<int>(remove_multop(v->math().non_ihs(v->induction()).str()));
-			int max_int = from_string<int>(remove_multop(max->math().non_ihs(max->induction()).str())); 
+			int prev = from_string<int>(remove_multop(v->math().non_ihs(v->conds().induction).str()));
+			int max_int = from_string<int>(remove_multop(max->math().non_ihs(max->conds().induction).str())); 
 			if (max_int < prev) {
 				max = v;
 			}
@@ -1151,17 +1151,20 @@ struct for_compound_op {
 			sharedset& local_out = o.out;
 			sharedset& local_inout = o.inout;
 
+			/*
 			if ((before_in != global_in.size() || before_out != global_out.size() || before_inout != global_inout.size()) ||
 					set_union_all(local_in, local_out, local_inout).size() > 0) {
 				conds = o.conds;
 			}
+			*/
 
 			depths local_depths;
 			for_all(local_in, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			const conditions inner = *next(curr_scope, conds);
+			//const conditions inner = *next(curr_scope, conds);
+			const conditions inner = o.conds.back();
 
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
@@ -1174,19 +1177,23 @@ struct for_compound_op {
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
 			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(inner, local_depths), seen_ins));
+			lbrace.push_back(new define_variable(index_adapt()(inner)));
 
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
+				/*
 				conditions bridge_in = outer;
 				bridge_in.induction = inner.induction;
+				*/
 				xformerlist& nested = node.value.xformations;
-				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(bridge_in, local_depths), seen_ins));
+				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(inner, local_depths), seen_ins));
 
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
+
 				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
 			}
 
@@ -1367,6 +1374,7 @@ struct parallel_for_op {
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
+			lbrace.push_back(new define_variable(index_adapt()(specond)));
 		
 			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
 				const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
@@ -1743,8 +1751,6 @@ struct cell_region {
 			const shared_variable* max = for_all(shared, max_buffer()).max;
 
 			front.push_back(new define_variable(prev));
-			append(front, fmap(make_define_variable(), fmap(index_adapt(), conds)));
-
 			front.push_back(new compute_bounds(least));
 
 			string clipped_start;
@@ -1761,8 +1767,8 @@ struct cell_region {
 			front.push_back(new define_clipped_range(clipped_start, clipped_stop, greatest));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), privs));
-			front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
-			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths), shared));
+			//front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
+			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths, greatest), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));
 			append(front, fmap(make_depth_xformer<buffer_allocation, private_variable>(max_depths), privs));

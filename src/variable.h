@@ -128,11 +128,11 @@ class unitialized_access_orientation: public exception {};
 
 class shared_variable: public region_variable {
 	add_expr _math;
-	list<string> _dimensions; // Dimensions for multidimensional array
+	list<string> _dimensions; // Dimensions for multidimensional array.
 	orientation_t _orientation;
 	bool _in_generated;
 	bool _out_generated;
-	string _induction; // The closest induction variable used for access
+	conditions _conds; // Closest conditions to the shared varaible.
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
@@ -163,8 +163,8 @@ public:
 	void in_generated() { _in_generated = true; }
 	void out_generated() { _out_generated = true; }
 
-	void induction(const string& str) { _induction = str; }
-	string induction() const { return _induction; }
+	void conds(const conditions& c) { _conds = c; }
+	conditions conds() const { return _conds; }
 };
 
 class reduction_variable: public region_variable {
@@ -262,7 +262,7 @@ public:
 			}
 		}
 		
-		const string base = "((" + conds.stop + "-" + conds.start + ") % (" + buffer_adaptor(v).size() + factor + "))";
+		const string base = "(((" + conds.stop + ") - (" + conds.start + ") ) % (" + buffer_adaptor(v).size() + factor + "))";
 
 		string correction;
 		if (factor == "" && max_factor != "" && from_string<int>(factor) < from_string<int>(max_factor)) {
@@ -285,7 +285,7 @@ public:
 
 	string reset(const string& stop) const
 	{
-		return name() + "= " + stop + "-" + rem_adaptor(v).name();
+		return name() + "= (" + stop + ") -" + rem_adaptor(v).name();
 	}
 };
 
