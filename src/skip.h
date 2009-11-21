@@ -14,6 +14,7 @@ struct skip_grammar: public grammar<skip_grammar>
 		{
 			skip =   
 				space_p
+			|	chlit<>('\\') >> chlit<>('\n')
 			|	comment_p("//")                 // C++ comment
 			|	comment_p("/*", "*/")           // C comment
 			|	comment_p("#line")
