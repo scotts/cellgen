@@ -396,7 +396,7 @@ unsigned int add_expr::index(const string& ivar) const
 {
 	unsigned int i = 1;
 	for (list<string>::const_iterator it = _indices.begin(); it != _indices.end(); ++it) {
-		if (*it == ivar) {
+		if (it->find(ivar) != string::npos) {
 			break;
 		}
 		else {
