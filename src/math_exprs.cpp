@@ -158,22 +158,21 @@ string mult_expr::str() const
 	}
 }
 
+//FIXME BROKEN
 string mult_expr::add_iteration(const string& ivar, const string& size) const
 {
 	assert(ivar != "");
 
-	const string plus_size = "(" + ivar + "+" + size + ")";
-	if (_lhs.str() == ivar) {
-		return "(" + plus_size + _op + _rhs.str() + ")";
+	if (_lhs.str().find(ivar) != string::npos) {
+		//return "((" + _lhs.str() + "+" + size + ")" + _op + _rhs.str() + ")";
+		return "((" + ivar + "+" + size + ")" + _op + _rhs.str() + ")";
 	}
-	else if (_rhs.str() == ivar) {
-		return "(" + _lhs.str() + _op + plus_size + ")";
+	else if (_rhs.str().find(ivar) != string::npos) {
+		//return "(" + _lhs.str() + _op + "(" + _rhs.str() + "+" + size + "))";
+		return "(" + _lhs.str() + _op + "(" + ivar + "+" + size + "))";
 	}
 	else {
-		return "(" +	_lhs.add_iteration(ivar, size) + 
-				_op + 
-				_rhs.add_iteration(ivar, size) + 
-			")";
+		return "(" + _lhs.add_iteration(ivar, size) + _op + _rhs.add_iteration(ivar, size) + ")";
 	}
 }
 

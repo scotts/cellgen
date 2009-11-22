@@ -380,16 +380,24 @@ public:
 			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size() + factor).define() + ";" + 
 				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs() + factor).define() + ";";
 			*/
-			const const_variable range("unsigned int", v->name() + "_rng", 
-					"min(((" + v->conds().stop + ")-(" + v->conds().start + ")), 16384/sizeof(" + max_type + "))");
-			const string depth1 = to_string(depth + 1);
-			const string def = range.name() + "*" + depth1 + "< (" + v->conds().stop + ") - (" + v->conds().start + ") ?" + 
-				range.name() + ":" +
-				"prev16(" + range.name() + "/" + depth1 + ")";
+			string def;
+			if (!buffer) {
+				const const_variable range("unsigned int", v->name() + "_rng", 
+						"min(((" + v->conds().stop + ")-(" + v->conds().start + ")), 16384/sizeof(" + max_type + "))");
+				const string depth1 = to_string(depth + 1);
+				def = range.name() + "*" + depth1 + "< (" + v->conds().stop + ") - (" + v->conds().start + ") ?" + 
+					range.name() + ":" +
+					"prev16(" + range.name() + "/" + depth1 + ")";
 
-			declaration = range.define() + ";" +
-				variable("unsigned int", buffer_adaptor(v).size(), def).define() + ";" + 
+				declaration = range.define() + ";";
+			}
+			else {
+				def = to_string(buffer);
+			}
+
+			declaration += variable("unsigned int", buffer_adaptor(v).size(), def).define() + ";" + 
 				const_variable("unsigned int", buffer_adaptor(v).abs(), def).define() + ";";
+			
 		}
 
 		return old + declaration;
