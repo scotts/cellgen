@@ -52,6 +52,7 @@ class mult_expr {
 public:
 	mult_expr() {}
 	mult_expr(const string& l): _lhs(l) {}
+	mult_expr(const paren_expr& p): _lhs(p) {}
 	mult_expr(const string& l, const string& o, const string& r): _lhs(l), _op(o), _rhs(r) {}
 	mult_expr(const paren_expr& l, const string& o, const string& r): _lhs(l), _op(o), _rhs(r) {}
 	mult_expr(const string& l, const string& o, const paren_expr& r): _lhs(l), _op(o), _rhs(r) {}

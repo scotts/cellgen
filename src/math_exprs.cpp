@@ -158,18 +158,18 @@ string mult_expr::str() const
 	}
 }
 
-//FIXME BROKEN
 string mult_expr::add_iteration(const string& ivar, const string& size) const
 {
+	const string lhs = _lhs.str();
+	const string rhs = _rhs.str();
+
 	assert(ivar != "");
 
-	if (_lhs.str().find(ivar) != string::npos) {
-		//return "((" + _lhs.str() + "+" + size + ")" + _op + _rhs.str() + ")";
-		return "((" + ivar + "+" + size + ")" + _op + _rhs.str() + ")";
+	if (lhs == ivar) {
+		return "((" + lhs + "+" + size + ")" + _op + rhs + ")";
 	}
-	else if (_rhs.str().find(ivar) != string::npos) {
-		//return "(" + _lhs.str() + _op + "(" + _rhs.str() + "+" + size + "))";
-		return "(" + _lhs.str() + _op + "(" + ivar + "+" + size + "))";
+	else if (rhs == ivar) {
+		return "(" + lhs + _op + "(" + rhs + "+" + size + "))";
 	}
 	else {
 		return "(" + _lhs.add_iteration(ivar, size) + _op + _rhs.add_iteration(ivar, size) + ")";
@@ -289,11 +289,19 @@ string add_expr::str() const
 
 string add_expr::add_iteration(const string& ivar, const string& size) const
 {
-	if (_lhs.str().find(ivar) != string::npos) {
-		return "(" + _lhs.add_iteration(ivar, size) + _op + _rhs.str() + ")";
+	const string lhs = _lhs.str();
+	const string rhs = _rhs.str();
+
+	cout << "lhs [" << lhs << "] rhs [" << "]" << endl;
+
+	if (lhs == ivar || rhs == ivar) {
+		return "(" + lhs + _op + rhs + "+" + size + ")";
 	}
-	else if (_rhs.str().find(ivar) != string::npos) {
-		return "(" + _lhs.str() + _op + _rhs.add_iteration(ivar, size) + ")";
+	else if (lhs.find(ivar) != string::npos) {
+		return "(" + _lhs.add_iteration(ivar, size) + _op + rhs + ")";
+	}
+	else if (rhs.find(ivar) != string::npos) {
+		return "(" + lhs + _op + _rhs.add_iteration(ivar, size) + ")";
 	}
 	else {
 		throw ivar_not_found();

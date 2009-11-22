@@ -221,7 +221,7 @@ add_expr construct_access_formula(const list<string>& dimensions, const list<add
 		add_expr staq(indices.front());
 		str_indices.push_back(indices.front().str());
 		for (++n, ++i; n != dimensions.end() && i != indices.end(); ++n, ++i) {
-			staq = add_expr(mult_expr(paren_expr(new add_expr(staq)), "*", *n), "+", mult_expr(i->str()));
+			staq = add_expr(mult_expr(paren_expr(new add_expr(staq)), "*", *n), "+", mult_expr(paren_expr(new add_expr(*i))));
 			str_indices.push_back(i->str());
 		}
 
