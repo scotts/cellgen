@@ -18,8 +18,7 @@ const int NSPEC = __NSPEC;
 
 #define SOURCE_RATE	4.67E+23
 
-double16b_t conc_spe_long[__NROWS][__NCOLS][__NSPEC] __attribute__((aligned(128)));
-double16b_t conc_spe_short[__NROWS][__NCOLS][__NSPEC] __attribute__((aligned(128)));
+double16b_t conc_spe[__NROWS][__NCOLS][__NSPEC] __attribute__((aligned(128)));
 double16b_t wind_u_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
 double16b_t wind_v_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
 double16b_t diff_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
@@ -1606,26 +1605,37 @@ int main()
 			diff_spe[i][j].num = diff_ppe[i][j] = (i+1) * (j+1);
 
 			for (k = 0; k < NSPEC; ++k) {
-				conc_spe_long[i][j][k].num = conc_spe_short[i][j][k].num = conc_ppe[i][j][k] = (i+1) * (j+1) * (k+1);
+				conc_spe[i][j][k].num = conc_ppe[i][j][k] = (i+1) * (j+1) * (k+1);
 			}
 		}
 	}
 
-	conc_spe_long[SOURCE_Y][SOURCE_X][0].num += (SOURCE_RATE) / (DX * DY * 1000.0);
-	conc_spe_short[SOURCE_Y][SOURCE_X][0].num += (SOURCE_RATE) / (DX * DY * 1000.0);
+	conc_spe[SOURCE_Y][SOURCE_X][0].num += (SOURCE_RATE) / (DX * DY * 1000.0);
 	conc_ppe[SOURCE_Y][SOURCE_X][0] += (SOURCE_RATE) / (DX * DY * 1000.0);
 
-	all_rows_spe_long(1.0 / 2.0, conc_spe_long, wind_u_spe, diff_spe);
-	all_rows_spe_short(1.0 / 2.0, conc_spe_short, wind_u_spe, diff_spe);
+	all_rows_spe_long(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
 	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
-	assert_rows(conc_spe_long, conc_ppe);
-	assert_rows(conc_spe_short, conc_ppe);
+	assert_rows(conc_spe, conc_ppe);
 
-	all_cols_spe_long(1.0 / 2.0, conc_spe_long, wind_v_spe, diff_spe);
-	all_cols_spe_short(1.0 / 2.0, conc_spe_short, wind_v_spe, diff_spe);
+	all_cols_spe_long(1.0 / 2.0, conc_spe, wind_v_spe, diff_spe);
 	all_cols_ppe(1.0 / 2.0, conc_ppe, wind_v_ppe, diff_ppe);
-	assert_cols(conc_spe_long, conc_ppe);
-	assert_cols(conc_spe_short, conc_ppe);
+	assert_cols(conc_spe, conc_ppe);
+
+	for (i = 0; i < NROWS; i++) {
+		for (j = 0; j < NCOLS; j++) {
+			for (k = 0; k < NSPEC; ++k) {
+				conc_spe[i][j][k].num = conc_ppe[i][j][k] = (i+1) * (j+1) * (k+1);
+			}
+		}
+	}
+
+	all_rows_spe_short(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
+	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
+	assert_rows(conc_spe, conc_ppe);
+
+	all_cols_spe_short(1.0 / 2.0, conc_spe, wind_v_spe, diff_spe);
+	all_cols_ppe(1.0 / 2.0, conc_ppe, wind_v_ppe, diff_ppe);
+	assert_cols(conc_spe, conc_ppe);
 
 	return 0;
 }
