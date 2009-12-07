@@ -199,7 +199,7 @@ public:
 		size_t bracket = v->type().find('['); 
 
 		if (bracket == string::npos && star == string::npos) {
-			throw user_error(string("variable ") + v->name() + 
+			throw user_error(string("variable ") + v->region_variable::name() + 
 					" can't be made into a buffer because it is a scalar." );
 		}
 

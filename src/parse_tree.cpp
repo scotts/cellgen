@@ -1163,9 +1163,7 @@ struct for_compound_op {
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			//const conditions inner = *next(curr_scope, conds);
 			const conditions inner = o.conds.back();
-
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
 			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
@@ -1183,10 +1181,6 @@ struct for_compound_op {
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				/*
-				conditions bridge_in = outer;
-				bridge_in.induction = inner.induction;
-				*/
 				xformerlist& nested = node.value.xformations;
 				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(inner, local_depths), seen_ins));
 

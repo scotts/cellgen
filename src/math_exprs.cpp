@@ -292,8 +292,6 @@ string add_expr::add_iteration(const string& ivar, const string& size) const
 	const string lhs = _lhs.str();
 	const string rhs = _rhs.str();
 
-	cout << "lhs [" << lhs << "] rhs [" << "]" << endl;
-
 	if (lhs == ivar || rhs == ivar) {
 		return "(" + lhs + _op + rhs + "+" + size + ")";
 	}
