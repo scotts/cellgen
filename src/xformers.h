@@ -315,41 +315,6 @@ public:
 	string class_name() const { return "define_clipped_range"; }
 };
 
-// FIXME: The relationship between this and shared_buffer_size is inelegant.
-class max_buffer_size: public depth_xformer {
-	const shared_variable* max;
-	const int buffer;
-	const int num_shared;
-	const string par_induction;
-
-public:
-	max_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const int d): 
-		depth_xformer(d), max(m), buffer(b), num_shared(n), par_induction(p) {}
-	string operator()(const string& old)
-	{
-		string declaration;
-		if (depth > 0) {
-			string def;
-			if (buffer) {
-				def = to_string(buffer);
-			}
-			else {
-				const string depth1 = to_string(depth + 1);
-				def = clipped_range.name() + "*" + depth1 + "<" + spe_stop.name() + "-" + spe_start.name() + "?" + 
-					clipped_range.name() + ":" +
-					"prev16(" + clipped_range.name() + "/" + depth1 + ")";
-			}
-			declaration = variable("unsigned int", buffer_adaptor(max).size(), def).define() + ";" +
-				const_variable("unsigned int", buffer_adaptor(max).abs(), buffer_adaptor(max).size()).define() + ";";
-		}
-
-		return old + declaration;
-	}
-
-	xformer* clone() const { return new max_buffer_size(*this); }
-	string class_name() const { return "max_buffer_size"; }
-};
-
 class shared_buffer_size: public depth_xformer {
 	const shared_variable* v;
 	const shared_variable* max;
@@ -364,8 +329,7 @@ public:
 	string operator()(const string& old)
 	{
 		string declaration;
-		if (depth > 0 /*&& v != max*/) {
-			/*
+		if (depth > 0) {
 			string factor;
 			try {
 				const string max_factor = max->math().factor(par_induction);
@@ -377,9 +341,6 @@ public:
 				// Yes, do nothing.
 			}
 
-			declaration = variable("unsigned int", buffer_adaptor(v).size(), buffer_adaptor(max).size() + factor).define() + ";" + 
-				const_variable("unsigned int", buffer_adaptor(v).abs(), buffer_adaptor(max).abs() + factor).define() + ";";
-			*/
 			string def;
 			if (!buffer) {
 				const const_variable range("unsigned int", v->name() + "_rng", 
@@ -395,9 +356,8 @@ public:
 				def = to_string(buffer);
 			}
 
-			declaration += variable("unsigned int", buffer_adaptor(v).size(), def).define() + ";" + 
-				const_variable("unsigned int", buffer_adaptor(v).abs(), def).define() + ";";
-			
+			declaration += variable("unsigned int", buffer_adaptor(v).size(), def + factor).define() + ";" + 
+				const_variable("unsigned int", buffer_adaptor(v).abs(), def + factor).define() + ";";
 		}
 
 		return old + declaration;

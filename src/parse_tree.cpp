@@ -1301,6 +1301,15 @@ struct multiple_parallel_induction_variables {
 	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
 };
 
+void set_flat_conditions(shared_variable* v)
+{
+	conditions c = v->conds();
+	c.start = spe_start.name();
+	c.stop = spe_stop.name();
+
+	v->conds(c);
+}
+
 // I AM A HACK. Every other method for figuring out which region number we're on is worse.
 int __region_number = 0;
 
@@ -1380,6 +1389,7 @@ struct parallel_for_op {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
+				for_all(flat_all, set_flat_conditions);
 				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, specond, flat_all, buffer_size);
 			}
 
@@ -1761,7 +1771,6 @@ struct cell_region {
 			front.push_back(new define_clipped_range(clipped_start, clipped_stop, greatest));
 
 			append(front, fmap(make_xformer<private_buffer_size, private_variable>(), privs));
-			//front.push_back(new max_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths[max]));
 			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths, greatest), shared));
 
 			append(front, fmap(make_depth_xformer<buffer_allocation, shared_variable>(max_depths), shared));

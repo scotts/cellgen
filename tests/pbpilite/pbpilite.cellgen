@@ -201,7 +201,7 @@ int main()
 		}
 	}
 
-	if (double_eq(lnL, lnL_ref)) {
+	if (!double_eq(lnL, lnL_ref)) {
 		printf("reduction failure: ppe %f, spe %f\n", lnL_ref, lnL);
 	}
 
