@@ -1137,10 +1137,6 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (is_for_loop(node)) {
-			const size_t before_in = global_in.size();
-			const size_t before_out = global_out.size();
-			const size_t before_inout = global_inout.size();
-
 			condslist::const_iterator curr_scope = previous(conds.end(), conds);
 			condslist oldconds = conds;
 			serial_for_op o(shared_symbols, priv_symbols, locals, global_in, global_out, global_inout, conds, ops);
@@ -1150,13 +1146,6 @@ struct for_compound_op {
 			sharedset& local_in = o.in;
 			sharedset& local_out = o.out;
 			sharedset& local_inout = o.inout;
-
-			/*
-			if ((before_in != global_in.size() || before_out != global_out.size() || before_inout != global_inout.size()) ||
-					set_union_all(local_in, local_out, local_inout).size() > 0) {
-				conds = o.conds;
-			}
-			*/
 
 			depths local_depths;
 			for_all(local_in, make_assign_set<shared_variable*>(2, local_depths));
@@ -1170,7 +1159,6 @@ struct for_compound_op {
 			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, local_inout));
 
 			// TODO:
-			// 	- Optimization if buffer is same size as (stop - start)?
 			// 	- Combine multiple in/out calls? 
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
@@ -1200,7 +1188,6 @@ struct for_compound_op {
 	}
 };
 
-// TODO: make this more general by creating add_exprs instead of strings.
 struct operator_wedge {
 	pt_node*& lhs;
 	pt_node*& rhs;
@@ -1294,12 +1281,6 @@ void serial_for_op::operator()(pt_node& node)
 		for_all(node.children, this);
 	}
 }
-
-struct multiple_parallel_induction_variables {
-	string old;
-	string attempt;
-	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
-};
 
 void set_flat_conditions(shared_variable* v)
 {
@@ -1506,6 +1487,12 @@ struct wipeout_const_and_pure_declarations {
 	}
 };
 
+struct multiple_parallel_induction_variables {
+	string old;
+	string attempt;
+	multiple_parallel_induction_variables(const string& o, const string& a): old(o), attempt(a) {}
+};
+
 struct compound {
 	const shared_symtbl& shared_symbols;
 	const priv_symtbl& priv_symbols;
@@ -1706,11 +1693,11 @@ struct cell_region {
 			const string least = for_all(shared, type_comparison(c_type_less)).winner;
 			const string greatest = for_all(shared, type_comparison(c_type_greater)).winner;
 
+			/*
 			operations overhead;
 			operations startup;
-			//call_descend(accumulate_cost(overhead, startup), node);	
+			call_descend(accumulate_cost(overhead, startup), node);	
 			operations total = iteration + startup + overhead;
-			/*
 			cout	<< "iteration " << endl << iteration 
 				<< "data " << iteration.data_cycles() << ", " << "comp " << iteration.comp_cycles() << endl
 				<< endl
@@ -1721,9 +1708,7 @@ struct cell_region {
 				<< "data " << startup.data_cycles() << ", " << "comp " << startup.comp_cycles() << endl
 				<< "total data " << total.data_cycles() << ", " << "total comp " << total.comp_cycles() << endl
 				<< endl;
-			*/
 
-			/*
 			string n = "1";
 			for (condslist::iterator i = conds.begin(); i != conds.end(); ++i) {
 				n += "*(";
