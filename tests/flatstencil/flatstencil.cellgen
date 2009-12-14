@@ -1,0 +1,65 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include "cellgen.h"
+
+const int N = 100;
+
+void init(int* a_p, int* b_p, int16b_t* a_s, int16b_t* b_s)
+{
+	int i;
+	int count = 1;
+	for (i = 0; i < N; ++i) {
+		a_p[i] = count;
+		a_s[i].num = count;
+		++count;
+
+		b_p[i] = 0;
+		b_s[i].num = 0;
+	}
+}
+
+void stencil_on_ppe(int* a, int* b)
+{
+	unsigned int i;
+	for (i = 1; i < N-1; ++i) {
+		b[i] = a[i-1] + a[i] + a[i+1];
+	}
+}
+
+void stencil_on_spe(int16b_t* a, int16b_t* b)
+{
+	#pragma cell shared(int16b_t* am = a, int16b_t* a = a, int16b_t* ap = a, int16b_t* b = b)
+	{
+		unsigned int i;
+		for (i = 1; i < N-1; ++i) {
+			b[i].num = am[i-1].num + a[i].num + ap[i+1].num;
+		}
+	}
+}
+
+void check_results(int* *b_p, int16b_t* b_s)
+{
+	unsigned int i;
+	for (i = 0; i < N; ++i) {
+		assert(b_p[i] == b_s[i].num);
+	}
+}
+
+int main()
+{
+	int* a_p = malloc(N * sizeof(int));
+	int* b_p = malloc(N * sizeof(int));
+
+	int16b_t* a_s = cellgen_malloc(N * sizeof(int16b_t));
+	int16b_t* b_s = cellgen_malloc(N * sizeof(int16b_t));
+
+	init(a_p, b_p, a_s, b_s);
+
+	stencil_on_ppe(a_p, b_p);
+	stencil_on_spe(a_s, b_s);
+
+	check_results(b_p, b_s);
+
+	return 0;
+}

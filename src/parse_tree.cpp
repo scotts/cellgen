@@ -954,22 +954,43 @@ struct replace_node {
 	}
 };
 
+template <class X>
+struct find_and_replace_xform {
+	xformer* x;
+	find_and_replace_xform(xformer* _x): x(_x) {}
+	void operator()(pt_node& node)
+	{
+		xformerlist& xformers = node.value.xformations;
+		xformerlist::iterator it = find_if_all(xformers, is_type<X, xformer>);
+
+		if (it != xformers.end()) {
+			xformer* old = *it;
+			xformers.erase(it);
+			delete old;
+			xformers.push_back(x);
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
 struct modify_for_loop {
 	const shared_variable* v;
-	const conditions& conds;
-	const string buffer_size;
+	const string& induction;
+	const string& buffer_size;
 	int seen;
-	modify_for_loop(const shared_variable* _v, const conditions& c, const string& b): 
-		v(_v), conds(c), buffer_size(b), seen(0) {}
+	modify_for_loop(const shared_variable* _v, const string& i, const string& b): 
+		v(_v), induction(i), buffer_size(b), seen(0) {}
 	void operator()(pt_node& node)
 	{
 		if (is_expression(node)) {
 			++seen;
 
 			switch (seen) {
-				case 2:	replace_node(conds.stop, new naked_string(full_adaptor(v).name()))(node);
+				case 2:	find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name()))(node);
 					break;
-				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
+				case 3: node.value.xformations.push_back(new loop_increment(induction, buffer_size));
 					node.children.clear();
 					break;
 			}
@@ -983,7 +1004,11 @@ struct modify_for_loop {
 template <class X>
 void remove_xforms(pt_node& node)
 {
-	node.value.xformations.remove_if(is_type<X, xformer>);
+	xformerlist& xformers = node.value.xformations;
+	xformerlist::iterator it = remove_if(xformers.begin(), xformers.end(), is_type<X, xformer>);
+	xformer* x = *it;
+	xformers.erase(it, xformers.end());
+	delete x;
 }
 
 struct find_induction {
@@ -1079,7 +1104,7 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 	}
 
 	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
-	modify_for_loop(max, conds, buffer_size)(for_loop);
+	modify_for_loop(max, conds.induction, buffer_size)(for_loop);
 	remove_xforms<if_clause>(*loop_cmpd); // Hack! hack-hack-hack
 
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd), ids::for_loop);
@@ -1282,15 +1307,6 @@ void serial_for_op::operator()(pt_node& node)
 	}
 }
 
-void set_flat_conditions(shared_variable* v)
-{
-	conditions c = v->conds();
-	c.start = spe_start.name();
-	c.stop = spe_stop.name();
-
-	v->conds(c);
-}
-
 // I AM A HACK. Every other method for figuring out which region number we're on is worse.
 int __region_number = 0;
 
@@ -1309,8 +1325,7 @@ struct parallel_for_op {
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, privset& ps, sharedset& i, sharedset& o, 
 			sharedset& io, operations& op, condslist& c, pt_node& par): 
 		shared_symbols(s), priv_symbols(p), privs(ps), global_in(i), global_out(o), global_inout(io), 
-		ops(op), conds(c), parent(par), expressions_seen(0)
-		{}
+		ops(op), conds(c), parent(par), expressions_seen(0) {}
 	void operator()(pt_node& node)
 	{
 		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) &&
@@ -1350,6 +1365,7 @@ struct parallel_for_op {
 			const fn_and<shared_variable> row_and_flat(&shared_variable::is_row, &shared_variable::is_flat);
 			const sharedset& flat_ins = filter(row_and_flat, set_union_all(in, inout));
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
+			const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
 			const make_conditions<gen_in<row_access> > make_gen_in_row(parcond, local_depths);
 			const make_conditions<gen_out<row_access> > make_gen_out_row(parcond, local_depths);
 
@@ -1358,10 +1374,9 @@ struct parallel_for_op {
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
-			lbrace.push_back(new define_variable(index_adapt()(specond)));
+			lbrace.push_back(new define_variable(index_adapt()(parcond.induction)));
 		
-			if (flat_ins.size() > 0 || flat_outs.size() > 0) {
-				const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
+			if (flat_all.size()) {
 				const shared_variable* first = *flat_all.begin();
 				const string& factor = first->math().factor(parcond.induction);
 				string buffer_size = buffer_adaptor(first).size();
@@ -1370,7 +1385,6 @@ struct parallel_for_op {
 					buffer_size = "(" + buffer_size + "/" + factor + ")";
 				}
 
-				for_all(flat_all, set_flat_conditions);
 				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, specond, flat_all, buffer_size);
 			}
 

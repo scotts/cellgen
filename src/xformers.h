@@ -114,7 +114,7 @@ public:
 	{
 		string offset;
 		string factor;
-		if (v->is_flat()) {
+		if (v->is_flat() && v->math().factor(conds.induction) != "") {
 			offset = math.non_ihs(conds.induction).str();
 			if (offset != "") {
 				offset = "+" + offset;
@@ -341,12 +341,19 @@ public:
 				// Yes, do nothing.
 			}
 
+			string start = v->conds().start;
+			string stop = v->conds().stop;
+			if (v->is_row() && v->is_flat()) {
+				start = spe_start.name();
+				stop = spe_stop.name();
+			}
+
 			string def;
 			if (!buffer) {
 				const const_variable range("unsigned int", v->name() + "_rng", 
-						"min(((" + v->conds().stop + ")-(" + v->conds().start + ")), 16384/sizeof(" + max_type + "))");
+						"min(((" + stop + ")-(" + start + ")), 16384/sizeof(" + max_type + "))");
 				const string depth1 = to_string(depth + 1);
-				def = range.name() + "*" + depth1 + "< (" + v->conds().stop + ") - (" + v->conds().start + ") ?" + 
+				def = range.name() + "*" + depth1 + "< (" + stop + ") - (" + start + ") ?" + 
 					range.name() + ":" +
 					"prev16(" + range.name() + "/" + depth1 + ")";
 
@@ -822,7 +829,7 @@ public:
 	string next_buffer(const condslist& nests) const
 	{
 		string a;
-		if (v->is_flat()) {
+		if (v->is_flat() && v->math().factor(conds.induction) != "") {
 			a = v->math().ihs(conds.induction).str(); 
 		}
 		else {
