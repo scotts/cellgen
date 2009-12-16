@@ -1,6 +1,6 @@
-PROGRAM_spu     := stencil_spe
+PROGRAM_spu     := flatstencil_spe
 
-LIBRARY_embed	= lib_stencil_spu.a
+LIBRARY_embed	= lib_flatstencil_spu.a
 
 IMPORTS		= -lsync
 
