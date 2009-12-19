@@ -499,8 +499,8 @@ c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const 
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
-		o.shared_var->math(add);
-		o.shared_var->conds(outer);
+		cout << o.shared_var->name() << " accessed with " << add.str() << " and " << outer.induction << endl;
+		o.shared_var->access(add, outer);
 
 		// Column or row access?
 		if (o.accesses.back().str().find(outer.induction) != string::npos) {

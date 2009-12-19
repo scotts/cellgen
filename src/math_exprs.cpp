@@ -23,16 +23,6 @@ add_expr paren_expr::eval() const
 	return add_expr(mult_expr(terminal));
 }
 
-string paren_expr::add_iteration(const string& ivar, const string& size) const
-{
-	if (recurse) {
-		return recurse->add_iteration(ivar, size);
-	}
-	else {
-		return terminal;
-	}
-}
-
 string paren_expr::str() const
 {
 	if (recurse) {
@@ -101,6 +91,25 @@ bool paren_expr::operator==(const paren_expr& o) const
 paren_expr::~paren_expr()
 {
 	delete recurse;
+}
+
+string paren_expr::add_iteration(const string& ivar, const string& size) const
+{
+	if (recurse) {
+		return recurse->add_iteration(ivar, size);
+	}
+	else {
+		return terminal;
+	}
+}
+
+string paren_expr::stencil_offset(const string& ivar) const
+{
+	string offset;
+	if (recurse) {
+		offset = recurse->stencil_offset(ivar);
+	}
+	return offset;
 }
 
 paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) const
@@ -205,6 +214,11 @@ paren_expr mult_expr::ihs(const string& ivar) const
 paren_expr mult_expr::non_ihs(const string& ivar) const
 {
 	return side(ivar, &_rhs, &_lhs);
+}
+
+string mult_expr::stencil_offset(const string& ivar) const
+{
+	return side(ivar, &_lhs, &_rhs).stencil_offset(ivar);
 }
 
 mult_expr mult_expr::replace_induction(const string& ivar, const string& rep) const
@@ -335,6 +349,25 @@ mult_expr add_expr::ihs(const string& ivar) const
 mult_expr add_expr::non_ihs(const string& ivar) const
 {
 	return side(ivar, &_rhs, &_lhs);
+}
+
+string add_expr::stencil_offset(const string& ivar) const
+{
+	const string& lhs = _lhs.str();
+	const string& rhs = _rhs.str();
+	string offset;
+
+	if (lhs == ivar) {
+		offset = _op + rhs;
+	}
+	else if (rhs == ivar) {
+		offset = _op + lhs;
+	}
+	else {
+		return side(ivar, &_lhs, &_rhs).stencil_offset(ivar);
+	}
+
+	return offset;
 }
 
 add_expr add_expr::replace_induction(const string& ivar, const string& rep) const

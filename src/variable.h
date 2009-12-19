@@ -133,17 +133,18 @@ class shared_variable: public region_variable {
 	bool _in_generated;
 	bool _out_generated;
 	conditions _conds; // Closest conditions to the shared varaible.
+	int _lowest;
+	int _highest;
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false)
-		{}
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false), 
+		_lowest(0), _highest(0) {}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false)
-		{}
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false), 
+		_lowest(0), _highest(0) {}
 
 	add_expr math() const { return _math; }
-	void math(add_expr m) { _math = m; }
 
 	bool is_row() const { return _orientation == ROW; }
 	void row() { _orientation = ROW; }
@@ -163,8 +164,24 @@ public:
 	void in_generated() { _in_generated = true; }
 	void out_generated() { _out_generated = true; }
 
-	void conds(const conditions& c) { _conds = c; }
 	conditions conds() const { return _conds; }
+
+	int stencil_low() const { return _lowest; }
+	int stencil_high() const { return _highest; }
+
+	void access(const add_expr& m, const conditions& c)
+	{
+		_math = m;
+		_conds = c;
+
+		int offset = from_string<int>(_math.stencil_offset(_conds.induction));
+		if (offset < _lowest) {
+			_lowest = offset;
+		}
+		else if (offset > _highest) {
+			_highest = offset;
+		}
+	}
 };
 
 class reduction_variable: public region_variable {
@@ -183,11 +200,7 @@ class buffer_adaptor {
 	const region_variable* v;
 
 public:
-	buffer_adaptor(const region_variable* _v): v(_v)
-	{
-		assert(v);
-	}
-
+	buffer_adaptor(const region_variable* _v): v(_v) { assert(v); }
 	string name() const { return v->region_variable::name() + "_buf"; }
 	string declare() const { return type() + "* " + name(); }
 	string size() const { return name() + "_sz"; }
@@ -212,11 +225,7 @@ class dma_list_adaptor {
 	const shared_variable* v;
 
 public:
-	dma_list_adaptor(const shared_variable* _v): v(_v)
-	{
-		assert(v);
-	}
-
+	dma_list_adaptor(const shared_variable* _v): v(_v) { assert(v); }
 	string name() const { return v->region_variable::name() + "_lst"; }
 	string name(const int i) const { return v->region_variable::name() + "_lst[" + to_string(i) + "]"; }
 	string name(const string s) const { return v->region_variable::name() + "_lst[" + s + "]"; }
@@ -227,7 +236,7 @@ public:
 class next_adaptor {
 	const region_variable* v;
 public:
-	next_adaptor(const region_variable* _v): v(_v) {}
+	next_adaptor(const region_variable* _v): v(_v) { assert(v); }
 	string type() const { return "int"; }
 	string name() const { return v->region_variable::name() + "_nxt"; }
 	string declare() const { return type() + " " + name(); }
@@ -236,7 +245,7 @@ public:
 class orig_adaptor {
 	const variable* v;
 public:
-	orig_adaptor(const region_variable* _v): v(_v) {}
+	orig_adaptor(const region_variable* _v): v(_v) { assert(v); }
 	string type() const { return v->variable::type(); }
 	string name() const { return v->variable::name(); }
 	string declare() const { return type() + " " + name(); }
@@ -245,7 +254,7 @@ public:
 class rem_adaptor {
 	const shared_variable* v;
 public:
-	rem_adaptor(const shared_variable* _v): v(_v) {}
+	rem_adaptor(const shared_variable* _v): v(_v) { assert(v); }
 	string name() const { return v->region_variable::name() + "_rem"; }
 	string declare() const
 	{
@@ -276,7 +285,7 @@ public:
 class full_adaptor {
 	const shared_variable* v;
 public:
-	full_adaptor(const shared_variable* _v): v(_v) {}
+	full_adaptor(const shared_variable* _v): v(_v) { assert(v); }
 	string name() const { return v->region_variable::name() + "_ful"; }
 	string declare() const
 	{

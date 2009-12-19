@@ -35,6 +35,7 @@ public:
 
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
+	string stencil_offset(const string& ivar) const;
 	add_expr eval() const;
 	paren_expr replace_induction(const string& ivar, const string& rep) const;
 	paren_expr expand_induction(const string& i) const;
@@ -80,6 +81,7 @@ public:
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
+	string stencil_offset(const string& ivar) const;
 	mult_expr replace_induction(const string& ivar, const string& rep) const;
 	mult_expr zero_induction(const string& ivar) const;
 	mult_expr expand_induction(const string& i) const;
@@ -119,6 +121,7 @@ public:
 	string str() const;
 	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
+	string stencil_offset(const string& ivar) const;
 	add_expr replace_induction(const string& ivar, const string& rep) const;
 	add_expr zero_induction(const string& ivar) const;
 	add_expr expand_induction(const string& i) const;

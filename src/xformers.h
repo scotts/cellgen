@@ -125,6 +125,9 @@ public:
 				factor = "*" + factor;
 			}
 		}
+		else if (v->stencil_low() != v->stencil_high()) {
+			offset = "+" + to_string(from_string<int>(math.stencil_offset(conds.induction)) - v->stencil_low());
+		}
 
 		return old + orig_adaptor(v).name() + "[" + index.name() + factor + offset + "]";
 	}
@@ -836,7 +839,7 @@ public:
 			a = v->math().expand_all_inductions(nests).str();
 		}
 
-		return a + "+" + buffer_adaptor(v).size();
+		return a + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low());
 	}
 
 	string this_buffer(const condslist& nests) const
@@ -865,7 +868,7 @@ public:
 			first = v->math().replace_induction(conds.induction, conds.start).expand_all_inductions(nests).str();
 		}
 
-		return first;
+		return first + "+" + to_string(v->stencil_low());
 	}
 
 	string final_buffer() const
