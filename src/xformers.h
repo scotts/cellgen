@@ -836,7 +836,7 @@ public:
 			a = v->math().ihs(conds.induction).str(); 
 		}
 		else {
-			a = v->math().expand_all_inductions(nests).str();
+			a = v->math().expand_all_inductions(nests).remove_stencil(conds.induction).str();
 		}
 
 		return a + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low());
@@ -848,7 +848,7 @@ public:
 			return v->math().ihs(conds.induction).str();
 		}
 		else {
-			return v->math().expand_all_inductions(nests).str();
+			return v->math().expand_all_inductions(nests).remove_stencil(conds.induction).str();
 		}
 	}
 
@@ -865,7 +865,7 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			first = v->math().replace_induction(conds.induction, conds.start).expand_all_inductions(nests).str();
+			first = v->math().replace_induction(conds.induction, conds.start).expand_all_inductions(nests).remove_stencil(conds.induction).str();
 		}
 
 		return first + "+" + to_string(v->stencil_low());
@@ -896,7 +896,7 @@ public:
 
 	string dma_in(const string& address) const
 	{
-		return dma_in(address, buffer_adaptor(v).size());
+		return dma_in(address, buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread()));
 	}
 
 	string dma_in(const string& address, const string& tsize) const
@@ -906,7 +906,7 @@ public:
 
 		return "dma_get(" + buff.name() + "+" + buff.abs() + "*" + next.name() + "," +
 				address + ","
-				"sizeof(" + buff.type() + ") *" + tsize + "," +
+				"sizeof(" + buff.type() + ") * (" + tsize + ")," +
 				next.name() + ");";
 	}
 
@@ -1089,7 +1089,9 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 				rotate_next + 
 				wait_next +
 				dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer(nests) + ")", 
-						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + buff.size() + ":" + Access::remainder_size() + ")") + 
+						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
+							buff.size() + "+" + to_string(v->stencil_spread()) + ":" + 
+							Access::remainder_size() + "+" + to_string(v->stencil_spread()) + ")") + 
 				orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";

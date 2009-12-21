@@ -129,6 +129,15 @@ paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) 
 	return replaced;
 }
 
+paren_expr paren_expr::remove_stencil(const string& ivar) const
+{
+	if (recurse && recurse->str().find(ivar) != string::npos) {
+		return paren_expr(new add_expr(recurse->remove_stencil(ivar)));
+	}
+
+	return *this;
+}
+
 paren_expr paren_expr::expand_induction(const string& i) const
 {
 	paren_expr exp;
@@ -247,6 +256,18 @@ mult_expr mult_expr::replace_induction(const string& ivar, const string& rep) co
 mult_expr mult_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
+}
+
+mult_expr mult_expr::remove_stencil(const string& ivar) const
+{
+	if (_lhs.str().find(ivar) != string::npos) {
+		return mult_expr(_lhs.remove_stencil(ivar), _op, _rhs);
+	}
+	else if (_rhs.str().find(ivar) != string::npos) {
+		return mult_expr(_lhs, _op, _rhs.remove_stencil(ivar));
+	}
+
+	return *this;
 }
 
 mult_expr mult_expr::expand_induction(const string& i) const
@@ -396,6 +417,29 @@ add_expr add_expr::replace_induction(const string& ivar, const string& rep) cons
 add_expr add_expr::zero_induction(const string& ivar) const
 {
 	return replace_induction(ivar, "0");
+}
+
+add_expr add_expr::remove_stencil(const string& ivar) const
+{
+	const string& lhs = _lhs.str();
+	const string& rhs = _rhs.str();
+
+	// We lost all of our node meta-information when we transformed it 
+	// into a data structure. So we need to resort to regexes.
+	if (lhs == ivar && regex_match(rhs, regex("\\d*"))) {
+		return add_expr(_lhs, _op, mult_expr());
+	}
+	else if (rhs == ivar && regex_match(lhs, regex("\\d*"))) {
+		return add_expr(mult_expr(), _op, _rhs);
+	}
+	else if (lhs.find(ivar) != string::npos) {
+		return add_expr(_lhs.remove_stencil(ivar), _op, _rhs);
+	}
+	else if (rhs.find(ivar) != string::npos) {
+		return add_expr(_lhs, _op, _rhs.remove_stencil(ivar));
+	}
+
+	return *this;
 }
 
 add_expr add_expr::expand_induction(const string& i) const

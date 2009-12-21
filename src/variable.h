@@ -7,6 +7,7 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <cmath>
 using namespace std;
 
 #include "utility.h"
@@ -168,6 +169,7 @@ public:
 
 	int stencil_low() const { return _lowest; }
 	int stencil_high() const { return _highest; }
+	int stencil_spread() const { return abs(_highest - _lowest); }
 
 	void access(const add_expr& m, const conditions& c)
 	{
