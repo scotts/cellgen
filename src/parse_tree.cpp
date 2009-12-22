@@ -976,20 +976,24 @@ struct find_and_replace_xform {
 
 struct modify_for_loop {
 	const shared_variable* v;
-	const string& induction;
+	const conditions& conds;
 	const string& buffer_size;
 	int seen;
-	modify_for_loop(const shared_variable* _v, const string& i, const string& b): 
-		v(_v), induction(i), buffer_size(b), seen(0) {}
+	modify_for_loop(const shared_variable* _v, const conditions& c, const string& b): 
+		v(_v), conds(c), buffer_size(b), seen(0) {}
 	void operator()(pt_node& node)
 	{
 		if (is_expression(node)) {
 			++seen;
 
+			// Inelegant. find_and_replace_xform is only needed for flat; replace_node is 
+			// only needed for multi-dimensional. But every method I can think of to only 
+			// do one is less elegant and requires more contortions.
 			switch (seen) {
 				case 2:	find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name()))(node);
+					replace_node(conds.stop, new naked_string(full_adaptor(v).name()))(node);
 					break;
-				case 3: node.value.xformations.push_back(new loop_increment(induction, buffer_size));
+				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
 					node.children.clear();
 					break;
 			}
@@ -1103,7 +1107,7 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 	}
 
 	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
-	modify_for_loop(max, conds.induction, buffer_size)(for_loop);
+	modify_for_loop(max, conds, buffer_size)(for_loop);
 	remove_xforms<if_clause>(*loop_cmpd); // Hack! hack-hack-hack
 
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd), ids::for_loop);

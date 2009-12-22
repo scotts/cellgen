@@ -2,7 +2,7 @@
 #include <malloc_align.h>
 #include <free_align.h>
 
-#define ITERATIONS 1000
+#define ITERATIONS 10
 #define N 16777216 // 128 MB 
 
 double vecscalar(double* vec, unsigned long long* time)
@@ -39,7 +39,7 @@ int main ()
 		sum = vecscalar(vec, &time);
 	}
 
-	printf("%f\n", (double)time / TB);
+	printf("%f\n", (double)time / timebase);
 
 	return 0;
 }

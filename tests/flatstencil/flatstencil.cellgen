@@ -29,11 +29,11 @@ void stencil_on_ppe(int* a, int* b)
 
 void stencil_on_spe(int16b_t* a, int16b_t* b)
 {
-	#pragma cell shared(int16b_t* am = a, int16b_t* a = a, int16b_t* ap = a, int16b_t* b = b)
+	#pragma cell shared(int16b_t* a = a, int16b_t* b = b)
 	{
 		unsigned int i;
 		for (i = 1; i < N-1; ++i) {
-			b[i].num = am[i-1].num + a[i].num + ap[i+1].num;
+			b[i].num = a[i-1].num + a[i].num + a[i+1].num;
 		}
 	}
 }

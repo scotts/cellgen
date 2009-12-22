@@ -3,9 +3,9 @@
 #include <free_align.h>
 #include "cellgen.h"
 
-#define ITERATIONS 1000
-//#define N 8388608 // 64 MB 
-#define N 26214400
+#define ITERATIONS 10
+#define N 8388608 // 64 MB 
+//#define N 26214400
 
 double vecdot(double* v1, double* v2, unsigned long long* time)
 {
@@ -46,7 +46,7 @@ int main()
 		dot = vecdot(v1, v2, &time);
 	}
 
-	printf("%f\n", (double)time / TB);
+	printf("%f\n", (double)time / timebase);
 
 	return 0;
 }
