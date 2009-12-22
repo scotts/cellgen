@@ -345,6 +345,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 				ppe_code >> pragma_code >> ppe_code 
 				>> *(pragma_code >> ppe_code);
 
+			// FIXME: remove lexeme_d so I can comment out pragmas.
 			ppe_code = no_node_d[
 					lexeme_d[ *(anychar_p - "#pragma cell") ] 
 					[self.ppe_op]
@@ -442,7 +443,8 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 
 			buffer_code = no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
 
-			buffer_num = no_node_d[int_p];
+			//buffer_num = no_node_d[int_p];
+			buffer_num = no_node_d[*(anychar_p - ',' - ')')];
 		}
 	};
 };
