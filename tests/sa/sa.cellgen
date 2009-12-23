@@ -51,7 +51,7 @@ void ppe_aggregation(int16b_t (*matrix)[W], meta_t* meta, partial_t* partials)
 
 void spe_aggregation(int16b_t (*matrix)[W], meta_t* meta, partial_t* partials)
 {
-	#pragma cell buffer(W) shared(int16b_t* matrix = matrix[N][W], meta_t* meta = meta, partial_t* partials = partials)
+	#pragma cell buffer(256) shared(int16b_t* matrix = matrix[N][W], meta_t* meta = meta, partial_t* partials = partials)
 	{
 		unsigned int i, j;
 

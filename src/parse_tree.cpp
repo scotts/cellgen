@@ -1687,7 +1687,7 @@ struct cell_region {
 			const reduceset& reductions = (*region)->reductions();
 			const shared_symtbl& shared_symbols = (*region)->shared_symbols();
 			const priv_symtbl& priv_symbols = (*region)->priv_symbols();
-			const int user_buffer = (*region)->buffer();
+			const string& user_buffer = (*region)->buffer();
 
 			// Assumption: one parallel induction variable.
 			sharedset in;

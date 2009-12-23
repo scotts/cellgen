@@ -16,13 +16,12 @@ class spe_region {
 	priv_symtbl _priv_symbols;
 	pt_node* _pt_root;
 	string _estimate;
-	int _buffer;
+	string _buffer;
 
 public:
-	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, int b):
+	spe_region(const privset& p, const sharedset& sh, const reduceset& r, const string& o, const shared_symtbl& ss, const priv_symtbl& ps, const string& b):
 		_priv(p), _shared(sh), _reductions(r), _reduction_op(o), _shared_symbols(ss), _priv_symbols(ps), _buffer(b)
 	{
-		assert(_buffer >= 0);
 		if (_reductions.size() > 0) {
 			assert(_reduction_op != "");
 		}
@@ -35,7 +34,7 @@ public:
 	priv_symtbl& priv_symbols()	{ return _priv_symbols; }
 
 	string reduction_op() const	{ return _reduction_op; }
-	int buffer() const		{ return _buffer; }
+	string buffer() const		{ return _buffer; }
 
 	void estimate(const string& e) { _estimate = e; }
 	string estimate() const { return _estimate; }

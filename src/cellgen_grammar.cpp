@@ -264,11 +264,11 @@ struct create_spe_region {
 	vars_op<shared_variable>&	shared_op;
 	vars_op<reduction_variable>&	reduce_def_op;
 	scalar_op<string>&		reduce_op_op;
-	scalar_op<int>&			buffer_op;
+	scalar_op<string>&		buffer_op;
 
 	create_spe_region(spelist& r, vars_op<private_variable>& p, 
 			vars_op<shared_variable>& s, vars_op<reduction_variable>& rd, 
-			scalar_op<string>& ro, scalar_op<int>& bo):
+			scalar_op<string>& ro, scalar_op<string>& bo):
 		regions(r), priv_op(p), shared_op(s), 
 		reduce_def_op(rd), reduce_op_op(ro), buffer_op(bo)
 		{}
@@ -294,7 +294,7 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	priv_symtbl private_symbols;
 	reduc_symtbl reduction_symbols;
 	string op;
-	int buffer;
+	string buffer;
 	push_back_op<sslist> ppe_op;
 	vars_op<private_variable> priv_op;
 	special_assign<private_variable> start_op;
@@ -302,11 +302,10 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	vars_op<shared_variable> shared_op;
 	vars_op<reduction_variable> reduce_def_op;
 	scalar_op<string> reduce_op_op;
-	scalar_op<int> buffer_op;
+	scalar_op<string> buffer_op;
 	create_spe_region region_op;
 
 	cellgen_grammar(sslist& ppe, spelist& regions):
-		buffer(0),
 		ppe_op(ppe),
 		priv_op(privs, private_symbols, regions),
 		start_op(priv_op, private_symbols, "spe_start", regions),

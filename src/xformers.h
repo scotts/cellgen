@@ -321,13 +321,13 @@ public:
 class shared_buffer_size: public depth_xformer {
 	const shared_variable* v;
 	const shared_variable* max;
-	const int buffer;
+	const string buffer;
 	const int num_shared;
 	const string par_induction;
 	const string max_type;
 
 public:
-	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const int b, const int n, const string& p, const int d, const string& mt): 
+	shared_buffer_size(const shared_variable* _v, const shared_variable* m, const string& b, const int n, const string& p, const int d, const string& mt): 
 		depth_xformer(d), v(_v), max(m), buffer(b), num_shared(n), par_induction(p), max_type(mt) {}
 	string operator()(const string& old)
 	{
@@ -352,7 +352,7 @@ public:
 			}
 
 			string def;
-			if (!buffer) {
+			if (buffer == "") {
 				const const_variable range("unsigned int", v->name() + "_rng", 
 						"min(((" + stop + ")-(" + start + ")), 16384/sizeof(" + max_type + "))");
 				const string depth1 = to_string(depth + 1);
@@ -363,7 +363,7 @@ public:
 				declaration = range.define() + ";";
 			}
 			else {
-				def = to_string(buffer);
+				def = buffer;
 			}
 
 			declaration += variable("unsigned int", buffer_adaptor(v).size(), def + factor).define() + ";" + 
@@ -379,12 +379,12 @@ public:
 
 struct make_shared_buffer_size: public unary_function<shared_variable*, xformer*> {
 	const shared_variable* max;
-	const int buffer;
+	const string& buffer;
 	const int num_shared;
 	const string& par_induction;
 	const depths& local_depths;
 	const string& max_type;
-	make_shared_buffer_size(const shared_variable* m, const int b, const int n, const string& p, const depths& l, const string& mt): 
+	make_shared_buffer_size(const shared_variable* m, const string& b, const int n, const string& p, const depths& l, const string& mt): 
 		max(m), buffer(b), num_shared(n), par_induction(p), local_depths(l), max_type(mt) {}
 
 	xformer* operator()(shared_variable* v)
