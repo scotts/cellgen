@@ -12,7 +12,7 @@ int double_eq(double a, double b)
 	return fabs(a - b) < 0.00001;
 }
 
-unsigned long long spe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
+unsigned long long spe_matadd(double (*a)[N], double (*b)[N], double (*c)[N])
 {
 	const unsigned long long before = get_tb();
 
@@ -32,7 +32,7 @@ unsigned long long spe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
 	return after - before;
 }
 
-void ppe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
+void ppe_matadd(double (*a)[N], double (*b)[N], double (*c)[N])
 {
 	int i, j;
 
@@ -83,10 +83,10 @@ int main(int argc, char** argv)
 
 	unsigned long long time = 0;
 	for (i = 0; i < ITERATIONS; ++i) {
-		time += spe_matmul(a_spe, b_spe, c_spe);
+		time += spe_matadd(a_spe, b_spe, c_spe);
 
 		if (!do_timing) {
-			ppe_matmul(a_ppe, b_ppe, c_ppe);
+			ppe_matadd(a_ppe, b_ppe, c_ppe);
 			check_results(c_spe, c_ppe);
 		}
 	}

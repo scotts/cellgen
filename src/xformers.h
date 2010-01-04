@@ -865,7 +865,14 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			first = v->math().replace_induction(conds.induction, conds.start).expand_all_inductions(nests).remove_stencil(conds.induction).str();
+			cout << v->math().str() << endl <<
+				v->math().remove_stencil(conds.induction).str() << endl <<
+				v->math().remove_stencil(conds.induction).replace_induction(conds.induction, conds.start).str() << endl <<
+				v->math().remove_stencil(conds.induction).replace_induction(conds.induction, conds.start).expand_all_inductions(nests).str() << endl <<
+				endl;
+
+			first = v->math().remove_stencil(conds.induction).replace_induction(conds.induction, conds.start).expand_all_inductions(nests).str();
+			cout << endl;
 		}
 
 		return first + "+" + to_string(v->stencil_low());

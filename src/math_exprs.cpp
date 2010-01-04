@@ -142,6 +142,7 @@ paren_expr paren_expr::expand_induction(const string& i) const
 {
 	paren_expr exp;
 	if (terminal.find(i) != string::npos) {
+		cout << "?" << endl;
 		exp = paren_expr(new add_expr(terminal, "+", index_adapt()(i).name()));
 	}
 	else if (recurse && recurse->str().find(i) != string::npos) {
@@ -424,6 +425,8 @@ add_expr add_expr::remove_stencil(const string& ivar) const
 	const string& lhs = _lhs.str();
 	const string& rhs = _rhs.str();
 
+	//cout << "rs: " << str() << endl;
+
 	// We lost all of our node meta-information when we transformed it 
 	// into a data structure. So we need to resort to regexes.
 	if (lhs == ivar && regex_match(rhs, regex("\\d*"))) {
@@ -440,6 +443,23 @@ add_expr add_expr::remove_stencil(const string& ivar) const
 	}
 
 	return *this;
+}
+
+struct call_remove_all_stencil {
+	add_expr& add;
+	call_remove_all_stencil(add_expr& a): add(a) {}
+	void operator()(const conditions& cond) const
+	{
+		add = add.remove_stencil(cond.induction);
+		cout << "call: " << add.str() << endl;
+	}
+};
+
+add_expr add_expr::remove_all_stencil(const condslist& nested) const
+{
+	add_expr exp = *this;
+	for_all(nested, call_remove_all_stencil(exp));
+	return exp;
 }
 
 add_expr add_expr::expand_induction(const string& i) const
