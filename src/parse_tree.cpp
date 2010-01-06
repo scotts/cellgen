@@ -488,6 +488,11 @@ struct struct_access_search {
 	}
 };
 
+void print_conditions(const conditions c)
+{
+	cout << c.to_string();
+}
+
 class shared_variable_double_orientation {};
 
 c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
@@ -499,7 +504,7 @@ c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const 
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
-		o.shared_var->access(add, outer);
+		o.shared_var->access(add, conds);
 
 		// Column or row access?
 		if (o.accesses.back().str().find(outer.induction) != string::npos) {
@@ -518,7 +523,7 @@ c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const 
 		}
 		
 		ops.inc(data, construct_c_type(o.shared_var->type()));
-		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, outer, index_adapt()(outer)));
+		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, conds, index_adapt()(outer)));
 
 		// The to_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
@@ -1103,7 +1108,7 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 
 	pt_node::tree_iterator nested_for_loop = find_shallow(for_loop, is_for_loop).second;
 	if (nested_for_loop != for_loop.children.end()) {
-		call_descend(make_for_all_xformations(bind(&xformer::nest_me, _1, conds)), *nested_for_loop);
+		call_descend(make_for_all_xformations(mem_fn(&xformer::nest_me)), *nested_for_loop);
 	}
 
 	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
@@ -1117,11 +1122,6 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 		const conditions& conds, const sharedset& seen, const string& buffer_size)
 {
 	loop_mitosis(for_loop, shared_symbols, priv_symbols, conds, conds, seen, buffer_size);
-}
-
-void print_conditions(const conditions c)
-{
-	cout << "(" << c.start << " " << c.induction << " " << c.stop << " " << c.step << ") ";
 }
 
 struct for_compound_op {
@@ -1190,15 +1190,15 @@ struct for_compound_op {
 			// 	- Combine multiple in/out calls? 
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
-			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(inner, local_depths), seen_ins));
+			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(inner, conds, local_depths), seen_ins));
 			lbrace.push_back(new define_variable(index_adapt()(inner)));
 
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
-			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, local_depths), seen_outs));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, conds, local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
 				xformerlist& nested = node.value.xformations;
-				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(inner, local_depths), seen_ins));
+				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(inner, conds, local_depths), seen_ins));
 
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
@@ -1369,11 +1369,11 @@ struct parallel_for_op {
 			const sharedset& flat_ins = filter(row_and_flat, set_union_all(in, inout));
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
 			const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
-			const make_conditions<gen_in<row_access> > make_gen_in_row(parcond, local_depths);
-			const make_conditions<gen_out<row_access> > make_gen_out_row(parcond, local_depths);
+			const make_conditions<gen_in<row_access> > make_gen_in_row(parcond, conds, local_depths);
+			const make_conditions<gen_out<row_access> > make_gen_out_row(parcond, conds, local_depths);
 
 			const conditions specond(spe_start.name(), parcond.induction, spe_stop.name(), parcond.step);
-			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(specond, local_depths), flat_ins));
+			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(specond, conds, local_depths), flat_ins));
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));

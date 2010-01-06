@@ -124,12 +124,13 @@ public:
 	string add_iteration(const string& ivar, const string& size) const;
 	string next_iteration(const string& ivar) const;
 	string stencil_offset(const string& ivar) const;
+	string stencil_offset(const condslist& above) const;
 	add_expr replace_induction(const string& ivar, const string& rep) const;
 	add_expr zero_induction(const string& ivar) const;
 	add_expr remove_stencil(const string& i) const;
-	add_expr remove_all_stencil(const condslist& nested) const;
+	add_expr remove_all_stencil(const condslist& above) const;
 	add_expr expand_induction(const string& i) const;
-	add_expr expand_all_inductions(const condslist& nests) const;
+	add_expr expand_all_inductions(const condslist& above) const;
 
 	string factor(const string& ivar) const
 	{

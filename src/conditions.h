@@ -2,6 +2,7 @@
 #define CONDITIONS_H
 
 #include <list>
+#include <string>
 using namespace std;
 
 struct conditions {
@@ -21,6 +22,11 @@ struct conditions {
 	bool operator==(const conditions& o) const
 	{
 		return start == o.start && induction == o.induction && stop == o.stop;
+	}
+
+	string to_string() const
+	{
+		return "(" + start + " " + induction + " " + stop + " " + step + ") ";
 	}
 };
 typedef list<conditions> condslist;

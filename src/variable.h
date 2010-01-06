@@ -171,12 +171,12 @@ public:
 	int stencil_high() const { return _highest; }
 	int stencil_spread() const { return abs(_highest - _lowest); }
 
-	void access(const add_expr& m, const conditions& c)
+	void access(const add_expr& m, const condslist& above)
 	{
 		_math = m;
-		_conds = c;
+		_conds = above.back();
 
-		int offset = from_string<int>(_math.stencil_offset(_conds.induction));
+		int offset = from_string<int>(_math.stencil_offset(above));
 		if (offset < _lowest) {
 			_lowest = offset;
 		}
