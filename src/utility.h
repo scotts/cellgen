@@ -120,6 +120,14 @@ void append(L1& l1, const L2& l2)
 	l1.insert(l1.end(), l2.begin(), l2.end());
 }
 
+template <class Container, class T>
+Container cons(const Container& c, const T& t)
+{
+	Container copy = c;
+	copy.push_back(t);
+	return copy;
+}
+
 template <class T>
 void delete_ptr(T* ptr)
 {

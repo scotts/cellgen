@@ -455,19 +455,21 @@ add_expr add_expr::remove_stencil(const string& ivar) const
 	return *this;
 }
 
-struct call_remove_all_stencil {
+struct call_remove_stencil {
 	add_expr& add;
-	call_remove_all_stencil(add_expr& a): add(a) {}
+	call_remove_stencil(add_expr& a): add(a) {}
 	void operator()(const conditions& cond) const
 	{
+		cout << "call_remove_stencil(" << cond.induction << "): " << add.str() << " -> ";
 		add = add.remove_stencil(cond.induction);
+		cout << add.str() << endl;
 	}
 };
 
 add_expr add_expr::remove_all_stencil(const condslist& nested) const
 {
 	add_expr exp = *this;
-	for_all(nested, call_remove_all_stencil(exp));
+	for_all(nested, call_remove_stencil(exp));
 	return exp;
 }
 

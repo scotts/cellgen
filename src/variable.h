@@ -176,7 +176,7 @@ public:
 		_math = m;
 		_conds = above.back();
 
-		int offset = from_string<int>(_math.stencil_offset(above));
+		int offset = from_string<int>(_math.stencil_offset(above.back().induction));
 		if (offset < _lowest) {
 			_lowest = offset;
 		}

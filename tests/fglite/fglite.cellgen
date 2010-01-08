@@ -395,18 +395,216 @@ void all_rows_spe_short(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double
 				double conc_p1 = c_p1[i][k + 1][s].num; 
 				double conc_p2 = c_p2[i][k + 2][s].num;
 
-				/*
-				double conc_m2 = conc[i][k - 2][s].num;
-				double conc_m1 = conc[i][k - 1][s].num;
-				double conc_p1 = conc[i][k + 1][s].num; 
-				double conc_p2 = conc[i][k + 2][s].num;
-				*/
-
 				double wrow_m1 = wind_um1[i][k - 1].num;
 				double wrow_p1 = wind_up1[i][k + 1].num;
 
 				double drow_m1 = diff_m1[i][k - 1].num;
 				double drow_p1 = diff_p1[i][k + 1].num;
+
+				crow1[k] = c[k] = conc_k;
+				wrow[k] = wrow_k;
+				drow[k] = drow_k;
+
+				if (k == 0) {
+					conc_m2 = conc_N2;
+					conc_m1 = conc_N1;
+
+					wrow_m1 = wind_N1;
+
+					drow_m1 = diff_N1;
+				}
+				else if (k == 1) {
+					conc_m2 = conc_N1;
+				}
+				else if (k == NCOLS - 2) {
+					conc_p2 = conc_0;
+				}
+				else if (k == NCOLS - 1) {
+					conc_p1 = conc_0;
+					conc_p2 = conc_1;
+
+					wrow_p1 = wind_0;
+
+					drow_p1 = diff_0;
+				}
+
+				wind = (wrow_m1 + wrow_k) / 2.0;
+				if (wind >= 0.0) {
+					advec_termL = (1.0 / 6.0) * (-conc_m2 + 5.0 * conc_m1 + 2.0 * conc_k);
+				}
+				else {
+					advec_termL = (1.0 / 6.0) * (2.0 * conc_m1 + 5.0 * conc_k - conc_p1);
+				}
+				advec_termL *= wind;
+				wind = (wrow_p1 + wrow_k) / 2.0;
+				if (wind >= 0.0) {
+					advec_termR = (1.0 / 6.0) * (-conc_m1 + 5.0 * conc_k + 2.0 * conc_p1);
+				}
+				else {
+					advec_termR = (1.0 / 6.0) * (2.0 * conc_k + 5.0 * conc_p1 - conc_p2);
+				}
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term = (((drow_m1 + drow_k) / 2) * (conc_m1 - conc_k) -
+					 ((drow_k + drow_p1) / 2) * (conc_k - conc_p1)) / (1000.0 * 1000.0);
+				dcdx[k] = advec_term + diff_term;
+
+				c[k] += dt * dcdx[k];
+			}
+
+			for (k = 0; k < NCOLS; k++) {
+				double conc_k = c[k];
+				double wrow_k = wrow[k];
+				double drow_k = drow[k];
+
+				double conc_m2 = c[k - 2];
+				double conc_m1 = c[k - 1];
+				double conc_p1 = c[k + 1];
+				double conc_p2 = c[k + 2];
+
+				double wrow_m1 = wrow[k - 1];
+				double wrow_p1 = wrow[k + 1];
+
+				double drow_m1 = drow[k - 1];
+				double drow_p1 = drow[k + 1];
+				double t;
+
+				if (k == 0) {
+					conc_m2 = conc_N2;
+					conc_m1 = conc_N1;
+
+					wrow_m1 = wind_N1;
+
+					drow_m1 = diff_N1;
+				}
+				else if (k == 1) {
+					conc_m2 = conc_N1;
+					conc_m1 = conc_0;
+				}
+				else if (k == NCOLS - 2) {
+					conc_p1 = conc_N1;
+					conc_p2 = conc_0;
+				}
+				else if (k == NCOLS - 1) {
+					conc_p1 = conc_0;
+					conc_p2 = conc_1;
+
+					wrow_p1 = wind_0;
+
+					drow_p1 = diff_0;
+				}
+
+				wind = (wrow_m1 + wrow_k) / 2.0;
+				if (wind >= 0.0) {
+					advec_termL = (1.0 / 6.0) * (-conc_m2 + 5.0 * conc_m1 + 2.0 * conc_k);
+				}
+				else {
+					advec_termL = (1.0 / 6.0) * (2.0 * conc_m1 + 5.0 * conc_k - conc_p1);
+				}
+				advec_termL *= wind;
+				wind = (wrow_p1 + wrow_k) / 2.0;
+				if (wind >= 0.0) {
+					advec_termR = (1.0 / 6.0) * (-conc_m1 + 5.0 * conc_k + 2.0 * conc_p1);
+				}
+				else {
+					advec_termR = (1.0 / 6.0) * (2.0 * conc_k + 5.0 * conc_p1 - conc_p2);
+				}
+				advec_termR *= wind;
+				advec_term = (advec_termL - advec_termR) / 1000.0;
+				diff_term = (((drow_m1 + drow_k) / 2) * (conc_m1 - conc_k) -
+					 ((drow_k + drow_p1) / 2) * (conc_k - conc_p1)) / (1000.0 * 1000.0);
+				dcdx[k] = advec_term + diff_term;
+
+				t = 0.5 * (crow1[k] + (c[k] + dt * dcdx[k]));
+				if (t < 0.0) {
+					t = 0.0;
+				}
+
+				conc[i][k][s].num = t;
+			}
+		}
+	}
+	}
+
+}
+
+void all_rows_spe_short_stencil(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double16b_t wind_u[NROWS][NCOLS], double16b_t diff[NROWS][NCOLS])
+{
+	#pragma cell buffer(32) shared(double16b_t* wind_u = wind_u[NROWS][NCOLS], \
+			double16b_t* wind_u_low = wind_u[NROWS][NCOLS], double16b_t* wind_u_high = wind_u[NROWS][NCOLS], \
+			double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* c_low = conc[NROWS][NCOLS][NSPEC], double16b_t* c_high = conc[NROWS][NCOLS][NSPEC], \
+			double16b_t* diff = diff[NROWS][NCOLS], double16b_t* diff_low = diff[NROWS][NCOLS], double16b_t* diff_high = diff[NROWS][NCOLS]) \
+			private(double dt = dt)
+	{
+	int i, s;
+	for (i = 0; i < NROWS; i++) {
+		for (s = 0; s < NSPEC; s++) {
+
+			double wind;
+			double diff_term;
+			double advec_term;
+			double advec_termL;
+			double advec_termR;
+			double c[NCOLS];
+			double dcdx[NCOLS];
+
+			double crow1[NCOLS];
+			double wrow[NCOLS];
+			double drow[NCOLS];
+
+			double conc_bound[NCOLS];
+
+			double conc_0;
+			double conc_1;
+			double conc_N2;
+			double conc_N1;
+
+			double wind_0;
+			double wind_N1;
+
+			double diff_0;
+			double diff_N1;
+
+			int k;
+
+			for (k = 0; k < 1; ++k) {
+				wind_0 = wind_u_low[i][k].num;
+				diff_0 = diff_low[i][k].num;
+			}
+
+			for (k = NCOLS - 1; k < NCOLS; ++k) {
+				wind_N1 = wind_u_high[i][k].num;
+				diff_N1 = diff_high[i][k].num;
+			}
+
+			for (k = 0; k < 2; ++k) {
+				conc_bound[k] = c_low[i][k][s].num;
+			}
+
+			for (k = NCOLS - 2; k < NCOLS; ++k) {
+				conc_bound[k] = c_high[i][k][s].num;
+			}
+
+			conc_0 = conc_bound[0]; 
+			conc_1 = conc_bound[1];
+			conc_N2 = conc_bound[NCOLS - 2];
+			conc_N1 = conc_bound[NCOLS - 1];
+
+			for (k = 0; k < NCOLS; k++) {
+				double conc_k = conc[i][k][s].num;
+				double wrow_k = wind_u[i][k].num;
+				double drow_k = diff[i][k].num;
+
+				double conc_m2 = c_m2[i][k - 2][s].num;
+				double conc_m1 = c_m1[i][k - 1][s].num;
+				double conc_p1 = c_p1[i][k + 1][s].num; 
+				double conc_p2 = c_p2[i][k + 2][s].num;
+
+				double wrow_m1 = wind_u[i][k - 1].num;
+				double wrow_p1 = wind_u[i][k + 1].num;
+
+				double drow_m1 = diff[i][k - 1].num;
+				double drow_p1 = diff[i][k + 1].num;
 
 				crow1[k] = c[k] = conc_k;
 				wrow[k] = wrow_k;
@@ -1639,7 +1837,7 @@ int main()
 		}
 	}
 
-	all_rows_spe_short(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
+	all_rows_spe_short_stencil(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
 	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
 	assert_rows(conc_spe, conc_ppe);
 

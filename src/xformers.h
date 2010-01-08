@@ -127,7 +127,7 @@ public:
 			}
 		}
 		else if (v->stencil_low() != v->stencil_high()) {
-			offset = "+" + to_string(from_string<int>(math.stencil_offset(above)) - v->stencil_low());
+			offset = "+" + to_string(from_string<int>(math.stencil_offset(above.back().induction)) - v->stencil_low());
 		}
 
 		return old + orig_adaptor(v).name() + "[" + index.name() + factor + offset + "]";
@@ -835,7 +835,7 @@ public:
 			math = v->math().ihs(conds.induction); 
 		}
 		else {
-			math = v->math().remove_all_stencil(above);
+			math = v->math().remove_stencil(above.back().induction);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
@@ -855,7 +855,7 @@ public:
 				math = math.expand_all_inductions(above);
 			}
 
-			return math.remove_all_stencil(above).str();
+			return math.remove_stencil(above.back().induction).str();
 		}
 	}
 
@@ -872,13 +872,12 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			cout << v->math().str() << endl <<
-				v->math().remove_all_stencil(above).str() << endl <<
-				v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).str() << endl <<
-				v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).expand_all_inductions(above).str() << endl <<
-				endl;
+			cout << v->math().str() << endl;
+			cout << v->math().remove_all_stencil(above).str() << endl;
+			cout << v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).str() << endl;
+			cout << v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).expand_all_inductions(above).str() << endl << endl;
 
-			add_expr math = v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start);
+			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, conds.start);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}

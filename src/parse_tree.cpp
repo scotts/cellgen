@@ -1190,15 +1190,15 @@ struct for_compound_op {
 			// 	- Combine multiple in/out calls? 
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
-			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(inner, conds, local_depths), seen_ins));
+			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(inner, cons(conds, inner), local_depths), seen_ins));
 			lbrace.push_back(new define_variable(index_adapt()(inner)));
 
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
-			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, conds, local_depths), seen_outs));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(inner, cons(conds, inner), local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
 				xformerlist& nested = node.value.xformations;
-				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(inner, conds, local_depths), seen_ins));
+				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(inner, cons(conds, inner), local_depths), seen_ins));
 
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
