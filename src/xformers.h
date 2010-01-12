@@ -423,7 +423,8 @@ public:
 		string alloc;
 		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
-			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + "*" + buff.size() + ",7);";
+			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + 
+					"* (" + buff.size() + "+" + to_string(v->stencil_spread()) + "),7);";
 		}
 
 		return old + alloc;
@@ -448,7 +449,7 @@ public:
 			allocation = lst.declare(depth) + "; \n";
 
 			for (int i = 0; i < depth; ++i) {
-				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + ",1);\n";
+				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + "+" + to_string(v->stencil_spread()) + ",1);\n";
 			}
 		}
 
@@ -850,12 +851,12 @@ public:
 			return v->math().ihs(conds.induction).str();
 		}
 		else {
-			add_expr math = v->math();
+			add_expr math = v->math().remove_stencil(above.back().induction);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
 
-			return math.remove_stencil(above.back().induction).str();
+			return math.str();
 		}
 	}
 
@@ -877,7 +878,7 @@ public:
 			cout << v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).str() << endl;
 			cout << v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).expand_all_inductions(above).str() << endl << endl;
 
-			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, conds.start);
+			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, conds.start + "+" + to_string(v->stencil_low()));
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
@@ -885,7 +886,7 @@ public:
 			first = math.str();
 		}
 
-		return first + "+" + to_string(v->stencil_low());
+		return first;
 	}
 
 	string final_buffer() const
@@ -972,17 +973,17 @@ public:
 
 	string next_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math();
+		add_expr math = v->math().remove_stencil(above.back().induction);
 		if (nested) {
 			math = math.expand_all_inductions(above);
 		}
 
-		return "(" + math.add_iteration(conds.induction, buffer_adaptor(v).size()) + ")";
+		return "(" + math.add_iteration(conds.induction, buffer_adaptor(v).size() + "+" + to_string(v->stencil_low())) + ")";
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math();
+		add_expr math = v->math().remove_stencil(above.back().induction);
 		if (nested) {
 			math = math.expand_all_inductions(above);
 		}
@@ -992,7 +993,7 @@ public:
 
 	string first_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().replace_induction(conds.induction, conds.start);
+		add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, conds.start + "+" + to_string(v->stencil_low()));
 		if (nested) {
 			math = math.expand_all_inductions(above);
 		}
@@ -1111,7 +1112,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 
 		if (is_remainder) {
 			return old +
-				orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + next.name() + ";" +
+				orig.name() + "=" + buff.name() + "+ (" + buff.abs() + "+" + to_string(v->stencil_spread()) + ") *" + next.name() + ";" +
 				wait_next;
 		}
 		else {
@@ -1124,7 +1125,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
 							buff.size() + "+" + to_string(v->stencil_spread()) + ":" + 
 							Access::remainder_size() + "+" + to_string(v->stencil_spread()) + ")") + 
-				orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + prev.name() + ";" +
+				orig.name() + "=" + buff.name() + "+(" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";
 		}

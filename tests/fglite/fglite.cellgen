@@ -13,11 +13,6 @@ const int NSPEC = __NSPEC;
 #define DX          250.0
 #define DY          250.0
 
-#define SOURCE_X	500
-#define SOURCE_Y	350
-
-#define SOURCE_RATE	4.67E+23
-
 double16b_t conc_spe[__NROWS][__NCOLS][__NSPEC] __attribute__((aligned(128)));
 double16b_t wind_u_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
 double16b_t wind_v_spe[__NROWS][__NCOLS] __attribute__((aligned(128)));
@@ -533,6 +528,7 @@ void all_rows_spe_short_stencil(double dt, double16b_t conc[NROWS][NCOLS][NSPEC]
 	#pragma cell buffer(32) shared(double16b_t* wind_u = wind_u[NROWS][NCOLS], \
 			double16b_t* wind_u_low = wind_u[NROWS][NCOLS], double16b_t* wind_u_high = wind_u[NROWS][NCOLS], \
 			double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* c_low = conc[NROWS][NCOLS][NSPEC], double16b_t* c_high = conc[NROWS][NCOLS][NSPEC], \
+			double16b_t* out = conc[NROWS][NCOLS][NSPEC], \
 			double16b_t* diff = diff[NROWS][NCOLS], double16b_t* diff_low = diff[NROWS][NCOLS], double16b_t* diff_high = diff[NROWS][NCOLS]) \
 			private(double dt = dt)
 	{
@@ -595,10 +591,10 @@ void all_rows_spe_short_stencil(double dt, double16b_t conc[NROWS][NCOLS][NSPEC]
 				double wrow_k = wind_u[i][k].num;
 				double drow_k = diff[i][k].num;
 
-				double conc_m2 = c_m2[i][k - 2][s].num;
-				double conc_m1 = c_m1[i][k - 1][s].num;
-				double conc_p1 = c_p1[i][k + 1][s].num; 
-				double conc_p2 = c_p2[i][k + 2][s].num;
+				double conc_m2 = conc[i][k - 2][s].num;
+				double conc_m1 = conc[i][k - 1][s].num;
+				double conc_p1 = conc[i][k + 1][s].num; 
+				double conc_p2 = conc[i][k + 2][s].num;
 
 				double wrow_m1 = wind_u[i][k - 1].num;
 				double wrow_p1 = wind_u[i][k + 1].num;
@@ -725,7 +721,7 @@ void all_rows_spe_short_stencil(double dt, double16b_t conc[NROWS][NCOLS][NSPEC]
 					t = 0.0;
 				}
 
-				conc[i][k][s].num = t;
+				out[i][k][s].num = t;
 			}
 		}
 	}
@@ -1806,20 +1802,19 @@ void assert_cols(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROW
 int main()
 {
 	int i, j, k;
+	unsigned long long count = 1;
 	for (i = 0; i < NROWS; i++) {
 		for (j = 0; j < NCOLS; j++) {
-			wind_u_spe[i][j].num = wind_u_ppe[i][j] = (i+1) * (j+1);
-			wind_v_spe[i][j].num = wind_v_ppe[i][j] = (i+1) * (j+1);
-			diff_spe[i][j].num = diff_ppe[i][j] = (i+1) * (j+1);
+			wind_u_spe[i][j].num = wind_u_ppe[i][j] = count; 
+			wind_v_spe[i][j].num = wind_v_ppe[i][j] = count; 
+			diff_spe[i][j].num = diff_ppe[i][j] = count; 
 
 			for (k = 0; k < NSPEC; ++k) {
-				conc_spe[i][j][k].num = conc_ppe[i][j][k] = (i+1) * (j+1) * (k+1);
+				conc_spe[i][j][k].num = conc_ppe[i][j][k] = count;
+				++count;
 			}
 		}
 	}
-
-	conc_spe[SOURCE_Y][SOURCE_X][0].num += (SOURCE_RATE) / (DX * DY * 1000.0);
-	conc_ppe[SOURCE_Y][SOURCE_X][0] += (SOURCE_RATE) / (DX * DY * 1000.0);
 
 	all_rows_spe_long(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
 	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
@@ -1829,10 +1824,12 @@ int main()
 	all_cols_ppe(1.0 / 2.0, conc_ppe, wind_v_ppe, diff_ppe);
 	assert_cols(conc_spe, conc_ppe);
 
+	count = 1;
 	for (i = 0; i < NROWS; i++) {
 		for (j = 0; j < NCOLS; j++) {
 			for (k = 0; k < NSPEC; ++k) {
-				conc_spe[i][j][k].num = conc_ppe[i][j][k] = (i+1) * (j+1) * (k+1);
+				conc_spe[i][j][k].num = conc_ppe[i][j][k] = count;
+				++count;
 			}
 		}
 	}

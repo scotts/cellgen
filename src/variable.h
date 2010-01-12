@@ -111,6 +111,7 @@ public:
 	string unique_declare() const { return type() + " " + unique_name(); }
 
 	virtual string actual() const { return pass_var + "." + unique_name(); }
+	virtual int stencil_spread() const { return 0; }
 };
 
 class private_variable: public region_variable {
