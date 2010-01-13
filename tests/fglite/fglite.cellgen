@@ -1802,7 +1802,7 @@ void assert_cols(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROW
 int main()
 {
 	int i, j, k;
-	unsigned long long count = 1;
+	int count = 1;
 	for (i = 0; i < NROWS; i++) {
 		for (j = 0; j < NCOLS; j++) {
 			wind_u_spe[i][j].num = wind_u_ppe[i][j] = count; 

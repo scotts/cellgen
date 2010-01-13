@@ -922,7 +922,7 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		return "dma_get(" + buff.name() + "+" + buff.abs() + "*" + next.name() + "," +
+		return "dma_get(" + buff.name() + "+ (" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + next.name() + "," +
 				address + ","
 				"sizeof(" + buff.type() + ") * (" + tsize + ")," +
 				next.name() + ");";
@@ -1032,7 +1032,7 @@ public:
 
 	string dma_in(const string& address) const
 	{
-		return dma_in(address, buffer_adaptor(v).size());
+		return dma_in(address, buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread()));
 	}
 
 	string dma_in(const string& address, const string& tsize) const
@@ -1047,7 +1047,7 @@ public:
 				"sizeof(" + buff.type() + "), " + 
 				stride() + "sizeof(" + buff.type() + "),"
 				"1);" +
-			"dma_getl(" + buff.name() + "+" + buff.abs() + "*" + next.name() + "," +
+			"dma_getl(" + buff.name() + "+(" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + next.name() + "," +
 				address + "," +
 				"&" + lst.name(next.name()) + "," + 
 				next.name() + ","
