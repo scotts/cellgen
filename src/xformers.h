@@ -842,7 +842,7 @@ public:
 			}
 		}
 
-		return math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low());
+		return "(" + math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low()) + ")";
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
@@ -873,12 +873,8 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			cout << v->math().str() << endl;
-			cout << v->math().remove_all_stencil(above).str() << endl;
-			cout << v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).str() << endl;
-			cout << v->math().remove_all_stencil(above).replace_induction(conds.induction, conds.start).expand_all_inductions(above).str() << endl << endl;
-
-			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, conds.start + "+" + to_string(v->stencil_low()));
+			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, 
+					"(" + conds.start + "+" + to_string(v->stencil_low()) + ")");
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
@@ -978,7 +974,7 @@ public:
 			math = math.expand_all_inductions(above);
 		}
 
-		return "(" + math.add_iteration(conds.induction, buffer_adaptor(v).size() + "+" + to_string(v->stencil_low())) + ")";
+		return math.add_iteration(conds.induction, "(" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low()) + ")");
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
@@ -993,7 +989,8 @@ public:
 
 	string first_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, conds.start + "+" + to_string(v->stencil_low()));
+		add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, 
+				"(" + conds.start + "+" + to_string(v->stencil_low()) + ")");
 		if (nested) {
 			math = math.expand_all_inductions(above);
 		}

@@ -168,12 +168,13 @@ operations paren_expr::cost() const
  */
 string mult_expr::str() const
 {
-	if (_lhs.str() == "" && _op == "" && _rhs.str() == "") {
+        if (_lhs.str() == "" && _op == "" && _rhs.str() == "") {
 		return "";
 	}
 	else {
 		return _lhs.str() + _op + _rhs.str();
 	}
+	
 }
 
 string mult_expr::add_iteration(const string& ivar, const string& size) const
@@ -460,9 +461,7 @@ struct call_remove_stencil {
 	call_remove_stencil(add_expr& a): add(a) {}
 	void operator()(const conditions& cond) const
 	{
-		cout << "call_remove_stencil(" << cond.induction << "): " << add.str() << " -> ";
 		add = add.remove_stencil(cond.induction);
-		cout << add.str() << endl;
 	}
 };
 
