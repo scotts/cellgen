@@ -1097,7 +1097,8 @@ void all_cols_spe_short(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double
 {
 	#pragma cell buffer(32) shared(double16b_t* wind_v = wind_v[NROWS][NCOLS], double16b_t* w_low = wind_v[NROWS][NCOLS], double16b_t* w_high = wind_v[NROWS][NCOLS], \
 			double16b_t* conc = conc[NROWS][NCOLS][NSPEC], double16b_t* c_low = conc[NROWS][NCOLS][NSPEC], double16b_t* c_high = conc[NROWS][NCOLS][NSPEC], \
-			double16b_t* diff = diff[NROWS][NCOLS], double16b_t* d_low = diff[NROWS][NCOLS], double16b_t* d_high = diff[NROWS][NCOLS]) \
+			double16b_t* diff = diff[NROWS][NCOLS], double16b_t* d_low = diff[NROWS][NCOLS], double16b_t* d_high = diff[NROWS][NCOLS], \
+			double16b_t* out = conc[NROWS][NCOLS][NSPEC]) \
 			private(double dt = dt)
 	{
 	int j, s, i;
@@ -1277,7 +1278,7 @@ void all_cols_spe_short(double dt, double16b_t conc[NROWS][NCOLS][NSPEC], double
 					t = 0.0;
 				}
 
-				conc[i][j][s].num = t;
+				out[i][j][s].num = t;
 			}
 		}
 	}
