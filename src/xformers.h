@@ -1116,8 +1116,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 				wait_next +
 				general_dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer(above, nested) + ")", 
 						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
-							buff.size() + "+" + to_string(v->stencil_spread()) + ":" + 
-							Access::remainder_size() + "+" + to_string(v->stencil_spread()) + ")") + 
+							buff.size() + "+" + to_string(v->stencil_spread()) + ":" + Access::remainder_size() + ")") + 
 				orig.name() + "=" + buff.name() + "+(" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";
