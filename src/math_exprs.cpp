@@ -185,13 +185,13 @@ string mult_expr::add_iteration(const string& ivar, const string& size) const
 	assert(ivar != "");
 
 	if (lhs == ivar) {
-		return "((" + lhs + "+" + size + ")" + _op + rhs + ")";
+		return hug(hug(lhs + "+" + size) + _op + rhs);
 	}
 	else if (rhs == ivar) {
-		return "(" + lhs + _op + "(" + rhs + "+" + size + "))";
+		return hug(lhs + _op + hug(rhs + "+" + size));
 	}
 	else {
-		return "(" + _lhs.add_iteration(ivar, size) + _op + _rhs.add_iteration(ivar, size) + ")";
+		return hug(_lhs.add_iteration(ivar, size) + _op + _rhs.add_iteration(ivar, size));
 	}
 }
 
@@ -320,7 +320,7 @@ string add_expr::str() const
 		return _lhs.str();
 	}
 
-	return "(" + _lhs.str() + _op + _rhs.str() + ")";
+	return hug(_lhs.str() + _op + _rhs.str());
 }
 
 string add_expr::add_iteration(const string& ivar, const string& size) const
@@ -329,13 +329,13 @@ string add_expr::add_iteration(const string& ivar, const string& size) const
 	const string rhs = _rhs.str();
 
 	if (lhs == ivar || rhs == ivar) {
-		return "(" + lhs + _op + rhs + "+" + size + ")";
+		return hug(lhs + _op + rhs + "+" + size);
 	}
 	else if (lhs.find(ivar) != string::npos) {
-		return "(" + _lhs.add_iteration(ivar, size) + _op + rhs + ")";
+		return hug(_lhs.add_iteration(ivar, size) + _op + rhs);
 	}
 	else if (rhs.find(ivar) != string::npos) {
-		return "(" + lhs + _op + _rhs.add_iteration(ivar, size) + ")";
+		return hug(lhs + _op + _rhs.add_iteration(ivar, size));
 	}
 	else {
 		throw ivar_not_found();

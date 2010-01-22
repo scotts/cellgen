@@ -845,7 +845,7 @@ public:
 
 	string final_iteration() const
 	{
-		return "(((" + conds.stop + ") - (" + conds.start + "))" + factor() + ")";
+		return hug(hug(hug(conds.stop) + "-" + hug(conds.start)) + factor());
 	}
 
 	string next_buffer(const condslist& above, const bool nested) const
@@ -861,7 +861,7 @@ public:
 			}
 		}
 
-		return "(" + math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low()) + ")";
+		return hug(math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low()));
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
@@ -892,7 +892,7 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, "(" + conds.start + ")");
+			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, hug(conds.start));
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
@@ -912,7 +912,7 @@ public:
 			offset = v->math().non_ihs(conds.induction).str() + "+";
 		}
 
-		return offset + "(" + full_adaptor(v).name() + factor() + ")";
+		return offset + hug(full_adaptor(v).name() + factor());
 	}
 
 	string remainder_size() const
@@ -973,7 +973,7 @@ public:
 
 	string final_iteration() const
 	{
-		return "((" + conds.stop + ") - (" + conds.start + "))";
+		return hug(hug(conds.stop) + "-" + hug(conds.start));
 	}
 
 	string next_buffer(const condslist& above, const bool nested) const
@@ -983,7 +983,7 @@ public:
 			math = math.expand_all_inductions(above);
 		}
 
-		return math.add_iteration(conds.induction, "(" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low()) + ")");
+		return math.add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low())));
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
@@ -998,7 +998,7 @@ public:
 
 	string first_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, "(" + conds.start + ")");
+		add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, hug(conds.start));
 		if (nested) {
 			math = math.expand_all_inductions(above);
 		}
@@ -1050,7 +1050,7 @@ public:
 
 	string dma_out(const string& address, const int depth) const
 	{
-		return dma_out(address, depth, buffer_adaptor(v).size(), "(" + next_adaptor(v).name() + "+(" + to_string(depth) + "-1))%" + to_string(depth));
+		return dma_out(address, depth, buffer_adaptor(v).size(), hug(next_adaptor(v).name() + "+" + to_string(depth - 1)) + "%" + to_string(depth));
 	}
 
 	string dma_out(const string& address, const int depth, const string& tsize, const string& next) const
@@ -1082,7 +1082,7 @@ public:
 	{
 		return old + 
 			"cellgen_dma_prep_start();" + 
-			first_dma_in("(unsigned long)(" + v->name() + " + (" + Access::first_buffer(above, nested) + "))", to_string(abs(v->stencil_low()))) + 
+			first_dma_in("(unsigned long)" + hug(v->name() + "+" + hug(Access::first_buffer(above, nested))), to_string(abs(v->stencil_low()))) + 
 			"cellgen_dma_prep_stop();";
 	}
 
@@ -1099,13 +1099,14 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
+		const string spread = to_string(v->stencil_spread());
 		const string wait_next = "dma_wait(" + next.name() + ", fn_id);";
 		const string wait_prev = "dma_wait(" + prev.name() + ", fn_id);";
-		const string rotate_next = next.name() + "= (" + next.name() + "+1)%" + to_string(depth) + ";";
+		const string rotate_next = next.name() + "=" + hug(next.name() + "+1") + "%" + to_string(depth) + ";";
 
 		if (is_remainder) {
 			return old +
-				orig.name() + "=" + buff.name() + "+ (" + buff.abs() + "+" + to_string(v->stencil_spread()) + ") *" + next.name() + ";" +
+				orig.name() + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + next.name() + ";" +
 				wait_next;
 		}
 		else {
@@ -1114,10 +1115,10 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 				prev.name() + "=" + next.name() + ";" +
 				rotate_next + 
 				wait_next +
-				general_dma_in("(unsigned long)(" + v->name() + "+" + Access::next_buffer(above, nested) + ")", 
-						"(" + Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
-							buff.size() + "+" + to_string(v->stencil_spread()) + ":" + Access::remainder_size() + ")") + 
-				orig.name() + "=" + buff.name() + "+(" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + prev.name() + ";" +
+				general_dma_in("(unsigned long)" + hug(v->name() + "+" + Access::next_buffer(above, nested)), 
+						hug(Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
+							buff.size() + "+" + spread + ":" + Access::remainder_size() + "+" + spread)) + 
+				orig.name() + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + prev.name() + ";" +
 				wait_prev +
 				"cellgen_dma_prep_stop();";
 		}
@@ -1138,7 +1139,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 
 		string var_switch;
 		if (depth < 3) {
-			var_switch = next.name() + "=(" + next.name() + "+1)%" + to_string(depth) + "; \n" +
+			var_switch = next.name() + "=" + hug(next.name() + "+1") + "%" + to_string(depth) + "; \n" +
 					orig.name() + "=" + buff.name() + "+" + buff.abs() + "*" + next.name() + "; \n";
 		}
 
@@ -1146,11 +1147,11 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 
 		string dma;
 		if (is_remainder) {
-			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::final_buffer() + ")", depth, Access::remainder_size(), next.name()); 
+			dma = dma_out("(unsigned long)" + hug(v->name() + "+" + Access::final_buffer()), depth, Access::remainder_size(), next.name()); 
 			return dma + wait + old;
 		}
 		else {
-			dma = dma_out("(unsigned long)(" + v->name() + "+" + Access::this_buffer(above, nested) + ")", depth);
+			dma = dma_out("(unsigned long)" + hug(v->name() + "+" + Access::this_buffer(above, nested)), depth);
 			return "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
 		}
 	}

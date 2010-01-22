@@ -353,5 +353,10 @@ string to_string(T t)
 	return ss.str();
 }
 
+inline string hug(const string& str)
+{
+	return "(" + str + ")";
+}
+
 #endif // UTILITY_H
 
