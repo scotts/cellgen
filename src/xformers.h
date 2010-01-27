@@ -759,14 +759,20 @@ public:
 	virtual string dma_out(const string& address, const int depth) const = 0;
 	virtual string dma_out(const string& address, const int depth, const string& tsize, const string& next) const = 0;
 
-	virtual string first_dma_in(const string& address, const string& correction) const
+	virtual string first_dma_in(const string& address) const
 	{
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		string local_buffer = buff.name() + "+ ((" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + next.name() + ") +" + correction;
+		string local_buffer = buff.name() + "+" + hug(hug(buff.abs() + "+" + to_string(v->stencil_spread())) + "*" + next.name());
+		string tsize = buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread());
+		if (v->stencil_spread()) {
+			const string correction = hug(conds.start + "+" + to_string(v->stencil_low()) + "< 0 ?" + to_string(abs(v->stencil_low())) + ":" + "0");
+			local_buffer += "+" + correction;
+			tsize += "-" + correction;
+		}
 
-		return dma_in(address, local_buffer, buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread()) + "-" + correction);
+		return dma_in(address, local_buffer, tsize);
 	}
 
 	virtual string general_dma_in(const string& address, const string& tsize) const
@@ -892,12 +898,16 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, hug(conds.start));
+			add_expr math = v->math().remove_stencil(above.back().induction);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
 
-			first = math.str();
+			string correction = conds.start;
+			if (v->stencil_spread()) {
+				correction += "+" + to_string(v->stencil_low()) + "< 0 ? 0 :" + to_string(v->stencil_low());
+			}
+			first = math.replace_induction(conds.induction, hug(correction)).str();
 		}
 
 		return first;
@@ -998,12 +1008,16 @@ public:
 
 	string first_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().remove_stencil(above.back().induction).replace_induction(conds.induction, hug(conds.start));
+		add_expr math = v->math().remove_stencil(above.back().induction);
 		if (nested) {
 			math = math.expand_all_inductions(above);
 		}
 
-		return math.str();
+		string correction = conds.start;
+		if (v->stencil_spread()) {
+			correction += "+" + to_string(v->stencil_low()) + "< 0 ? 0:" + to_string(v->stencil_low());
+		}
+		return math.replace_induction(conds.induction, hug(correction)).str();
 	}
 
 	string final_buffer() const
@@ -1082,7 +1096,7 @@ public:
 	{
 		return old + 
 			"cellgen_dma_prep_start();" + 
-			first_dma_in("(unsigned long)" + hug(v->name() + "+" + hug(Access::first_buffer(above, nested))), to_string(abs(v->stencil_low()))) + 
+			first_dma_in("(unsigned long)" + hug(v->name() + "+" + hug(Access::first_buffer(above, nested)))) + 
 			"cellgen_dma_prep_stop();";
 	}
 
