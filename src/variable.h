@@ -111,7 +111,7 @@ public:
 	string unique_declare() const { return type() + " " + unique_name(); }
 
 	virtual string actual() const { return pass_var + "." + unique_name(); }
-	virtual int stencil_spread() const { return 0; }
+	virtual int stencil_spread(const string& ivar) const { return 0; }
 };
 
 class private_variable: public region_variable {
@@ -135,16 +135,14 @@ class shared_variable: public region_variable {
 	bool _in_generated;
 	bool _out_generated;
 	conditions _conds; // Closest conditions to the shared varaible.
-	int _lowest;
-	int _highest;
+	map<string, int> _lowest;
+	map<string, int> _highest;
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false), 
-		_lowest(0), _highest(0) {}
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false) {}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false), 
-		_lowest(0), _highest(0) {}
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false) {}
 
 	add_expr math() const { return _math; }
 
@@ -168,22 +166,33 @@ public:
 
 	conditions conds() const { return _conds; }
 
-	int stencil_low() const { return _lowest; }
-	int stencil_high() const { return _highest; }
-	int stencil_spread() const { return abs(_highest - _lowest); }
+	int stencil_low(const string& i) const { return _lowest.find(i)->second; }
+	int stencil_high(const string& i) const { return _highest.find(i)->second; }
+	int stencil_spread(const string& i) const { cout << "spread " << i << endl; return abs(_highest.find(i)->second - _lowest.find(i)->second); }
 
 	void access(const add_expr& m, const condslist& above)
 	{
 		_math = m;
 		_conds = above.back();
 
-		int offset = from_string<int>(_math.stencil_offset(above.back().induction));
-		if (offset < _lowest) {
-			_lowest = offset;
+		const string& ivar = above.back().induction;
+
+		if (_lowest.find(ivar) == _lowest.end()) {
+			_lowest[ivar] = 0;
 		}
-		else if (offset > _highest) {
-			_highest = offset;
+		if (_highest.find(ivar) == _highest.end()) {
+			_highest[ivar] = 0;
 		}
+
+		int offset = from_string<int>(_math.stencil_offset(ivar));
+		if (offset < _lowest[ivar]) {
+			_lowest[ivar] = offset;
+		}
+		else if (offset > _highest[ivar]) {
+			_highest[ivar] = offset;
+		}
+
+		cout << "low[" << ivar << "] " << _lowest[ivar] << ", high[" << ivar << "] " << _highest[ivar] << endl;
 	}
 };
 

@@ -62,13 +62,12 @@ public:
 
 template <class X>
 struct make_conditions: public unary_function<shared_variable*, xformer*> {
-	const conditions& conds;
 	const condslist& above;
 	const depths& local_depths;
-	make_conditions(const conditions& c, const condslist& a, const depths& l): conds(c), above(a), local_depths(l) {}
+	make_conditions(const condslist& a, const depths& l): above(a), local_depths(l) {}
 	xformer* operator()(shared_variable* v)
 	{
-		return new X(v, conds, above, local_depths.find(v)->second);
+		return new X(v, above, local_depths.find(v)->second);
 	}
 };
 
@@ -126,8 +125,8 @@ public:
 				factor = "*" + factor;
 			}
 		}
-		else if (v->stencil_low() != v->stencil_high()) {
-			offset = "+" + to_string(from_string<int>(math.stencil_offset(above.back().induction)) - v->stencil_low());
+		else if (v->stencil_low(above.back().induction) != v->stencil_high(above.back().induction)) {
+			offset = "+" + to_string(from_string<int>(math.stencil_offset(above.back().induction)) - v->stencil_low(above.back().induction));
 		}
 
 		return old + orig_adaptor(v).name() + "[" + index.name() + factor + offset + "]";
@@ -413,32 +412,46 @@ public:
 	string class_name() const { return "private_buffer_size"; }
 };
 
-class buffer_allocation: public depth_xformer {
-	const region_variable* v;
-
+class private_buffer_allocation: public xformer {
+	const private_variable* v;
 public:
-	buffer_allocation(const region_variable* v, const int d): depth_xformer(d), v(v) {}
+	private_buffer_allocation(const private_variable* _v): v(_v) {}
+	string operator()(const string& old)
+	{
+		string alloc;
+		if (v->is_non_scalar()) {
+			buffer_adaptor buff(v);
+			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + buff.size() + ",7);";
+		}
+		return old + alloc;
+	}
+
+	xformer* clone() const { return new private_buffer_allocation(*this); }
+	string class_name() const { return "private_buffer_allocation"; }
+};
+
+class shared_buffer_allocation: public conditions_xformer {
+public:
+	shared_buffer_allocation(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d) {}
 	string operator()(const string& old)
 	{
 		string alloc;
 		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
 			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + 
-					"* (" + buff.size() + "+" + to_string(v->stencil_spread()) + "),7);";
+					"*" + hug(buff.size() + "+" + to_string(v->stencil_spread(above.back().induction))) + ",7);";
 		}
 
 		return old + alloc;
 	}
 
-	xformer* clone() const { return new buffer_allocation(*this); }
-	string class_name() const { return "buffer_allocation"; }
+	xformer* clone() const { return new shared_buffer_allocation(*this); }
+	string class_name() const { return "shared_buffer_allocation"; }
 };
 
-class dma_list_allocation: public depth_xformer {
-	const shared_variable* v;
-
+class dma_list_allocation: public conditions_xformer {
 public:
-	dma_list_allocation(const shared_variable* v, const int d): depth_xformer(d), v(v) {}
+	dma_list_allocation(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d) {}
 	string operator()(const string& old)
 	{
 		string allocation;
@@ -449,7 +462,7 @@ public:
 			allocation = lst.declare(depth) + "; \n";
 
 			for (int i = 0; i < depth; ++i) {
-				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + "+" + to_string(v->stencil_spread()) + ",1);\n";
+				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + "+" + to_string(v->stencil_spread(above.back().induction)) + ",1);\n";
 			}
 		}
 
@@ -648,21 +661,20 @@ struct make_reset_full: public unary_function<shared_variable*, xformer*> {
 
 template <class Xrow, class Xcolumn>
 struct make_choice: public unary_function<shared_variable*, xformer*>  {
-	const conditions& conds;
 	const condslist& above;
 	const depths& local_depths;
-	make_choice(const conditions& c, const condslist& a, const depths& l):
-		conds(c), above(a), local_depths(l) {}
+	make_choice(const condslist& a, const depths& l):
+		above(a), local_depths(l) {}
 
 	xformer* operator()(shared_variable* v)
 	{
 		xformer* x = NULL;
 
 		if (v->is_row()) {
-			x = new Xrow(v, conds, above, local_depths.find(v)->second);
+			x = new Xrow(v, above, local_depths.find(v)->second);
 		}
 		else if (v->is_column()) {
-			x = new Xcolumn(v, conds, above, local_depths.find(v)->second);
+			x = new Xcolumn(v, above, local_depths.find(v)->second);
 		}
 		else {
 			throw unitialized_access_orientation();
@@ -764,10 +776,11 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		string local_buffer = buff.name() + "+" + hug(hug(buff.abs() + "+" + to_string(v->stencil_spread())) + "*" + next.name());
-		string tsize = buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread());
-		if (v->stencil_spread()) {
-			const string correction = hug(conds.start + "+" + to_string(v->stencil_low()) + "< 0 ?" + to_string(abs(v->stencil_low())) + ":" + "0");
+		string local_buffer = buff.name() + "+" + hug(hug(buff.abs() + "+" + to_string(v->stencil_spread(conds.induction))) + "*" + next.name());
+		string tsize = buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread(conds.induction));
+		if (v->stencil_spread(conds.induction)) {
+			const string correction = hug(conds.start + "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ?" + 
+					to_string(abs(v->stencil_low(conds.induction))) + ":" + "0");
 			local_buffer += "+" + correction;
 			tsize += "-" + correction;
 		}
@@ -780,7 +793,7 @@ public:
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
 
-		string local_buffer = buff.name() + "+ ((" + buff.abs() + "+" + to_string(v->stencil_spread()) + ")*" + next.name() + ")";
+		string local_buffer = buff.name() + "+ ((" + buff.abs() + "+" + to_string(v->stencil_spread(conds.induction)) + ")*" + next.name() + ")";
 
 		return dma_in(address, local_buffer, tsize);
 	}
@@ -861,13 +874,13 @@ public:
 			math = v->math().ihs(conds.induction); 
 		}
 		else {
-			math = v->math().remove_stencil(above.back().induction);
+			math = v->math().remove_stencil(conds.induction);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
 		}
 
-		return hug(math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low()));
+		return hug(math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction)));
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
@@ -876,7 +889,7 @@ public:
 			return v->math().ihs(conds.induction).str();
 		}
 		else {
-			add_expr math = v->math().remove_stencil(above.back().induction);
+			add_expr math = v->math().remove_stencil(conds.induction);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
@@ -898,14 +911,14 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			add_expr math = v->math().remove_stencil(above.back().induction);
+			add_expr math = v->math().remove_stencil(conds.induction);
 			if (nested) {
 				math = math.expand_all_inductions(above);
 			}
 
 			string correction = conds.start;
-			if (v->stencil_spread()) {
-				correction += "+" + to_string(v->stencil_low()) + "< 0 ? 0 :" + to_string(v->stencil_low());
+			if (v->stencil_spread(conds.induction)) {
+				correction += "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ? 0 :" + to_string(v->stencil_low(conds.induction));
 			}
 			first = math.replace_induction(conds.induction, hug(correction)).str();
 		}
@@ -993,7 +1006,7 @@ public:
 			math = math.expand_all_inductions(above);
 		}
 
-		return math.add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low())));
+		return math.add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction))));
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
@@ -1014,8 +1027,8 @@ public:
 		}
 
 		string correction = conds.start;
-		if (v->stencil_spread()) {
-			correction += "+" + to_string(v->stencil_low()) + "< 0 ? 0:" + to_string(v->stencil_low());
+		if (v->stencil_spread(conds.induction)) {
+			correction += "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ? 0:" + to_string(v->stencil_low(conds.induction));
 		}
 		return math.replace_induction(conds.induction, hug(correction)).str();
 	}
@@ -1091,7 +1104,7 @@ public:
 template <class Access>
 class gen_in_first: public conditions_xformer, public nested_xformer, public Access {
 public:
-	gen_in_first(shared_variable* v, const conditions& c, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, c) {}
+	gen_in_first(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a.back()) {}
 	string operator()(const string& old)
 	{
 		return old + 
@@ -1106,14 +1119,14 @@ public:
 
 template <class Access>
 struct gen_in: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
-	gen_in(shared_variable* v, const conditions& c, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, c) {}
+	gen_in(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a.back()) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		const string spread = to_string(v->stencil_spread());
+		const string spread = to_string(v->stencil_spread(above.back().induction));
 		const string wait_next = "dma_wait(" + next.name() + ", fn_id);";
 		const string wait_prev = "dma_wait(" + prev.name() + ", fn_id);";
 		const string rotate_next = next.name() + "=" + hug(next.name() + "+1") + "%" + to_string(depth) + ";";
@@ -1144,7 +1157,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 
 template <class Access>
 struct gen_out: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
-	gen_out(shared_variable* v, const conditions& c, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, c) {}
+	gen_out(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a.back()) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
