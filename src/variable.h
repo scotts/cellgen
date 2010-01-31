@@ -192,8 +192,6 @@ public:
 		else if (offset > _highest[ivar]) {
 			_highest[ivar] = offset;
 		}
-
-		cout << "low[" << ivar << "] " << _lowest[ivar] << ", high[" << ivar << "] " << _highest[ivar] << endl;
 	}
 };
 

@@ -1752,9 +1752,6 @@ struct cell_region {
 			(*region)->estimate("estimate_cycles(" + n + "," + to_string(total.cycles()) + ", sizeof(" + greatest + "),");
 			*/
 
-			cout << "below: ";
-			for_all(below, print_conditions);
-			cout << endl;
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer()).max;
 
