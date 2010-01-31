@@ -24,7 +24,7 @@ struct conditions {
 		return start == o.start && induction == o.induction && stop == o.stop;
 	}
 
-	string to_string() const
+	string str() const
 	{
 		return "(" + start + " " + induction + " " + stop + " " + step + ") ";
 	}

@@ -439,7 +439,7 @@ public:
 		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
 			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + 
-					"*" + hug(buff.size() + "+" + to_string(v->stencil_spread(above.back().induction))) + ",7);";
+					"*" + hug(buff.size() + "+" + to_string(v->stencil_row_spread())) + ",7);";
 		}
 
 		return old + alloc;
@@ -462,7 +462,7 @@ public:
 			allocation = lst.declare(depth) + "; \n";
 
 			for (int i = 0; i < depth; ++i) {
-				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + "+" + to_string(v->stencil_spread(above.back().induction)) + ",1);\n";
+				allocation += "allocate_dma_list(&" + lst.name(i) + "," + buff.size() + "+" + to_string(v->stencil_row_spread()) + ",1);\n";
 			}
 		}
 

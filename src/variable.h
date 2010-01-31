@@ -168,7 +168,8 @@ public:
 
 	int stencil_low(const string& i) const { return _lowest.find(i)->second; }
 	int stencil_high(const string& i) const { return _highest.find(i)->second; }
-	int stencil_spread(const string& i) const { cout << "spread " << i << endl; return abs(_highest.find(i)->second - _lowest.find(i)->second); }
+	int stencil_spread(const string& i) const { return abs(_highest.find(i)->second - _lowest.find(i)->second); }
+	int stencil_row_spread() const { return stencil_spread(_conds.induction); }
 
 	void access(const add_expr& m, const condslist& above)
 	{

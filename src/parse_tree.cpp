@@ -488,11 +488,6 @@ struct struct_access_search {
 	}
 };
 
-void print_conditions(const conditions c)
-{
-	cout << c.to_string();
-}
-
 class shared_variable_double_orientation {};
 
 c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
@@ -504,6 +499,7 @@ c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const 
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
+		// FIXME: here is where we should say which is the fastest changing induction variable
 		o.shared_var->access(add, conds);
 
 		// Column or row access?
@@ -1124,6 +1120,11 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 	loop_mitosis(for_loop, shared_symbols, priv_symbols, conds, conds, seen, buffer_size);
 }
 
+void print_conditions(const conditions c)
+{
+	cout << c.str();
+}
+
 struct for_compound_op {
 	const shared_symtbl& shared_symbols; 
 	const priv_symtbl& priv_symbols;
@@ -1135,28 +1136,28 @@ struct for_compound_op {
 	sharedset& global_out;
 	sharedset& global_inout;
 	operations& ops;
-	condslist& conds;
+	condslist& above;
 	const conditions outer;
 
 	for_compound_op(const shared_symtbl& s, const priv_symtbl& p, const var_symtbl& l,  
 			sharedset& i, sharedset& o, sharedset& io, 
 			sharedset& gi, sharedset& go, sharedset& gio, 
-			operations& op, condslist& c, const conditions& out): 
+			operations& op, condslist& a, const conditions& out): 
 		shared_symbols(s), priv_symbols(p), locals(l), 
 		in(i), out(o), inout(io),
 		global_in(gi), global_out(go), global_inout(gio),
-		ops(op), conds(c), outer(out)
+		ops(op), above(a), outer(out)
 		{}
 	void operator()(pt_node& node)
 	{
 		if (node_is(node, ids::declaration)) {
-			declaration_op o(shared_symbols, priv_symbols, locals, conds, outer, ops);
+			declaration_op o(shared_symbols, priv_symbols, locals, above, outer, ops);
 			for_all(node.children, &o);
 
 			in.insert(o.in.begin(), o.in.end());
 		}
 		else if (node_is(node, ids::expression_statement, ids::selection_statement)) {
-			assignment_search o(shared_symbols, priv_symbols, locals, conds, outer, ops, out);
+			assignment_search o(shared_symbols, priv_symbols, locals, above, outer, ops, out);
 			for_all(node.children, &o);
 
 			in.insert(o.in.begin(), o.in.end());
@@ -1165,9 +1166,7 @@ struct for_compound_op {
 		// This is the first nested for loop occurrence. (Figuring this out by tracing the calls is 
 		// confusing.)
 		else if (is_for_loop(node)) {
-			condslist::const_iterator curr_scope = previous(conds.end(), conds);
-			condslist oldconds = conds;
-			serial_for_op o(shared_symbols, priv_symbols, locals, global_in, global_out, global_inout, conds, ops);
+			serial_for_op o(shared_symbols, priv_symbols, locals, global_in, global_out, global_inout, above, ops);
 			for_all(node.children, &o);
 			o.merge_inout(global_in, global_out, global_inout);
 
@@ -1180,7 +1179,6 @@ struct for_compound_op {
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			// FIXME Uh-oh. Why cons(conds, inner) ?
 			const conditions inner = o.conds.back();
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
@@ -1191,15 +1189,15 @@ struct for_compound_op {
 			// 	- Combine multiple in/out calls? 
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
-			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(conds, inner), local_depths), seen_ins));
+			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(above, inner), local_depths), seen_ins));
 			lbrace.push_back(new define_variable(index_adapt()(inner)));
 
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
-			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(cons(conds, inner), local_depths), seen_outs));
+			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(cons(above, inner), local_depths), seen_outs));
 
 			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
 				xformerlist& nested = node.value.xformations;
-				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(conds, inner), local_depths), seen_ins));
+				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(above, inner), local_depths), seen_ins));
 
 				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
 				const shared_variable* first = *seen_all.begin();
@@ -1322,20 +1320,20 @@ struct parallel_for_op {
 	sharedset& global_out;
 	sharedset& global_inout;
 	operations& ops;
-	condslist& conds;
+	condslist& above;
 	pt_node& parent;
 	conditions parcond;
 	int expressions_seen;
 	parallel_for_op(const shared_symtbl& s, const priv_symtbl& p, privset& ps, sharedset& i, sharedset& o, 
-			sharedset& io, operations& op, condslist& c, pt_node& par): 
+			sharedset& io, operations& op, condslist& a, pt_node& par): 
 		shared_symbols(s), priv_symbols(p), privs(ps), global_in(i), global_out(o), global_inout(io), 
-		ops(op), conds(c), parent(par), expressions_seen(0) {}
+		ops(op), above(a), parent(par), expressions_seen(0) {}
 	void operator()(pt_node& node)
 	{
 		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) &&
 				expressions_seen < 3) {
 			++expressions_seen;
-			parse_conditions(node, expressions_seen, conds, parcond);
+			parse_conditions(node, expressions_seen, above, parcond);
 
 			if (expressions_seen == 1) {
 				for_all(node.children, replace_node(parcond.start, new variable_name(spe_start)));
@@ -1348,11 +1346,11 @@ struct parallel_for_op {
 			}
 		}
 		else if (node_is(node, ids::compound)) {
-			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, conds, parcond, ops);
+			serial_for_op o(shared_symbols, priv_symbols, global_in, global_out, global_inout, above, parcond, ops);
 			o(node);
 
 			o.merge_inout(global_in, global_out, global_inout);
-			conds = o.conds;
+			above = o.conds;
 
 			sharedset& in = o.in;
 			sharedset& out = o.out;
@@ -1370,11 +1368,11 @@ struct parallel_for_op {
 			const sharedset& flat_ins = filter(row_and_flat, set_union_all(in, inout));
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
 			const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
-			const make_conditions<gen_in<row_access> > make_gen_in_row(cons(conds, parcond), local_depths);
-			const make_conditions<gen_out<row_access> > make_gen_out_row(cons(conds, parcond), local_depths);
+			const make_conditions<gen_in<row_access> > make_gen_in_row(above, local_depths);
+			const make_conditions<gen_out<row_access> > make_gen_out_row(above, local_depths);
 
 			const conditions specond(spe_start.name(), parcond.induction, spe_stop.name(), parcond.step);
-			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(cons(conds, specond), local_depths), flat_ins));
+			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(cons(above, specond), local_depths), flat_ins));
 
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
@@ -1694,10 +1692,10 @@ struct cell_region {
 			sharedset in;
 			sharedset out;
 			sharedset inout;
-			condslist conds;
+			condslist below;
 			operations iteration;
 
-			compound o(shared_symbols, priv_symbols, privs, in, out, inout, iteration, conds);
+			compound o(shared_symbols, priv_symbols, privs, in, out, inout, iteration, below);
 			for_all(node.children, &o);
 
 			depths max_depths;
@@ -1706,7 +1704,7 @@ struct cell_region {
 			for_all(inout, make_assign_set<shared_variable*>(3, max_depths));
 			for_all(privs, make_assign_set<private_variable*>(1, max_depths));
 
-			const string& par_induction = conds.front().induction;
+			const string& par_induction = below.front().induction;
 
 			const string least = for_all(shared, type_comparison(c_type_less)).winner;
 			const string greatest = for_all(shared, type_comparison(c_type_greater)).winner;
@@ -1728,7 +1726,7 @@ struct cell_region {
 				<< endl;
 
 			string n = "1";
-			for (condslist::iterator i = conds.begin(); i != conds.end(); ++i) {
+			for (condslist::iterator i = below.begin(); i != below.end(); ++i) {
 				n += "*(";
 
 				priv_symtbl::const_iterator p;
@@ -1736,7 +1734,7 @@ struct cell_region {
 					n += (*p).second->definition();
 				}
 				else {
-					n += conds.back().stop;
+					n += below.back().stop;
 				}
 
 				n += "-";
@@ -1745,7 +1743,7 @@ struct cell_region {
 					n += (*p).second->definition();
 				}
 				else {
-					n += conds.back().start;
+					n += below.back().start;
 				}
 
 				n += ")";
@@ -1754,6 +1752,9 @@ struct cell_region {
 			(*region)->estimate("estimate_cycles(" + n + "," + to_string(total.cycles()) + ", sizeof(" + greatest + "),");
 			*/
 
+			cout << "below: ";
+			for_all(below, print_conditions);
+			cout << endl;
 			xformerlist& front = node.children.front().value.xformations;
 			const shared_variable* max = for_all(shared, max_buffer()).max;
 
@@ -1768,8 +1769,8 @@ struct cell_region {
 				clipped_stop = spe_stop.name();
 			}
 			else {
-				clipped_start = conds.back().start;
-				clipped_stop = conds.back().stop;
+				clipped_start = below.back().start;
+				clipped_stop = below.back().stop;
 			}
 			front.push_back(new define_clipped_range(clipped_start, clipped_stop, greatest));
 
@@ -1777,8 +1778,8 @@ struct cell_region {
 			append(front, fmap(make_shared_buffer_size(max, user_buffer, shared.size(), par_induction, max_depths, greatest), shared));
 
 			append(front, fmap(make_xformer<private_buffer_allocation, private_variable>(), privs));
-			append(front, fmap(make_conditions<shared_buffer_allocation>(conds, max_depths), shared));
-			append(front, fmap(make_conditions<dma_list_allocation>(conds, max_depths), shared));
+			append(front, fmap(make_conditions<shared_buffer_allocation>(below, max_depths), shared));
+			append(front, fmap(make_conditions<dma_list_allocation>(below, max_depths), shared));
 
 			append(front, fmap(make_xformer<define_buffer, shared_variable>(), shared));
 			append(front, fmap(make_xformer<define_next, shared_variable>(), shared));
