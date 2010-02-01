@@ -16,6 +16,8 @@ using namespace std;
 
 const string pass_var = "pass";
 
+class shared_variable_double_orientation {};
+
 class variable {
 	string _type;
 	string _name;
@@ -124,7 +126,7 @@ public:
 	virtual string formal() const { return type() + " " + variable::name(); }
 };
 
-enum orientation_t { UNINITIALIZED, ROW, COLUMN };
+enum orientation_t { UNINITIALIZED, ROW, COLUMN, OFF_INDUCTION_STENCIL };
 
 class unitialized_access_orientation: public exception {};
 
@@ -152,6 +154,9 @@ public:
 	bool is_column() const { return _orientation == COLUMN; }
 	void column() { _orientation = COLUMN; }
 
+	bool is_off_induction_stencil() const { return _orientation == OFF_INDUCTION_STENCIL; }
+	void off_induction_stencil() { _orientation = OFF_INDUCTION_STENCIL; }
+
 	bool has_orientation() const { return _orientation != UNINITIALIZED; }
 	virtual string name() const { return region_variable::name() + "_adr"; }
 
@@ -171,26 +176,54 @@ public:
 	int stencil_spread(const string& i) const { return abs(_highest.find(i)->second - _lowest.find(i)->second); }
 	int stencil_row_spread() const { return stencil_spread(_conds.induction); }
 
-	void access(const add_expr& m, const condslist& above)
+	void analyze_access(const list<add_expr>& accesses, const add_expr& m, const condslist& above)
 	{
 		_math = m;
 		_conds = above.back();
 
-		const string& ivar = above.back().induction;
+		// Access type, columun or row.
+		if (accesses.back().str().find(_conds.induction) != string::npos) {
+			if (is_column()) {
+				throw shared_variable_double_orientation();
+			}
 
-		if (_lowest.find(ivar) == _lowest.end()) {
-			_lowest[ivar] = 0;
+			row();
 		}
-		if (_highest.find(ivar) == _highest.end()) {
-			_highest[ivar] = 0;
+		else {
+			if (is_row()) {
+				throw shared_variable_double_orientation();
+			}
+
+			column();
 		}
 
-		int offset = from_string<int>(_math.stencil_offset(ivar));
-		if (offset < _lowest[ivar]) {
-			_lowest[ivar] = offset;
-		}
-		else if (offset > _highest[ivar]) {
-			_highest[ivar] = offset;
+		// Access stencil attributes, if any.
+		for (condslist::const_reverse_iterator i = above.rbegin(); i != above.rend(); ++i) {
+			const string& ivar = i->induction;
+			if (_lowest.find(ivar) == _lowest.end()) {
+				_lowest[ivar] = 0;
+			}
+			if (_highest.find(ivar) == _highest.end()) {
+				_highest[ivar] = 0;
+			}
+
+			try {
+				int offset = from_string<int>(_math.stencil_offset(ivar));
+				if (offset < _lowest[ivar]) {
+					_lowest[ivar] = offset;
+				}
+				else if (offset > _highest[ivar]) {
+					_highest[ivar] = offset;
+				}
+
+				if (i != above.rbegin() && offset) {
+					//off_induction_stencil();
+					cout << "off induction stencil" << endl;
+				}
+			}
+			catch (ivar_not_found) {
+				// Yes, do nothing.
+			}
 		}
 	}
 };

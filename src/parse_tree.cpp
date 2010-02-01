@@ -488,38 +488,25 @@ struct struct_access_search {
 	}
 };
 
-class shared_variable_double_orientation {};
+void print_conditions(const conditions c)
+{
+	cout << c.str();
+}
 
 c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-			const condslist& conds, const conditions outer, operations& ops, op_type data, sharedset& vars)
+			const condslist& above, const conditions outer, operations& ops, op_type data, sharedset& vars)
 {
-	postfix_op o(shared_symbols, priv_symbols, conds, vars);
+	postfix_op o(shared_symbols, priv_symbols, above, vars);
 	for_all(node.children, &o);
 	c_type type = UNKNOWN_VAR;
 
 	if (o.found_shared && o.found_induction) {
 		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
 		// FIXME: here is where we should say which is the fastest changing induction variable
-		o.shared_var->access(add, conds);
+		o.shared_var->analyze_access(o.accesses, add, above);
 
-		// Column or row access?
-		if (o.accesses.back().str().find(outer.induction) != string::npos) {
-			if (o.shared_var->is_column()) {
-				throw shared_variable_double_orientation();
-			}
-
-			o.shared_var->row();
-		}
-		else {
-			if (o.shared_var->is_row()) {
-				throw shared_variable_double_orientation();
-			}
-
-			o.shared_var->column();
-		}
-		
 		ops.inc(data, construct_c_type(o.shared_var->type()));
-		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, conds, index_adapt()(outer)));
+		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, above, index_adapt()(outer)));
 
 		// The to_buffer_space xformer subsumes the code inside the original array access. But, 
 		// if it accesses a field in a struct, then we want to preserve that.
@@ -1118,11 +1105,6 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 		const conditions& conds, const sharedset& seen, const string& buffer_size)
 {
 	loop_mitosis(for_loop, shared_symbols, priv_symbols, conds, conds, seen, buffer_size);
-}
-
-void print_conditions(const conditions c)
-{
-	cout << c.str();
 }
 
 struct for_compound_op {
