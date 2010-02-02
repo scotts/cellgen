@@ -186,6 +186,16 @@ I rprevious(I i, const C& c)
 	return --i;
 }
 
+template <class S>
+S remove_back(const S& seq)
+{
+	if (seq.begin() == seq.end()) {
+		return S();
+	}
+
+	return S(seq.begin(), --seq.end());
+}
+
 template <class Container1, class Container2, class Out, class Comp>
 Out set_intersection_all(const Container1& c1, const Container2& c2, Out o, Comp co)
 {

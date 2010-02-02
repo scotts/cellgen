@@ -31,5 +31,10 @@ struct conditions {
 };
 typedef list<conditions> condslist;
 
+void inline print_conditions(const conditions& c)
+{
+	cout << c.str();
+}
+
 #endif // CONDITIONS_H
 

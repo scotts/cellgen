@@ -130,7 +130,7 @@ public:
 	add_expr remove_stencil(const string& i) const;
 	add_expr remove_all_stencil(const condslist& above) const;
 	add_expr expand_induction(const string& i) const;
-	add_expr expand_all_inductions(const condslist& above) const;
+	add_expr expand_all_inductions(const condslist& above, const bool nested) const;
 
 	string factor(const string& ivar) const
 	{
@@ -143,5 +143,7 @@ public:
 
 	bool operator==(const add_expr& o) const { return _lhs == o._lhs && _op == o._op && _rhs == o._rhs; }
 };
+
+add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices);
 
 #endif	// MULT_EXPR_H

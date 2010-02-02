@@ -176,9 +176,9 @@ public:
 	int stencil_spread(const string& i) const { return abs(_highest.find(i)->second - _lowest.find(i)->second); }
 	int stencil_row_spread() const { return stencil_spread(_conds.induction); }
 
-	void analyze_access(const list<add_expr>& accesses, const add_expr& m, const condslist& above)
+	add_expr analyze_access(const list<string>& dimensions, const list<add_expr>& accesses, const condslist& above)
 	{
-		_math = m;
+		_math = construct_access_formula(dimensions, accesses);
 		_conds = above.back();
 
 		// Access type, columun or row.
@@ -225,6 +225,8 @@ public:
 				// Yes, do nothing.
 			}
 		}
+
+		return _math;
 	}
 };
 

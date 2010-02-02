@@ -874,10 +874,7 @@ public:
 			math = v->math().ihs(conds.induction); 
 		}
 		else {
-			math = v->math().remove_stencil(conds.induction);
-			if (nested) {
-				math = math.expand_all_inductions(above);
-			}
+			math = v->math().remove_stencil(conds.induction).expand_all_inductions(remove_back(above), nested);
 		}
 
 		return hug(math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction)));
@@ -889,12 +886,7 @@ public:
 			return v->math().ihs(conds.induction).str();
 		}
 		else {
-			add_expr math = v->math().remove_stencil(conds.induction);
-			if (nested) {
-				math = math.expand_all_inductions(above);
-			}
-
-			return math.str();
+			return v->math().remove_stencil(conds.induction).expand_all_inductions(remove_back(above), nested).str();
 		}
 	}
 
@@ -911,16 +903,13 @@ public:
 			first = conds.start + factor;
 		}
 		else {
-			add_expr math = v->math().remove_stencil(conds.induction);
-			if (nested) {
-				math = math.expand_all_inductions(above);
-			}
-
 			string correction = conds.start;
 			if (v->stencil_spread(conds.induction)) {
 				correction += "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ? 0 :" + to_string(v->stencil_low(conds.induction));
 			}
-			first = math.replace_induction(conds.induction, hug(correction)).str();
+			first = v->math().remove_stencil(conds.induction).
+				replace_induction(conds.induction, hug(correction)).
+				expand_all_inductions(remove_back(above), nested).str();
 		}
 
 		return first;
@@ -1001,36 +990,25 @@ public:
 
 	string next_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().remove_stencil(above.back().induction);
-		if (nested) {
-			math = math.expand_all_inductions(above);
-		}
-
-		return math.add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction))));
+		return v->math().remove_stencil(conds.induction).
+			expand_all_inductions(remove_back(above), nested).
+			add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction))));
 	}
 
 	string this_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().remove_stencil(above.back().induction);
-		if (nested) {
-			math = math.expand_all_inductions(above);
-		}
-
-		return math.str();
+		return v->math().remove_stencil(above.back().induction).expand_all_inductions(remove_back(above), nested).str();
 	}
 
 	string first_buffer(const condslist& above, const bool nested) const
 	{
-		add_expr math = v->math().remove_stencil(above.back().induction);
-		if (nested) {
-			math = math.expand_all_inductions(above);
-		}
-
 		string correction = conds.start;
 		if (v->stencil_spread(conds.induction)) {
 			correction += "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ? 0:" + to_string(v->stencil_low(conds.induction));
 		}
-		return math.replace_induction(conds.induction, hug(correction)).str();
+		return v->math().remove_stencil(conds.induction).
+			replace_induction(conds.induction, hug(correction)).
+			expand_all_inductions(remove_back(above), nested).str();
 	}
 
 	string final_buffer() const

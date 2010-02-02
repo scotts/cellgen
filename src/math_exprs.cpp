@@ -497,10 +497,12 @@ struct call_expand_induction {
 	}
 };
 
-add_expr add_expr::expand_all_inductions(const condslist& nested) const
+add_expr add_expr::expand_all_inductions(const condslist& above, const bool nested) const
 {
 	add_expr exp = *this;
-	for_all(nested, call_expand_induction(exp));
+	if (nested) {
+		for_all(above, call_expand_induction(exp));
+	}
 	return exp;
 }
 
@@ -537,5 +539,31 @@ operations add_expr::cost() const
 	}
 
 	return ops;
+}
+
+add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices)
+{
+	if (indices.size() > 1) {
+		// Combine dimensions and indices to get string versions of:
+		// 	staq = sum(product(dimensions), indices)
+		// Where sum goes from 0 to indices.size()-1 and 
+		// product goes from 0 to dimensions.size()-1.
+		list<string>::const_iterator n = dimensions.begin();
+		list<add_expr>::const_iterator i = indices.begin();
+		list<string> str_indices;
+
+		add_expr staq(indices.front());
+		str_indices.push_back(indices.front().str());
+		for (++n, ++i; n != dimensions.end() && i != indices.end(); ++n, ++i) {
+			staq = add_expr(mult_expr(paren_expr(new add_expr(staq)), "*", *n), "+", mult_expr(paren_expr(new add_expr(*i))));
+			str_indices.push_back(i->str());
+		}
+
+		staq.indices(str_indices);
+		return staq;
+	}
+	else {
+		return indices.front();
+	}
 }
 

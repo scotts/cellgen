@@ -207,32 +207,6 @@ bool is_compound_expression(pt_node& node)
 	return node_is(node, ids::compound);
 }
 
-add_expr construct_access_formula(const list<string>& dimensions, const list<add_expr>& indices)
-{
-	if (indices.size() > 1) {
-		// Combine dimensions and indices to get string versions of:
-		// 	staq = sum(product(dimensions), indices)
-		// Where sum goes from 0 to indices.size()-1 and 
-		// product goes from 0 to dimensions.size()-1.
-		list<string>::const_iterator n = dimensions.begin();
-		list<add_expr>::const_iterator i = indices.begin();
-		list<string> str_indices;
-
-		add_expr staq(indices.front());
-		str_indices.push_back(indices.front().str());
-		for (++n, ++i; n != dimensions.end() && i != indices.end(); ++n, ++i) {
-			staq = add_expr(mult_expr(paren_expr(new add_expr(staq)), "*", *n), "+", mult_expr(paren_expr(new add_expr(*i))));
-			str_indices.push_back(i->str());
-		}
-
-		staq.indices(str_indices);
-		return staq;
-	}
-	else {
-		return indices.front();
-	}
-}
-
 template <class F>
 struct descend {
 	F f;
@@ -488,11 +462,6 @@ struct struct_access_search {
 	}
 };
 
-void print_conditions(const conditions c)
-{
-	cout << c.str();
-}
-
 c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
 			const condslist& above, const conditions outer, operations& ops, op_type data, sharedset& vars)
 {
@@ -501,9 +470,7 @@ c_type postfix_postop(pt_node& node, const shared_symtbl& shared_symbols, const 
 	c_type type = UNKNOWN_VAR;
 
 	if (o.found_shared && o.found_induction) {
-		add_expr add = construct_access_formula(o.shared_var->dimensions(), o.accesses);
-		// FIXME: here is where we should say which is the fastest changing induction variable
-		o.shared_var->analyze_access(o.accesses, add, above);
+		add_expr add = o.shared_var->analyze_access(o.shared_var->dimensions(), o.accesses, above);
 
 		ops.inc(data, construct_c_type(o.shared_var->type()));
 		node.value.xformations.push_back(new to_buffer_space(o.shared_var, add, above, index_adapt()(outer)));
