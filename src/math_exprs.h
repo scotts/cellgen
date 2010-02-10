@@ -84,7 +84,6 @@ public:
 	string next_iteration(const string& ivar) const;
 	string stencil_offset(const string& ivar) const;
 	mult_expr replace_induction(const string& ivar, const string& rep) const;
-	mult_expr zero_induction(const string& ivar) const;
 	mult_expr remove_stencil(const string& ivar) const;
 	mult_expr expand_induction(const string& i) const;
 
@@ -126,7 +125,6 @@ public:
 	string stencil_offset(const string& ivar) const;
 	string stencil_offset(const condslist& above) const;
 	add_expr replace_induction(const string& ivar, const string& rep) const;
-	add_expr zero_induction(const string& ivar) const;
 	add_expr remove_stencil(const string& i) const;
 	add_expr remove_all_stencil(const condslist& above) const;
 	add_expr expand_induction(const string& i) const;

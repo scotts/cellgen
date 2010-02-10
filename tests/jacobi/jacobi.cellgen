@@ -34,15 +34,15 @@ void jacobi_on_ppe(int (*a)[N], int (*b)[N])
 
 void jacobi_on_spe(int16b_t (*a)[N], int16b_t (*b)[N])
 {
-	// pragma cell shared(int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
 	// pragma cell shared(int16b_t* ai = a[N][N], int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
-	#pragma cell shared(int16b_t* aim = a[N][N], int16b_t* aip = a[N][N], int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
+	// pragma cell shared(int16b_t* aim = a[N][N], int16b_t* aip = a[N][N], int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
+	#pragma cell shared(int16b_t* a = a[N][N], int16b_t* b = b[N][N])
 	{
 		unsigned int i, j;
-		for (i = 0; i < N; ++i) {
-			for (j = 0; j < N; ++j) {
+		for (i = 1; i < N-1; ++i) {
+			for (j = 1; j < N-1; ++j) {
 				//b[i][j].num = ai[i-1][j].num + ai[i+1][j].num + aj[i][j-1].num + aj[i][j+1].num;
-				b[i][j].num = aim[i-1][j].num + aip[i+1][j].num + aj[i][j-1].num + aj[i][j+1].num;
+				b[i][j].num = a[i-1][j].num + a[i+1][j].num + a[i][j-1].num + a[i][j+1].num;
 				//b[i][j].num = aj[i][j-1].num + aj[i][j+1].num;
 			}
 		}

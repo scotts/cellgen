@@ -126,7 +126,7 @@ public:
 	virtual string formal() const { return type() + " " + variable::name(); }
 };
 
-enum orientation_t { UNINITIALIZED, ROW, COLUMN, OFF_INDUCTION_STENCIL };
+enum orientation_t { UNINITIALIZED, ROW, COLUMN };
 
 class unitialized_access_orientation: public exception {};
 
@@ -134,6 +134,7 @@ class shared_variable: public region_variable {
 	add_expr _math;
 	list<string> _dimensions; // Dimensions for multidimensional array.
 	orientation_t _orientation;
+	bool _off_induction_stencil;
 	bool _in_generated;
 	bool _out_generated;
 	conditions _conds; // Closest conditions to the shared varaible.
@@ -142,9 +143,11 @@ class shared_variable: public region_variable {
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false) {}
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _off_induction_stencil(false), 
+		_in_generated(false), _out_generated(false) {}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _in_generated(false), _out_generated(false) {}
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _off_induction_stencil(false), 
+		_in_generated(false), _out_generated(false) {}
 
 	add_expr math() const { return _math; }
 
@@ -154,8 +157,7 @@ public:
 	bool is_column() const { return _orientation == COLUMN; }
 	void column() { _orientation = COLUMN; }
 
-	bool is_off_induction_stencil() const { return _orientation == OFF_INDUCTION_STENCIL; }
-	void off_induction_stencil() { _orientation = OFF_INDUCTION_STENCIL; }
+	bool is_off_induction_stencil() const { return _off_induction_stencil; }
 
 	bool has_orientation() const { return _orientation != UNINITIALIZED; }
 	virtual string name() const { return region_variable::name() + "_adr"; }
@@ -173,7 +175,7 @@ public:
 
 	int stencil_low(const string& i) const { return _lowest.find(i)->second; }
 	int stencil_high(const string& i) const { return _highest.find(i)->second; }
-	int stencil_spread(const string& i) const { return abs(_highest.find(i)->second - _lowest.find(i)->second); }
+	int stencil_spread(const string& i) const { return abs(stencil_high(i) - stencil_low(i)); }
 	int stencil_row_spread() const { return stencil_spread(_conds.induction); }
 
 	add_expr analyze_access(const list<string>& dimensions, const list<add_expr>& accesses, const condslist& above)
@@ -217,8 +219,7 @@ public:
 				}
 
 				if (i != above.rbegin() && offset) {
-					//off_induction_stencil();
-					cout << "off induction stencil" << endl;
+					_off_induction_stencil = true;
 				}
 			}
 			catch (ivar_not_found) {

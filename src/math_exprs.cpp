@@ -114,19 +114,18 @@ string paren_expr::stencil_offset(const string& ivar) const
 
 paren_expr paren_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	paren_expr replaced;
-	if (terminal.find(ivar) != string::npos) {
-		replaced = paren_expr(regex_replace(terminal, regex(ivar), rep));
+	if (ivar == "") {
+		return *this;
+	}
+	else if (terminal.find(ivar) != string::npos) {
+		return paren_expr(regex_replace(terminal, regex(ivar), rep));
 	}
 	else if (recurse && recurse->str().find(ivar) != string::npos) {
-		replaced = paren_expr(new add_expr(recurse->replace_induction(ivar, rep)));
+		return paren_expr(new add_expr(recurse->replace_induction(ivar, rep)));
 	}
 	else {
-		std::cerr << terminal << " " << ivar << std::endl;
-		throw ivar_not_found();
+		return *this;
 	}
-
-	return replaced;
 }
 
 paren_expr paren_expr::remove_stencil(const string& ivar) const
@@ -233,30 +232,24 @@ string mult_expr::stencil_offset(const string& ivar) const
 
 mult_expr mult_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	mult_expr replaced;
-
-	if (_lhs.str() == ivar) {
-		replaced = mult_expr(rep, _op, _rhs);	
+	if (ivar == "") {
+		return *this;
+	}
+	else if (_lhs.str() == ivar) {
+		return mult_expr(rep, _op, _rhs);	
 	}
 	else if (_rhs.str() == ivar) {
-		replaced = mult_expr(_lhs, _op, rep);
+		return mult_expr(_lhs, _op, rep);
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		replaced = mult_expr(_lhs.replace_induction(ivar, rep), _op, _rhs);
+		return mult_expr(_lhs.replace_induction(ivar, rep), _op, _rhs);
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		replaced = mult_expr(_lhs, _op, _lhs.replace_induction(ivar, rep));
+		return mult_expr(_lhs, _op, _lhs.replace_induction(ivar, rep));
 	}
 	else {
-		throw ivar_not_found();
+		return *this;
 	}
-
-	return replaced;
-}
-
-mult_expr mult_expr::zero_induction(const string& ivar) const
-{
-	return replace_induction(ivar, "0");
 }
 
 mult_expr mult_expr::remove_stencil(const string& ivar) const
@@ -407,30 +400,24 @@ string add_expr::stencil_offset(const condslist& above) const
 
 add_expr add_expr::replace_induction(const string& ivar, const string& rep) const
 {
-	add_expr replaced;
-
-	if (_lhs.str() == ivar) {
-		replaced = add_expr(mult_expr(rep), _op, _rhs);
+	if (ivar == "") {
+		return *this;
+	}
+	else if (_lhs.str() == ivar) {
+		return add_expr(mult_expr(rep), _op, _rhs);
 	}
 	else if (_rhs.str() == ivar) {
-		replaced = add_expr(_lhs, _op, mult_expr(rep));
+		return add_expr(_lhs, _op, mult_expr(rep));
 	}
 	else if (_lhs.str().find(ivar) != string::npos) {
-		replaced = add_expr(_lhs.replace_induction(ivar, rep), _op, _rhs);
+		return add_expr(_lhs.replace_induction(ivar, rep), _op, _rhs);
 	}
 	else if (_rhs.str().find(ivar) != string::npos) {
-		replaced = add_expr(_lhs, _op, _rhs.replace_induction(ivar, rep));
+		return add_expr(_lhs, _op, _rhs.replace_induction(ivar, rep));
 	}
 	else {
-		throw ivar_not_found();
+		return *this;
 	}
-
-	return replaced; 
-}
-
-add_expr add_expr::zero_induction(const string& ivar) const
-{
-	return replace_induction(ivar, "0");
 }
 
 add_expr add_expr::remove_stencil(const string& ivar) const
