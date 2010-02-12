@@ -51,10 +51,8 @@ struct make_depth_xformer: public unary_function<const V*, xformer*> {
 };
 
 class conditions_xformer: virtual public xformer, public depth_xformer {
-public:
-	// FIXME: this should not be public
-	shared_variable* v;
 protected:
+	shared_variable* v;
 	condslist above;
 public:
 	conditions_xformer(shared_variable* _v, const condslist& a, const int d): depth_xformer(d), v(_v), above(a) {}
@@ -762,16 +760,24 @@ public:
 	virtual string final_iteration() const = 0;
 	virtual string next_buffer(const condslist& above, const bool nested) const = 0;
 	virtual string this_buffer(const condslist& above, const bool nested) const = 0;
-	virtual string first_buffer(const condslist& above, const conditions& off, const string& off_i, const bool nested) const = 0;
+	virtual string first_buffer(const condslist& above, const conditions& off, const string& rep, const bool nested) const = 0;
 	virtual string final_buffer() const = 0;
 	virtual string remainder_size() const = 0;
 	virtual string dma_in(const string& address, const string& local_buffer, const string& tsize) const = 0;
 	virtual string dma_out(const string& address, const int depth) const = 0;
 	virtual string dma_out(const string& address, const int depth, const string& tsize, const string& next) const = 0;
 
-	virtual string first_buffer_no_off(const condslist& above, const bool nested)
+	virtual string first_buffer_no_off(const condslist& above, const string& rep, const bool nested) const
 	{
-		return first_buffer(above, conditions(), "", nested);
+		return first_buffer(above, conditions(), rep, nested);
+	}
+
+	virtual string correction(const string& no_spread, const string& start, const int yes, const int no) const
+	{
+		if (v->stencil_spread(conds.induction)) {
+			return hug(start + "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ?" + to_string(yes) + ":" + to_string(no));
+		}
+		return no_spread;
 	}
 };
 
@@ -866,31 +872,23 @@ public:
 		}
 	}
 
-	string first_buffer(const condslist& above, const conditions& off, const string& off_replace, const bool nested) const
+	string first_buffer(const condslist& above, const conditions& off, const string& rep, const bool nested) const
 	{
-		string first;
-
 		if (v->is_flat()) {
 			string factor = v->math().factor(conds.induction);
 			if (factor != "") {
 				factor = "*" + factor;
 			}
 
-			first = conds.start + factor;
+			return conds.start + factor;
 		}
 		else {
-			string correction = conds.start;
-			if (v->stencil_spread(conds.induction)) {
-				const string low = to_string(v->stencil_low(conds.induction));
-				correction += "+" + low + "< 0 ? 0 :" + low;
-			}
-			first = v->math().remove_stencil(conds.induction).
-				replace_induction(off.induction, off_replace).
-				replace_induction(conds.induction, hug(correction)).
+			const int low = v->stencil_low(conds.induction);
+			return v->math().remove_stencil(conds.induction).
+				replace_induction(off.induction, off.start + "+" + to_string(low)).
+				replace_induction(conds.induction, rep).
 				expand_all_inductions(remove_back(above), nested).str();
 		}
-
-		return first;
 	}
 
 	string final_buffer() const
@@ -978,15 +976,11 @@ public:
 		return v->math().remove_stencil(above.back().induction).expand_all_inductions(remove_back(above), nested).str();
 	}
 
-	string first_buffer(const condslist& above, const conditions& off, const string& off_replace, const bool nested) const
+	string first_buffer(const condslist& above, const conditions& off, const string& rep, const bool nested) const
 	{
-		string correction = conds.start;
-		if (v->stencil_spread(conds.induction)) {
-			correction += "+" + to_string(v->stencil_low(conds.induction)) + "< 0 ? 0:" + to_string(v->stencil_low(conds.induction));
-		}
 		return v->math().remove_stencil(conds.induction).
-			replace_induction(conds.induction, hug(correction)).
-			replace_induction(off.induction, off_replace).
+			replace_induction(conds.induction, rep).
+			replace_induction(off.induction, off.start + "+" + to_string(v->stencil_low(off.induction))).
 			expand_all_inductions(remove_back(above), nested).str();
 	}
 
@@ -1057,16 +1051,7 @@ class gen_in_first: public conditions_xformer, public nested_xformer, public Acc
 	string local_buffer(const string& i)
 	{
 		buffer_adaptor buff(v);
-		return hug(hug(buff.name() + "+" + hug(hug(buff.abs() + "+" + to_string(v->stencil_spread(Access::conds.induction))))) + "*" + i);
-	}
-
-	string correction()
-	{
-		if (v->stencil_spread(Access::conds.induction)) {
-			return hug(Access::conds.start + "+" + to_string(v->stencil_low(Access::conds.induction)) + "< 0 ?" + 
-					to_string(abs(v->stencil_low(Access::conds.induction))) + ":" + "0");
-		}
-		return "0";
+		return hug(hug(buff.name() + "+" + hug(hug(buff.abs() + "+" + to_string(v->stencil_spread(Access::conds.induction))) + "*" + i)));
 	}
 
 public:
@@ -1086,18 +1071,24 @@ public:
 				}
 				if (v->stencil_spread(it->induction)) {
 					for (int i = 0; i < v->stencil_spread(it->induction) + 1; ++i) {
+						const string more = correction("0", Access::conds.induction, abs(v->stencil_low(Access::conds.induction)), 0);
+						const string less = correction("0", Access::conds.induction, 0, v->stencil_low(Access::conds.induction));
 						dma += dma_in("(unsigned long)" + hug(v->name() + "+" + 
-								hug(Access::first_buffer(above, *it, it->induction + "+" + to_string(i), nested))), 
-								local_buffer(to_string(i)) + "+" + correction(), 
-								tsize + "-" + correction());
+							Access::first_buffer(above, *it, Access::conds.induction + "+" + less, nested)), 
+							local_buffer(to_string(i)) + "+" + more, 
+							tsize + "-" + more);
 					}
 				}
 			}
 		}
 		else {
-			dma = dma_in("(unsigned long)" + hug(v->name() + "+" + hug(Access::first_buffer_no_off(above, nested))), 
-					local_buffer(next.name()) + "+" + correction(), 
-					tsize + "-" + correction());
+			const int low = v->stencil_low(Access::conds.induction);
+			const string more = correction("0", Access::conds.start, low, 0);
+			const string less = correction(Access::conds.start, Access::conds.start, 0, low);
+			dma = dma_in("(unsigned long)" + hug(v->name() + "+" + 
+					Access::first_buffer_no_off(above, less, nested)), 
+					local_buffer(next.name()) + "+" + more, 
+					tsize + "-" + more);
 		}
 
 		return old + "cellgen_dma_prep_start();" + dma + "cellgen_dma_prep_stop();";
