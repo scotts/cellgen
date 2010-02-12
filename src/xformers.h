@@ -746,10 +746,11 @@ public:
 class base_access {
 protected:
 	shared_variable* v; 
+	const condslist above;
 	const conditions conds;
 
 public:
-	base_access(shared_variable* _v, const conditions& c): v(_v), conds(c) {}
+	base_access(shared_variable* _v, const condslist& a): v(_v), above(a), conds(a.back()) {}
 	virtual ~base_access() {}
 	
 	virtual string class_name() const = 0; // debugging purposes only
@@ -758,18 +759,18 @@ public:
 	virtual string next_iteration() const = 0;
 	virtual string bounds_check() const = 0;
 	virtual string final_iteration() const = 0;
-	virtual string next_buffer(const condslist& above, const bool nested) const = 0;
-	virtual string this_buffer(const condslist& above, const bool nested) const = 0;
-	virtual string first_buffer(const condslist& above, const conditions& off, const string& rep, const bool nested) const = 0;
+	virtual string next_buffer(const bool nested) const = 0;
+	virtual string this_buffer(const bool nested) const = 0;
+	virtual string first_buffer(const conditions& off, const string& rep, const bool nested) const = 0;
 	virtual string final_buffer() const = 0;
 	virtual string remainder_size() const = 0;
 	virtual string dma_in(const string& address, const string& local_buffer, const string& tsize) const = 0;
 	virtual string dma_out(const string& address, const int depth) const = 0;
 	virtual string dma_out(const string& address, const int depth, const string& tsize, const string& next) const = 0;
 
-	virtual string first_buffer_no_off(const condslist& above, const string& rep, const bool nested) const
+	virtual string first_buffer_no_off(const string& rep, const bool nested) const
 	{
-		return first_buffer(above, conditions(), rep, nested);
+		return first_buffer(conditions(), rep, nested);
 	}
 
 	virtual string correction(const string& no_spread, const string& start, const int yes, const int no) const
@@ -783,7 +784,7 @@ public:
 
 class row_access: public base_access {
 public:
-	row_access(shared_variable* v, const conditions& c): base_access(v, c) {}
+	row_access(shared_variable* v, const condslist& a): base_access(v, a) {}
 
 	string class_name() const
 	{
@@ -849,7 +850,7 @@ public:
 		return hug(hug(hug(conds.stop) + "-" + hug(conds.start)) + factor());
 	}
 
-	string next_buffer(const condslist& above, const bool nested) const
+	string next_buffer(const bool nested) const
 	{
 		add_expr math;
 		if (v->is_flat() && v->math().factor(conds.induction) != "") {
@@ -862,7 +863,7 @@ public:
 		return hug(math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction)));
 	}
 
-	string this_buffer(const condslist& above, const bool nested) const
+	string this_buffer(const bool nested) const
 	{
 		if (v->is_flat()) {
 			return v->math().ihs(conds.induction).str();
@@ -872,7 +873,7 @@ public:
 		}
 	}
 
-	string first_buffer(const condslist& above, const conditions& off, const string& rep, const bool nested) const
+	string first_buffer(const conditions& off, const string& rep, const bool nested) const
 	{
 		if (v->is_flat()) {
 			string factor = v->math().factor(conds.induction);
@@ -937,7 +938,7 @@ public:
 
 class column_access: public base_access {
 public:
-	column_access(shared_variable* v, const conditions& c): base_access(v, c) {}
+	column_access(shared_variable* v, const condslist& a): base_access(v, a) {}
 
 	string class_name() const
 	{
@@ -964,19 +965,19 @@ public:
 		return hug(hug(conds.stop) + "-" + hug(conds.start));
 	}
 
-	string next_buffer(const condslist& above, const bool nested) const
+	string next_buffer(const bool nested) const
 	{
 		return v->math().remove_stencil(conds.induction).
 			expand_all_inductions(remove_back(above), nested).
 			add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction))));
 	}
 
-	string this_buffer(const condslist& above, const bool nested) const
+	string this_buffer(const bool nested) const
 	{
 		return v->math().remove_stencil(above.back().induction).expand_all_inductions(remove_back(above), nested).str();
 	}
 
-	string first_buffer(const condslist& above, const conditions& off, const string& rep, const bool nested) const
+	string first_buffer(const conditions& off, const string& rep, const bool nested) const
 	{
 		return v->math().remove_stencil(conds.induction).
 			replace_induction(conds.induction, rep).
@@ -1055,26 +1056,28 @@ class gen_in_first: public conditions_xformer, public nested_xformer, public Acc
 	}
 
 public:
-	gen_in_first(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a.back()) {}
+	gen_in_first(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
 		next_adaptor next(v);
+		const conditions& conds = Access::conds;
 
-		const string tsize = buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread(Access::conds.induction));
+		const string tsize = buffer_adaptor(v).size() + "+" + to_string(v->stencil_spread(conds.induction));
+		const int low = v->stencil_low(conds.induction);
 		string dma;
 
 		if (v->is_off_induction_stencil()) {
 			for (condslist::const_iterator it = above.begin(); it != above.end(); ++it) {
-				if (*it == Access::conds) {
+				if (*it == conds) {
 					continue;
 				}
 				if (v->stencil_spread(it->induction)) {
 					for (int i = 0; i < v->stencil_spread(it->induction) + 1; ++i) {
-						const string more = correction("0", Access::conds.induction, abs(v->stencil_low(Access::conds.induction)), 0);
-						const string less = correction("0", Access::conds.induction, 0, v->stencil_low(Access::conds.induction));
+						const string more = Access::correction("0", conds.induction, abs(low), 0);
+						const string less = Access::correction("0", conds.induction, 0, low);
 						dma += dma_in("(unsigned long)" + hug(v->name() + "+" + 
-							Access::first_buffer(above, *it, Access::conds.induction + "+" + less, nested)), 
+							Access::first_buffer(*it, conds.induction + "+" + less, nested)), 
 							local_buffer(to_string(i)) + "+" + more, 
 							tsize + "-" + more);
 					}
@@ -1082,11 +1085,9 @@ public:
 			}
 		}
 		else {
-			const int low = v->stencil_low(Access::conds.induction);
-			const string more = correction("0", Access::conds.start, low, 0);
-			const string less = correction(Access::conds.start, Access::conds.start, 0, low);
-			dma = dma_in("(unsigned long)" + hug(v->name() + "+" + 
-					Access::first_buffer_no_off(above, less, nested)), 
+			const string more = Access::correction("0", conds.start, low, 0);
+			const string less = Access::correction(conds.start, conds.start, 0, low);
+			dma = dma_in("(unsigned long)" + hug(v->name() + "+" + Access::first_buffer_no_off(less, nested)), 
 					local_buffer(next.name()) + "+" + more, 
 					tsize + "-" + more);
 		}
@@ -1100,7 +1101,7 @@ public:
 
 template <class Access>
 struct gen_in: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
-	gen_in(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a.back()) {}
+	gen_in(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a) {}
 	string operator()(const string& old)
 	{
 		next_adaptor next(v);
@@ -1124,7 +1125,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 				prev.name() + "=" + next.name() + ";" +
 				rotate_next + 
 				wait_next +
-				dma_in("(unsigned long)" + hug(v->name() + "+" + Access::next_buffer(above, nested)), 
+				dma_in("(unsigned long)" + hug(v->name() + "+" + Access::next_buffer(nested)), 
 						local_buffer,
 						hug(Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
 							buff.size() + "+" + spread + ":" + Access::remainder_size() + "+" + spread)) + 
@@ -1140,7 +1141,7 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 
 template <class Access>
 struct gen_out: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
-	gen_out(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a.back()) {}
+	gen_out(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a) {}
 	string operator()(const string& old)
 	{
 		buffer_adaptor buff(v);
@@ -1161,7 +1162,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 			return dma + wait + old;
 		}
 		else {
-			dma = dma_out("(unsigned long)" + hug(v->name() + "+" + Access::this_buffer(above, nested)), depth);
+			dma = dma_out("(unsigned long)" + hug(v->name() + "+" + Access::this_buffer(nested)), depth);
 			return "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
 		}
 	}
