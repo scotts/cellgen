@@ -24,6 +24,11 @@ struct conditions {
 		return start == o.start && induction == o.induction && stop == o.stop;
 	}
 
+	bool operator!=(const conditions& o) const
+	{
+		return !operator==(o);
+	}
+
 	string str() const
 	{
 		return "(" + start + " " + induction + " " + stop + " " + step + ") ";

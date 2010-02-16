@@ -93,7 +93,7 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2;
 	}
 
-	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r)
+	#pragma cell private(double* tl = tl, double* tr = tr, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r)
 	{
 		int i;
 		for (i = 0; i < QN; ++i) {
@@ -146,7 +146,7 @@ int main()
 		root_ref[(i*4)+3] = t1 * t2 * t3;
 	}
 
-	#pragma cell buffer(0) private(double* tl = tl, double* tr = tr, double* tp = tp, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
+	#pragma cell private(double* tl = tl, double* tr = tr, double* tp = tp, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r, double* pp = pp)
 	{
 		int i;
 		for (i = 0; i < QN; i++) {
@@ -189,7 +189,7 @@ int main()
 		lnL_ref +=  weight[i] * temp;
 	}
 
-	#pragma cell buffer(0) reduction(+: double l = lnL) private(double* freq = freq, int QN = QN) shared(double* sroot = root, int* weight = weight)
+	#pragma cell reduction(+: double l = lnL) private(double* freq = freq, int QN = QN) shared(double* sroot = root, int* weight = weight)
 	{
 		int i;
 		for (i = 0; i < QN; i++) {

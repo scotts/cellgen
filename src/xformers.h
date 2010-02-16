@@ -759,7 +759,7 @@ public:
 	virtual string next_iteration() const = 0;
 	virtual string bounds_check() const = 0;
 	virtual string final_iteration() const = 0;
-	virtual string next_buffer(const bool nested) const = 0;
+	virtual string next_buffer(const conditions& off, const string& rep, const bool nested) const = 0;
 	virtual string this_buffer(const bool nested) const = 0;
 	virtual string first_buffer(const conditions& off, const string& rep, const bool nested) const = 0;
 	virtual string final_buffer() const = 0;
@@ -850,17 +850,21 @@ public:
 		return hug(hug(hug(conds.stop) + "-" + hug(conds.start)) + factor());
 	}
 
-	string next_buffer(const bool nested) const
+	string next_buffer(const conditions& off, const string& rep, const bool nested) const
 	{
-		add_expr math;
-		if (v->is_flat() && v->math().factor(conds.induction) != "") {
-			math = v->math().ihs(conds.induction); 
+		const string factor = v->math().factor(conds.induction);
+
+		if (v->is_flat() && factor != "") {
+			const string sz = buffer_adaptor(v).size();
+			return v->math().replace_induction(conds.induction, hug(regex_replace(rep, regex(sz), hug(sz + "/" + factor)))).
+				ihs(conds.induction).str(); 
 		}
 		else {
-			math = v->math().remove_stencil(conds.induction).expand_all_inductions(remove_back(above), nested);
+			return v->math().remove_stencil(conds.induction).
+					replace_induction(off.induction, hug(off.induction + "+" + to_string(v->stencil_spread(off.induction)))).
+					replace_induction(conds.induction, hug(rep)).
+					expand_all_inductions(remove_back(above), nested).str();
 		}
-
-		return hug(math.str() + "+" + buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction)));
 	}
 
 	string this_buffer(const bool nested) const
@@ -881,13 +885,12 @@ public:
 				factor = "*" + factor;
 			}
 
-			return conds.start + factor;
+			return conds.start + factor + "+" + hug(rep);
 		}
 		else {
-			const int low = v->stencil_low(conds.induction);
 			return v->math().remove_stencil(conds.induction).
-				replace_induction(off.induction, off.start + "+" + to_string(low)).
 				replace_induction(conds.induction, rep).
+				replace_induction(off.induction, off.start + "+" + to_string(v->stencil_low(conds.induction))).
 				expand_all_inductions(remove_back(above), nested).str();
 		}
 	}
@@ -965,11 +968,12 @@ public:
 		return hug(hug(conds.stop) + "-" + hug(conds.start));
 	}
 
-	string next_buffer(const bool nested) const
+	string next_buffer(const conditions& off, const string& rep, const bool nested) const
 	{
 		return v->math().remove_stencil(conds.induction).
 			expand_all_inductions(remove_back(above), nested).
-			add_iteration(conds.induction, hug(buffer_adaptor(v).size() + "+" + to_string(v->stencil_low(conds.induction))));
+			replace_induction(off.induction, hug(off.induction + "+" + to_string(v->stencil_spread(off.induction)))).
+			replace_induction(conds.induction, hug(rep)).str();
 	}
 
 	string this_buffer(const bool nested) const
@@ -1068,24 +1072,18 @@ public:
 		string dma;
 
 		if (v->is_off_induction_stencil()) {
-			for (condslist::const_iterator it = above.begin(); it != above.end(); ++it) {
-				if (*it == conds) {
-					continue;
-				}
-				if (v->stencil_spread(it->induction)) {
-					for (int i = 0; i < v->stencil_spread(it->induction) + 1; ++i) {
-						const string more = Access::correction("0", conds.induction, abs(low), 0);
-						const string less = Access::correction("0", conds.induction, 0, low);
-						dma += dma_in("(unsigned long)" + hug(v->name() + "+" + 
-							Access::first_buffer(*it, conds.induction + "+" + less, nested)), 
-							local_buffer(to_string(i)) + "+" + more, 
-							tsize + "-" + more);
-					}
-				}
+			const conditions off = v->off();
+			for (int i = 0; i < v->stencil_spread(off.induction) + 1; ++i) {
+				const string more = Access::correction("0", conds.induction, abs(low), 0);
+				const string less = Access::correction("0", conds.induction, 0, low);
+				dma += dma_in("(unsigned long)" + hug(v->name() + "+" + 
+					Access::first_buffer(off, conds.induction + "+" + less, nested)), 
+					local_buffer(to_string(i)) + "+" + more, 
+					tsize + "-" + more);
 			}
 		}
 		else {
-			const string more = Access::correction("0", conds.start, low, 0);
+			const string more = Access::correction("0", conds.start, abs(low), 0);
 			const string less = Access::correction(conds.start, conds.start, 0, low);
 			dma = dma_in("(unsigned long)" + hug(v->name() + "+" + Access::first_buffer_no_off(less, nested)), 
 					local_buffer(next.name()) + "+" + more, 
@@ -1108,30 +1106,56 @@ struct gen_in: public conditions_xformer, public remainder_xformer, public neste
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		const string spread = to_string(v->stencil_spread(above.back().induction));
+		const conditions conds = Access::conds;
+		const string spread = to_string(v->stencil_spread(conds.induction));
+		const int low = v->stencil_low(conds.induction);
 		const string wait_next = "dma_wait(" + next.name() + ", fn_id);";
 		const string wait_prev = "dma_wait(" + prev.name() + ", fn_id);";
-		const string rotate_next = next.name() + "=" + hug(next.name() + "+1") + "%" + to_string(depth) + ";";
 
-		if (is_remainder) {
-			return old +
-				orig.name() + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + next.name() + ";" +
+		if (v->is_off_induction_stencil()) {
+			const conditions off = v->off();
+			const int off_spread = v->stencil_spread(off.induction);
+			const string more = Access::correction("0", conds.induction, abs(low), 0);
+			const string less = Access::correction("0", conds.induction, 0, low);
+			const string local_buffer = buff.name() + "+" + hug(hug(buff.abs() + "+" + spread) + "*" + 
+					hug(hug(prev.name() + "+" + to_string(off_spread + 1)) + "%" + to_string(off_spread + 2))) + "+" + more;
+
+			const string rotate_next = next.name() + "=" + hug(next.name() + "+1") + "%" + to_string(off_spread + 2) + ";";
+
+			string buff_step;
+			for (int i = low, count = 0; i < v->stencil_high(off.induction) + 1; ++i, ++count) {
+				buff_step += orig.off_stencil_name(i) + "=" + buff.name() + hug(buff.abs() + "+" + spread) + "*" + 
+					hug(hug(prev.name() + "+" + to_string(count)) + "%" + to_string(off_spread + 2)) + ";";
+			}
+
+			return old + "cellgen_dma_prep_start();" + 
+				prev.name() + "=" + next.name() + ";" +
+				rotate_next + wait_next +
+				dma_in("(unsigned long)" + hug(v->name() + "+" + 
+						Access::next_buffer(off, conds.induction + "+" + less, nested)), local_buffer,
+						hug(Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
+							buff.size() + "+" + spread + ":" + Access::remainder_size() + "+" + spread)) + 
+				buff_step + wait_prev + "cellgen_dma_prep_stop();";
+		}
+		else if (is_remainder) {
+			return old + 
+				orig.name() + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + next.name() + ";" + 
 				wait_next;
 		}
 		else {
-			string local_buffer = buff.name() + "+ ((" + buff.abs() + "+" + to_string(v->stencil_spread(Access::conds.induction)) + ")*" + next.name() + ")";
-			return old +
-				"cellgen_dma_prep_start();" + 
+			const string local_buffer = buff.name() + "+" + hug(hug(buff.abs() + "+" + spread) + "*" + next.name());
+			const string rotate_next = next.name() + "=" + hug(next.name() + "+1") + "%" + to_string(depth) + ";";
+
+			return old + "cellgen_dma_prep_start();" + 
 				prev.name() + "=" + next.name() + ";" +
-				rotate_next + 
-				wait_next +
-				dma_in("(unsigned long)" + hug(v->name() + "+" + Access::next_buffer(nested)), 
+				rotate_next + wait_next +
+				dma_in("(unsigned long)" + hug(v->name() + "+" + 
+						Access::next_buffer(conditions(), conds.induction + "+" + buff.size() + "+" + to_string(low), nested)), 
 						local_buffer,
 						hug(Access::bounds_check() + "<" + full_adaptor(v).name() + "?" + 
 							buff.size() + "+" + spread + ":" + Access::remainder_size() + "+" + spread)) + 
 				orig.name() + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + prev.name() + ";" +
-				wait_prev +
-				"cellgen_dma_prep_stop();";
+				wait_prev + "cellgen_dma_prep_stop();";
 		}
 	}
 

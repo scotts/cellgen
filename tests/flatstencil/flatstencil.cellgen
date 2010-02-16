@@ -42,7 +42,10 @@ void check_results(int* *b_p, int16b_t* b_s)
 {
 	unsigned int i;
 	for (i = 0; i < N; ++i) {
-		assert(b_p[i] == b_s[i].num);
+		if (b_p[i] != b_s[i].num) {
+			printf("failure at %d, ppe %d, spe %d\n", i, b_p[i], b_s[i].num);
+			return;
+		}
 	}
 }
 

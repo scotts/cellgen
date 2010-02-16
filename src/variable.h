@@ -71,8 +71,8 @@ public:
 
 const variable prev("int", "prev", "0");
 const variable clipped_range("int", "__N__");
-const variable spe_start("unsigned int", "spe_start");
-const variable spe_stop("unsigned int", "spe_stop");
+const variable spe_start("int", "spe_start");
+const variable spe_stop("int", "spe_stop");
 
 class const_variable: public variable {
 public:
@@ -134,19 +134,19 @@ class shared_variable: public region_variable {
 	add_expr _math;
 	list<string> _dimensions; // Dimensions for multidimensional array.
 	orientation_t _orientation;
-	bool _off_induction_stencil;
 	bool _in_generated;
 	bool _out_generated;
 	conditions _conds; // Closest conditions to the shared varaible.
+	conditions _off; // Conditions for the off induction stencil, if any
 	map<string, int> _lowest;
 	map<string, int> _highest;
 
 public:
 	shared_variable(const string& t, const string& l, const string& a, int r):
-		region_variable(t, l, a, r), _orientation(UNINITIALIZED), _off_induction_stencil(false), 
+		region_variable(t, l, a, r), _orientation(UNINITIALIZED), 
 		_in_generated(false), _out_generated(false) {}
 	shared_variable(const string& t, const string& l, const string& a, const list<string>& d, int r):
-		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), _off_induction_stencil(false), 
+		region_variable(t, l, a, r), _dimensions(d), _orientation(UNINITIALIZED), 
 		_in_generated(false), _out_generated(false) {}
 
 	add_expr math() const { return _math; }
@@ -157,7 +157,7 @@ public:
 	bool is_column() const { return _orientation == COLUMN; }
 	void column() { _orientation = COLUMN; }
 
-	bool is_off_induction_stencil() const { return _off_induction_stencil; }
+	bool is_off_induction_stencil() const { return _off != conditions(); }
 
 	bool has_orientation() const { return _orientation != UNINITIALIZED; }
 	virtual string name() const { return region_variable::name() + "_adr"; }
@@ -172,6 +172,7 @@ public:
 	void out_generated() { _out_generated = true; }
 
 	conditions conds() const { return _conds; }
+	conditions off() const { return _off; }
 
 	int stencil_low(const string& i) const { return _lowest.find(i)->second; }
 	int stencil_high(const string& i) const { return _highest.find(i)->second; }
@@ -219,7 +220,7 @@ public:
 				}
 
 				if (i != above.rbegin() && offset) {
-					_off_induction_stencil = true;
+					_off = *i;
 				}
 			}
 			catch (ivar_not_found) {
@@ -296,6 +297,19 @@ public:
 	string type() const { return v->variable::type(); }
 	string name() const { return v->variable::name(); }
 	string declare() const { return type() + " " + name(); }
+
+	string off_stencil_name(const int i)
+	{
+		if (i < 0) {
+			return name() + "_m" + to_string(abs(i));
+		}
+		else if (i > 0) {
+			return name() + "_p" + to_string(i);
+		}
+		else {
+			return name();
+		}
+	}
 };
 
 class rem_adaptor {
