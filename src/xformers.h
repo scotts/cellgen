@@ -1072,19 +1072,18 @@ public:
 		string dma;
 
 		if (v->is_off_induction_stencil()) {
-			const conditions off = v->off();
-			for (int i = 0; i < v->stencil_spread(off.induction) + 1; ++i) {
+			for (int i = 0; i < v->stencil_spread(v->off().induction) + 1; ++i) {
 				const string more = Access::correction("0", conds.induction, abs(low), 0);
 				const string less = Access::correction("0", conds.induction, 0, low);
 				dma += dma_in("(unsigned long)" + hug(v->name() + "+" + 
-					Access::first_buffer(off, conds.induction + "+" + less, nested)), 
+					Access::first_buffer(v->off(), conds.induction + "+" + less, nested)), 
 					local_buffer(to_string(i)) + "+" + more, 
 					tsize + "-" + more);
 			}
 		}
 		else {
-			const string more = Access::correction("0", conds.start, abs(low), 0);
-			const string less = Access::correction(conds.start, conds.start, 0, low);
+			const string more = Access::correction("0", hug(conds.start), abs(low), 0);
+			const string less = Access::correction(hug(conds.start), hug(conds.start), 0, low);
 			dma = dma_in("(unsigned long)" + hug(v->name() + "+" + Access::first_buffer_no_off(less, nested)), 
 					local_buffer(next.name()) + "+" + more, 
 					tsize + "-" + more);
