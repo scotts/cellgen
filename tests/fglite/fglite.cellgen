@@ -1565,7 +1565,7 @@ void all_cols_ppe(double dt, double conc[NROWS][NCOLS][NSPEC], double wind_v[NRO
 	}
 }
 
-void assert_rows(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROWS][NCOLS][NSPEC])
+void assert_rows(const char* which, double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROWS][NCOLS][NSPEC])
 {
 	int i, j, k;
 
@@ -1573,8 +1573,8 @@ void assert_rows(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROW
 		for (j = 0; j < NSPEC; ++j) {
 			for (k = 0; k < NCOLS; ++k) {
 				if (!double_eq(conc_spe[i][k][j].num, conc_ppe[i][k][j])) {
-					printf("conc rows failed at (%d,%d,%d): spe %f, ppe %f\n",
-					       i, k, j, conc_spe[i][k][j].num, conc_ppe[i][k][j]);
+					printf("conc rows %s failed at (%d,%d,%d): spe %f, ppe %f\n",
+					       which, i, k, j, conc_spe[i][k][j].num, conc_ppe[i][k][j]);
 					return;
 				}
 			}
@@ -1583,7 +1583,7 @@ void assert_rows(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROW
 	}
 }
 
-void assert_cols(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROWS][NCOLS][NSPEC])
+void assert_cols(const char* which, double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROWS][NCOLS][NSPEC])
 {
 	int i, j, k;
 
@@ -1591,8 +1591,8 @@ void assert_cols(double16b_t conc_spe[NROWS][NCOLS][NSPEC], double conc_ppe[NROW
 		for (j = 0; j < NSPEC; ++j) {
 			for (k = 0; k < NROWS; ++k) {
 				if (!double_eq(conc_spe[k][i][j].num, conc_ppe[k][i][j])) {
-					printf("conc cols failed at (%d,%d,%d): spe %f, ppe %f\n",
-					       k, i, j, conc_spe[k][i][j].num, conc_ppe[k][i][j]);
+					printf("conc cols %s failed at (%d,%d,%d): spe %f, ppe %f\n",
+					       which, k, i, j, conc_spe[k][i][j].num, conc_ppe[k][i][j]);
 					return;
 				}
 			}
@@ -1619,11 +1619,11 @@ int main()
 
 	all_rows_spe_long(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
 	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
-	assert_rows(conc_spe, conc_ppe);
+	assert_rows("long", conc_spe, conc_ppe);
 
 	all_cols_spe_long(1.0 / 2.0, conc_spe, wind_v_spe, diff_spe);
 	all_cols_ppe(1.0 / 2.0, conc_ppe, wind_v_ppe, diff_ppe);
-	assert_cols(conc_spe, conc_ppe);
+	assert_cols("long", conc_spe, conc_ppe);
 
 	count = 1;
 	for (i = 0; i < NROWS; i++) {
@@ -1637,11 +1637,11 @@ int main()
 
 	all_rows_spe_short(1.0 / 2.0, conc_spe, wind_u_spe, diff_spe);
 	all_rows_ppe(1.0 / 2.0, conc_ppe, wind_u_ppe, diff_ppe);
-	assert_rows(conc_spe, conc_ppe);
+	assert_rows("short", conc_spe, conc_ppe);
 
 	all_cols_spe_short(1.0 / 2.0, conc_spe, wind_v_spe, diff_spe);
 	all_cols_ppe(1.0 / 2.0, conc_ppe, wind_v_ppe, diff_ppe);
-	assert_cols(conc_spe, conc_ppe);
+	assert_cols("short", conc_spe, conc_ppe);
 
 	return 0;
 }
