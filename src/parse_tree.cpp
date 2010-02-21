@@ -1061,6 +1061,7 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 		call_descend(make_for_all_xformations(mem_fn(&xformer::nest_me)), *nested_for_loop);
 	}
 
+	// Point of duplication
 	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 	modify_for_loop(max, conds, buffer_size)(for_loop);
 	remove_xforms<if_clause>(*loop_cmpd); // Hack! hack-hack-hack
@@ -1133,9 +1134,6 @@ struct for_compound_op {
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
 			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
 			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, local_inout));
-
-			// TODO:
-			// 	- Combine multiple in/out calls? 
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
 			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(above, inner), local_depths), seen_ins));

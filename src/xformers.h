@@ -419,7 +419,7 @@ public:
 		string alloc;
 		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
-			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + buff.size() + ",7);";
+			alloc = buff.declare() + "=" + hug(buff.type() + "*") + "_malloc_align(sizeof(" + buff.type() + ")*" + buff.size() + ",7);";
 		}
 		return old + alloc;
 	}
@@ -436,8 +436,25 @@ public:
 		string alloc;
 		if (v->is_non_scalar()) {
 			buffer_adaptor buff(v);
-			alloc = buff.declare() + "= (" + buff.type() + "*) _malloc_align(sizeof(" + buff.type() + ")*" + to_string(depth) + 
-					"*" + hug(buff.size() + "+" + to_string(v->stencil_row_spread())) + ",7);";
+			const string row_size = hug(buff.size() + "+" + to_string(v->stencil_row_spread()));
+
+			int num_buffs;
+			if (v->is_off_induction_stencil()) {
+				num_buffs = v->stencil_spread(v->off().induction) + 2;
+			}
+			else {
+				num_buffs = depth;
+			}
+
+			alloc = buff.declare() + "=" + hug(buff.type() + "*") + "_malloc_align(sizeof(" + buff.type() + ")*" + to_string(num_buffs) + 
+					"*" + row_size + ",7);";
+
+			if (v->is_off_induction_stencil()) {
+				for (int i = v->stencil_low(v->off().induction), count = 0; i < v->stencil_high(v->off().induction) + 1; ++i, ++count) {
+					alloc += buff.type() + "* " + orig_adaptor(v).off_stencil_name(i) + "=" + 
+						buff.name() + "+" + row_size + "*" + to_string(count) + ";";
+				}
+			}
 		}
 
 		return old + alloc;
