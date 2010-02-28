@@ -250,6 +250,14 @@ Container set_union_all(const Container& c1, const Container& c2, const Containe
 	return u;
 }
 
+template <class Container>
+Container set_difference_all(const Container& c1, const Container& c2)
+{
+	Container diff;
+	set_difference_all(c1, c2, inserter(diff, diff.begin()));
+	return diff;
+}
+
 template <class Key, class Val, class Set>
 struct assign_set {
 	Val val;
@@ -343,6 +351,22 @@ template <class T>
 acc_or<T> make_acc_or(bool (T::*f)() const)
 {
 	return acc_or<T>(f);
+}
+
+template <class T>
+struct fn_not: public unary_function<bool, const T*> {
+	bool (T::*func1)() const;
+	fn_not(bool (T::*f1)() const): func1(f1) {}
+	bool operator()(const T* v) const
+	{
+		return !(v->*func1)();
+	}
+};
+
+template <class T>
+fn_not<T> make_fn_not(bool (T::*f)() const)
+{
+	return fn_not<T>(f);
 }
 
 template <class T>

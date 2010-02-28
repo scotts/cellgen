@@ -1056,9 +1056,9 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(for_loop, is_compound_expression);
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
 
-	pt_node::tree_iterator nested_for_loop = find_shallow(for_loop, is_for_loop).second;
-	if (nested_for_loop != for_loop.children.end()) {
-		call_descend(make_for_all_xformations(mem_fn(&xformer::nest_me)), *nested_for_loop);
+	pt_node::tree_iterator nested = find_shallow(for_loop, is_for_loop).second;
+	if (nested != for_loop.children.end()) {
+		call_descend(make_for_all_xformations(mem_fn(&xformer::nest_me)), *nested);
 	}
 
 	// Point of duplication
@@ -1073,6 +1073,124 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 		const conditions& conds, const sharedset& seen, const string& buffer_size)
 {
 	loop_mitosis(for_loop, shared_symbols, priv_symbols, conds, conds, seen, buffer_size);
+}
+
+struct operator_wedge {
+	pt_node*& lhs;
+	pt_node*& rhs;
+	bool seen_operator;
+	operator_wedge(pt_node*& l, pt_node*& r):
+		lhs(l), rhs(r), seen_operator(false)
+		{}
+	void operator()(pt_node& node)
+	{
+		if (node_is(node, ids::identifier) || is_constant(node) || is_expression(node)) {
+			if (!seen_operator) {
+				lhs = &node;
+			}
+			else {
+				rhs = &node;
+			}
+		}
+		else if (is_conditional_operator(node)) {
+			seen_operator = true;
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+struct conditional_search {
+	pt_node* lhs;
+	pt_node* rhs;
+	conditional_search():
+		lhs(NULL), rhs(NULL)
+		{}
+	void operator()(pt_node& node)
+	{
+		if (node_is(node, ids::relational_expression, ids::assignment_expression)) {
+			operator_wedge w(lhs, rhs);
+			for_all(node.children, &w);
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+void parse_conditions(pt_node& node, const int expressions_seen, condslist& above, conditions& conds)
+{
+	if (expressions_seen >= 4) {
+		throw user_error("number of expressions seen in parse_conditions.");
+	}
+
+	if (expressions_seen < 3) {
+		conditional_search conditional;
+		for_all(node.children, &conditional);
+
+		if (!conditional.lhs || !conditional.rhs) {
+			throw user_error("No relational or assignment expression in nested for loop.");
+		}
+
+		if (expressions_seen == 1) {
+			conds.induction = string(conditional.lhs->value.begin(), conditional.lhs->value.end());
+			call_descend(build_string(conds.start), *conditional.rhs);
+		}
+		else if (expressions_seen == 2) {
+			call_descend(build_string(conds.stop), *conditional.rhs);
+		}
+	}
+	else {
+		call_descend(build_string(conds.step), node);
+
+		if (!exists_in(above, conds)) {
+			above.push_back(conds);
+		}
+	}
+}
+
+struct discover_conditions {
+	conditions& conds;
+	int expressions_seen;
+	condslist above;
+
+	discover_conditions(conditions& c): conds(c), expressions_seen(0) {}
+	void operator()(pt_node& node)
+	{
+		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) && 
+			expressions_seen < 3) {
+			++expressions_seen;
+			parse_conditions(node, expressions_seen, above, conds);
+		}
+		else {
+			for_all(node.children, this);
+		}
+	}
+};
+
+pair<pt_node*, pt_node::tree_iterator> find_off_loop(pt_node& outer, const conditions& off)
+{
+	pair<pt_node*, pt_node::tree_iterator> inner = find_shallow(outer, is_for_loop);
+	assert(inner.second != outer.children.end());
+
+	conditions conds;
+	discover_conditions dc(conds);
+	for_all((*inner.first).children, &dc);
+
+	if (off == dc.conds) {
+		return inner;
+	}
+	else {
+		return find_off_loop(*inner.first, off);
+	}
+}
+
+void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const sharedset& ois)
+{
+	const shared_variable* v = *ois.begin();
+	pair<pt_node*, pt_node::tree_iterator> inner_loop = find_off_loop(outer_loop, v->off());
+	cout << "loop flip" << endl;
 }
 
 struct for_compound_op {
@@ -1129,31 +1247,41 @@ struct for_compound_op {
 			for_all(local_out, make_assign_set<shared_variable*>(2, local_depths));
 			for_all(local_inout, make_assign_set<shared_variable*>(3, local_depths));
 
-			const conditions inner = o.conds.back();
 			const fn_and<shared_variable> seen_not_in(&shared_variable::seen, &shared_variable::in_not_generated);
 			const fn_and<shared_variable> seen_not_out(&shared_variable::seen, &shared_variable::out_not_generated);
+
 			const sharedset& seen_ins = filter(seen_not_in, set_union_all(local_in, local_inout));
+			const sharedset& seen_ois = filter(mem_fn(&shared_variable::is_off_induction_stencil), seen_ins);
+			const sharedset& seen_in_ons = filter(make_fn_not(&shared_variable::is_off_induction_stencil), seen_ins);
 			const sharedset& seen_outs = filter(seen_not_out, set_union_all(local_out, local_inout));
 
+			const sharedset& below_seen_ois = set_difference_all(filter(mem_fn(&shared_variable::is_off_induction_stencil), global_in), seen_ois);
+
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
-			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(above, inner), local_depths), seen_ins));
+			const conditions inner = o.conds.back();
+			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(above, inner), local_depths), seen_in_ons));
 			lbrace.push_back(new define_variable(index_adapt()(inner)));
 
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(cons(above, inner), local_depths), seen_outs));
 
-			if (seen_ins.size() > 0 || seen_outs.size() > 0) {
-				xformerlist& nested = node.value.xformations;
-				append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(above, inner), local_depths), seen_ins));
+			xformerlist& nested = node.value.xformations;
+			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(above, inner), local_depths), seen_in_ons));
 
-				const sharedset& seen_all = set_union_all(seen_ins, seen_outs);
+			if (!below_seen_ois.empty()) {
+				cout << "nested ";
+				loop_flip(node, inner, below_seen_ois);
+			}
+			else if ((!seen_in_ons.empty() || !seen_outs.empty()) && seen_ois.empty()) {
+				const sharedset& seen_all = set_union_all(seen_in_ons, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
 
 				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
 			}
 
-			for_all(seen_ins, mem_fn(&shared_variable::in_generated));
+			for_all(below_seen_ois, mem_fn(&shared_variable::in_generated));
+			for_all(seen_in_ons, mem_fn(&shared_variable::in_generated));
 			for_all(seen_outs, mem_fn(&shared_variable::out_generated));
 		}
 		else {
@@ -1161,81 +1289,6 @@ struct for_compound_op {
 		}
 	}
 };
-
-struct operator_wedge {
-	pt_node*& lhs;
-	pt_node*& rhs;
-	bool seen_operator;
-	operator_wedge(pt_node*& l, pt_node*& r):
-		lhs(l), rhs(r), seen_operator(false)
-		{}
-	void operator()(pt_node& node)
-	{
-		if (node_is(node, ids::identifier) || is_constant(node) || is_expression(node)) {
-			if (!seen_operator) {
-				lhs = &node;
-			}
-			else {
-				rhs = &node;
-			}
-		}
-		else if (is_conditional_operator(node)) {
-			seen_operator = true;
-		}
-		else {
-			for_all(node.children, this);
-		}
-	}
-};
-
-struct conditional_search {
-	pt_node* lhs;
-	pt_node* rhs;
-	conditional_search():
-		lhs(NULL), rhs(NULL)
-		{}
-	void operator()(pt_node& node)
-	{
-		if (node_is(node, ids::relational_expression, ids::assignment_expression)) {
-			operator_wedge w(lhs, rhs);
-			for_all(node.children, &w);
-		}
-		else {
-			for_all(node.children, this);
-		}
-	}
-};
-
-void parse_conditions(pt_node& node, const int expressions_seen, condslist& conds, conditions& cond)
-{
-	if (expressions_seen >= 4) {
-		throw user_error("number of expressions seen in parse_conditions.");
-	}
-
-	if (expressions_seen < 3) {
-		conditional_search conditional;
-		for_all(node.children, &conditional);
-
-		if (!conditional.lhs || !conditional.rhs) {
-			throw user_error("No relational or assignment expression in nested for loop.");
-		}
-
-		if (expressions_seen == 1) {
-			cond.induction = string(conditional.lhs->value.begin(), conditional.lhs->value.end());
-			call_descend(build_string(cond.start), *conditional.rhs);
-		}
-		else if (expressions_seen == 2) {
-			call_descend(build_string(cond.stop), *conditional.rhs);
-		}
-	}
-	else {
-		call_descend(build_string(cond.step), node);
-
-		if (!exists_in(conds, cond)) {
-			conds.push_back(cond);
-		}
-	}
-}
 
 void serial_for_op::operator()(pt_node& node)
 {
@@ -1311,32 +1364,39 @@ struct parallel_for_op {
 			// Hi, I'm an inelegant special case.
 			xformerlist& lbrace = node.children.front().value.xformations;
 			xformerlist& rbrace = node.children.back().value.xformations;
+
 			const fn_and<shared_variable> row_and_flat(&shared_variable::is_row, &shared_variable::is_flat);
 			const sharedset& flat_ins = filter(row_and_flat, set_union_all(in, inout));
 			const sharedset& flat_outs = filter(row_and_flat, set_union_all(out, inout));
 			const sharedset& flat_all = set_union_all(flat_ins, flat_outs);
-			const make_conditions<gen_in<row_access> > make_gen_in_row(above, local_depths);
-			const make_conditions<gen_out<row_access> > make_gen_out_row(above, local_depths);
+			const sharedset& below_seen_ois = filter(mem_fn(&shared_variable::is_off_induction_stencil), global_in);
 
 			const conditions specond(spe_start.name(), parcond.induction, spe_stop.name(), parcond.step);
 			append(parent.value.xformations, fmap(make_conditions<gen_in_first<row_access> >(cons(above, specond), local_depths), flat_ins));
 
+			const make_conditions<gen_in<row_access> > make_gen_in_row(above, local_depths);
+			const make_conditions<gen_out<row_access> > make_gen_out_row(above, local_depths);
 			append(lbrace, fmap(make_gen_in_row, flat_ins));
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
 			lbrace.push_back(new define_variable(index_adapt()(parcond.induction)));
 		
-			if (flat_all.size()) {
+			if (!below_seen_ois.empty()) {
+				cout << "flat ";
+				loop_flip(node, above.back(), below_seen_ois);
+			}
+			else if (!flat_all.empty()) {
 				const shared_variable* first = *flat_all.begin();
 				const string& factor = first->math().factor(parcond.induction);
 				string buffer_size = buffer_adaptor(first).size();
 			
 				if (factor != "") {
-					buffer_size = "(" + buffer_size + "/" + factor + ")";
+					buffer_size = hug(buffer_size + "/" + factor);
 				}
 
 				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, specond, flat_all, buffer_size);
 			}
 
+			for_all(below_seen_ois, mem_fn(&shared_variable::in_generated));
 			for_all(flat_ins, mem_fn(&shared_variable::in_generated));
 			for_all(flat_outs, mem_fn(&shared_variable::out_generated));
 		}
