@@ -929,32 +929,88 @@ struct find_and_replace_xform {
 	}
 };
 
-struct modify_for_loop {
-	const shared_variable* v;
-	const conditions& conds;
-	const string& buffer_size;
+template <class F>
+struct walk_conditions {
+	F f;
 	int seen;
-	modify_for_loop(const shared_variable* _v, const conditions& c, const string& b): 
-		v(_v), conds(c), buffer_size(b), seen(0) {}
+	walk_conditions(F _f): f(_f), seen(0) {}
 	void operator()(pt_node& node)
 	{
 		if (is_expression(node)) {
 			++seen;
-
-			// Inelegant. find_and_replace_xform is only needed for flat; replace_node is 
-			// only needed for multi-dimensional. But every method I can think of to only 
-			// do one is less elegant and requires more contortions.
-			switch (seen) {
-				case 2:	find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name()))(node);
-					replace_node(conds.stop, new naked_string(full_adaptor(v).name()))(node);
-					break;
-				case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
-					node.children.clear();
-					break;
-			}
+			f(node, seen);
 		}
-		else {
-			for_all(node.children, this);
+	}
+};
+
+template <class F>
+walk_conditions<F> make_walk_conditions(F f)
+{
+	return walk_conditions<F>(f);
+}
+
+struct on_loop_mod {
+	const shared_variable* v;
+	const conditions& conds;
+	const string& buffer_size;
+	on_loop_mod(const shared_variable* _v, const conditions& c, const string& b): 
+		v(_v), conds(c), buffer_size(b) {}
+	void operator()(pt_node& node, const int seen)
+	{
+		// Inelegant. find_and_replace_xform is only needed for flat; replace_node is 
+		// only needed for multi-dimensional. But every method I can think of to only 
+		// do one is less elegant and requires more contortions.
+		switch (seen) {
+			case 2:	find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name()))(node);
+				replace_node(conds.stop, new naked_string(full_adaptor(v).name()))(node);
+				break;
+			case 3: node.value.xformations.push_back(new loop_increment(conds.induction, buffer_size));
+				node.children.clear();
+				break;
+		}
+	}
+};
+
+struct ois_outer_loop {
+	const shared_variable* v;
+	const conditions& conds;
+	const conditions& off;
+	ois_outer_loop(const shared_variable* _v, const conditions& c, const conditions& o): 
+		v(_v), conds(c), off(o) {}
+	void operator()(pt_node& node, const int seen)
+	{
+		switch (seen) {
+			case 1: for_all(node.children, replace_node(off.induction, new naked_string(conds.induction)));
+				break;
+			case 2: for_all(node.children, replace_node(off.induction, new naked_string(conds.induction)));
+				for_all(node.children, find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name())));
+				break;
+			case 3: for_all(node.children, replace_node(off.induction, new naked_string(conds.induction)));
+				node.value.xformations.push_back(new loop_increment(conds.induction, buffer_adaptor(v).size()));
+				node.children.clear();
+				break;
+		}
+	}
+};
+
+struct ois_inner_loop {
+	const shared_variable* v;
+	const conditions& conds;
+	const conditions& off;
+	ois_inner_loop(const shared_variable* _v, const conditions& c, const conditions& o): 
+		v(_v), conds(c), off(o) {}
+	void operator()(pt_node& node, const int seen)
+	{
+		switch (seen) {
+			case 1: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
+				break;
+			case 2: //for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
+				//for_all(node.children, find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name())));
+				break;
+			case 3: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
+				//node.value.xformations.push_back(new loop_increment(conds.induction, buffer_adaptor(v).size()));
+				//node.children.clear();
+				break;
 		}
 	}
 };
@@ -1046,12 +1102,11 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 
 	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
 	rbrace.push_back(new buffer_loop_stop());
+	for_all(for_loop.children, find_compound(conds, max));
 
 	append(for_loop.value.xformations, fmap(make_reset_buf_sz(speconds), seen));
 	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
 	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
-
-	for_all(for_loop.children, find_compound(conds, max));
 
 	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(for_loop, is_compound_expression);
 	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
@@ -1063,7 +1118,7 @@ void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const 
 
 	// Point of duplication
 	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
-	modify_for_loop(max, conds, buffer_size)(for_loop);
+	for_all(for_loop.children, make_walk_conditions(on_loop_mod(max, conds, buffer_size)));
 	remove_xforms<if_clause>(*loop_cmpd); // Hack! hack-hack-hack
 
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd), ids::for_loop);
@@ -1150,16 +1205,16 @@ void parse_conditions(pt_node& node, const int expressions_seen, condslist& abov
 	}
 }
 
-struct discover_conditions {
+class discover_conditions {
 	conditions& conds;
 	int expressions_seen;
 	condslist above;
 
+public:
 	discover_conditions(conditions& c): conds(c), expressions_seen(0) {}
 	void operator()(pt_node& node)
 	{
-		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) && 
-			expressions_seen < 3) {
+		if (is_expression(node) && expressions_seen < 3) {
 			++expressions_seen;
 			parse_conditions(node, expressions_seen, above, conds);
 		}
@@ -1169,28 +1224,44 @@ struct discover_conditions {
 	}
 };
 
-pair<pt_node*, pt_node::tree_iterator> find_off_loop(pt_node& outer, const conditions& off)
+pair<pt_node*, pt_node::tree_iterator> find_off_loop(pt_node& outer, const conditions& conds)
 {
 	pair<pt_node*, pt_node::tree_iterator> inner = find_shallow(outer, is_for_loop);
 	assert(inner.second != outer.children.end());
 
-	conditions conds;
-	discover_conditions dc(conds);
-	for_all((*inner.first).children, &dc);
+	conditions inner_conds;
+	discover_conditions dc(inner_conds);
+	for_all((*inner.second).children, &dc);
 
-	if (off == dc.conds) {
+	if (conds == inner_conds) {
 		return inner;
 	}
 	else {
-		return find_off_loop(*inner.first, off);
+		return find_off_loop(*inner.second, conds);
 	}
 }
 
-void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const sharedset& ois)
+void loop_flip(pt_node& outer_loop, const sharedset& ois)
 {
 	const shared_variable* v = *ois.begin();
-	pair<pt_node*, pt_node::tree_iterator> inner_loop = find_off_loop(outer_loop, v->off());
-	cout << "loop flip" << endl;
+	const conditions& conds = v->conds();
+	const conditions& off = v->off();
+
+	pt_node& inner_loop = *find_off_loop(outer_loop, conds).second;
+
+	xformerlist& lbrace = inner_loop.children.back().children.front().value.xformations;
+	xformerlist& rbrace = inner_loop.children.back().children.back().value.xformations;
+
+	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_adaptor(v).size(), rem_adaptor(v).name(), conds.induction, conds.step));
+	rbrace.push_back(new buffer_loop_stop());
+	for_all(inner_loop.children, find_compound(conds, v));
+
+	append(outer_loop.value.xformations, fmap(make_reset_buf_sz(conds), ois));
+	append(outer_loop.value.xformations, fmap(make_reset_rem(conds, ""), ois));
+	append(outer_loop.value.xformations, fmap(make_reset_full(conds.stop), ois));
+
+	for_all(outer_loop.children, make_walk_conditions(ois_outer_loop(v, conds, off)));
+	for_all(inner_loop.children, make_walk_conditions(ois_inner_loop(v, conds, off)));
 }
 
 struct for_compound_op {
@@ -1259,18 +1330,17 @@ struct for_compound_op {
 
 			xformerlist& lbrace = node.children.back().children.front().value.xformations;
 			const conditions inner = o.conds.back();
-			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(above, inner), local_depths), seen_in_ons));
+			append(lbrace, fmap(make_choice<gen_in<row_access>, gen_in<column_access> >(cons(above, inner), local_depths), seen_ins));
 			lbrace.push_back(new define_variable(index_adapt()(inner)));
 
 			xformerlist& rbrace = node.children.back().children.back().value.xformations;
 			append(rbrace, fmap(make_choice<gen_out<row_access>, gen_out<column_access> >(cons(above, inner), local_depths), seen_outs));
 
 			xformerlist& nested = node.value.xformations;
-			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(above, inner), local_depths), seen_in_ons));
+			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(above, inner), local_depths), seen_ins));
 
-			if (!below_seen_ois.empty()) {
-				cout << "nested ";
-				loop_flip(node, inner, below_seen_ois);
+			if (!below_seen_ois.empty() && (*below_seen_ois.begin())->off() == inner) {
+				loop_flip(node, below_seen_ois);
 			}
 			else if ((!seen_in_ons.empty() || !seen_outs.empty()) && seen_ois.empty()) {
 				const sharedset& seen_all = set_union_all(seen_in_ons, seen_outs);
@@ -1330,8 +1400,7 @@ struct parallel_for_op {
 		ops(op), above(a), parent(par), expressions_seen(0) {}
 	void operator()(pt_node& node)
 	{
-		if (node_is(node, ids::expression, ids::expression_statement, ids::assignment_expression, ids::unary_expression, ids::postfix_expression) &&
-				expressions_seen < 3) {
+		if (is_expression(node) && expressions_seen < 3) {
 			++expressions_seen;
 			parse_conditions(node, expressions_seen, above, parcond);
 
@@ -1380,9 +1449,8 @@ struct parallel_for_op {
 			append(rbrace, fmap(make_gen_out_row, flat_outs));
 			lbrace.push_back(new define_variable(index_adapt()(parcond.induction)));
 		
-			if (!below_seen_ois.empty()) {
-				cout << "flat ";
-				loop_flip(node, above.back(), below_seen_ois);
+			if (!below_seen_ois.empty() && (*below_seen_ois.begin())->off() == parcond) {
+				loop_flip(parent, below_seen_ois);
 			}
 			else if (!flat_all.empty()) {
 				const shared_variable* first = *flat_all.begin();
@@ -1401,110 +1469,6 @@ struct parallel_for_op {
 			for_all(flat_outs, mem_fn(&shared_variable::out_generated));
 		}
 		else {
-			for_all(node.children, this);
-		}
-	}
-};
-
-bool has_declaration(const pt_node& node)
-{
-	if (node_is(node, ids::declaration)) {
-		return true;
-	}
-	else {
-		for (pt_node::const_tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
-			if (has_declaration(*i)) {
-				return true;
-			}
-		}
-		return false;
-	}
-}
-
-struct wipeout_identifier {
-	const string& ident;
-	pt_node& root;
-	wipeout_identifier(const string& i, pt_node& r):
-		ident(i), root(r) {}
-	void operator()(pt_node& node)
-	{
-		if (node_is(node, ids::identifier)) {
-			if (ident == string(node.value.begin(), node.value.end())) {
-				root.value.xformations.push_back(new nop);
-				root.children.clear();
-			}
-		}
-	}
-};
-
-struct wipeout_declarations {
-	void operator()(pt_node& node)
-	{
-		if (node_is(node, ids::declaration)) {
-			node.value.xformations.push_back(new nop);
-			node.children.clear();
-		}
-	}
-};
-
-struct init_declarations_to_expressions {
-	void operator()(pt_node& node)
-	{
-		if (node_is(node, ids::declaration_specifiers, ids::pointer) || is_type_specifier(node)) {
-			node.value.xformations.push_back(new nop);
-			node.children.clear();
-		}
-		else if (node.value.id() != ids::compound) { // new scopes can keep their declarations
-			for_all(node.children, this);
-		}
-	}
-};
-
-bool is_const_declaration(const pt_node& node)
-{
-	if (node_is(node, ids::declaration_specifiers)) {
-		if (node.children.empty()) {
-			return false;
-		}
-		const pt_node& front = node.children.front();
-		return "const" == string(front.value.begin(), front.value.end());
-	}
-	else {
-		for (pt_node::const_tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
-			if (is_const_declaration(*i)) {
-				return true;
-			}
-		}
-		return false;
-	}
-}
-
-bool is_pure_declaration(const pt_node& node)
-{
-	if (node_is(node, ids::init_declarator)) {
-		return false;
-	}
-	else {
-		for (pt_node::const_tree_iterator i = node.children.begin(); i != node.children.end(); ++i) {
-			if (!is_pure_declaration(*i)) {
-				return false;
-			}
-		}
-		return true;
-	}
-}
-
-struct wipeout_const_and_pure_declarations {
-	void operator()(pt_node& node)
-	{
-		if (node_is(node, ids::declaration)) {
-			if (is_const_declaration(node) || is_pure_declaration(node)) {
-				node.value.xformations.push_back(new nop);
-				node.children.clear();
-			}
-
-		}
-		else if (node.value.id() != ids::compound) { // new scopes can keep their declarations
 			for_all(node.children, this);
 		}
 	}
