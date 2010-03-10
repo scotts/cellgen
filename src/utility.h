@@ -370,6 +370,12 @@ fn_not<T> make_fn_not(bool (T::*f)() const)
 }
 
 template <class T>
+bool same_object(const T& a, const T& b)
+{
+	return &a == &b;
+}
+
+template <class T>
 T from_string(const string& str)
 {
 	stringstream ss;

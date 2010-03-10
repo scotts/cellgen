@@ -898,9 +898,8 @@ struct replace_node {
 			call_descend(build_string(str), node);
 			if (to_replace == str) {
 				node.value.xformations.push_back(x);
+				node.children.clear();
 			}
-
-			node.children.clear();
 		}
 		else {
 			for_all(node.children, this);
@@ -1004,12 +1003,10 @@ struct ois_inner_loop {
 		switch (seen) {
 			case 1: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
 				break;
-			case 2: //for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
-				//for_all(node.children, find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name())));
+			case 2: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
+				for_all(node.children, find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name())));
 				break;
 			case 3: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
-				//node.value.xformations.push_back(new loop_increment(conds.induction, buffer_adaptor(v).size()));
-				//node.children.clear();
 				break;
 		}
 	}
@@ -1091,44 +1088,6 @@ struct max_buffer: unary_function<const region_variable*, void> {
 	}
 };
 
-// Need to transform postfix accesses for all non-shared variables.
-void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-		const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)
-{
-	const shared_variable* max = for_all(seen, max_buffer()).max;
-	const string& max_factor = max->math().factor(conds.induction);
-	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
-	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
-
-	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
-	rbrace.push_back(new buffer_loop_stop());
-	for_all(for_loop.children, find_compound(conds, max));
-
-	append(for_loop.value.xformations, fmap(make_reset_buf_sz(speconds), seen));
-	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
-	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
-
-	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(for_loop, is_compound_expression);
-	(*left_cmpd.second).value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
-
-	pt_node::tree_iterator nested = find_shallow(for_loop, is_for_loop).second;
-	if (nested != for_loop.children.end()) {
-		call_descend(make_for_all_xformations(mem_fn(&xformer::nest_me)), *nested);
-	}
-
-	// Point of duplication
-	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
-	for_all(for_loop.children, make_walk_conditions(on_loop_mod(max, conds, buffer_size)));
-	remove_xforms<if_clause>(*loop_cmpd); // Hack! hack-hack-hack
-
-	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *(++loop_cmpd), ids::for_loop);
-}
-
-void loop_mitosis(pt_node& for_loop, const shared_symtbl& shared_symbols, const priv_symtbl& priv_symbols, 
-		const conditions& conds, const sharedset& seen, const string& buffer_size)
-{
-	loop_mitosis(for_loop, shared_symbols, priv_symbols, conds, conds, seen, buffer_size);
-}
 
 struct operator_wedge {
 	pt_node*& lhs;
@@ -1241,9 +1200,13 @@ pair<pt_node*, pt_node::tree_iterator> find_off_loop(pt_node& outer, const condi
 	}
 }
 
-void loop_flip(pt_node& outer_loop, const sharedset& ois)
+// loop_flip and loop_mitosis are obviously similar both in structure and because loop_mitosis 
+// splits the loop body for "normal" code, and loop_flip inverts two loops for off-induction 
+// stencil accesses. There exists a function that is the generalization of these two functions. 
+// But the differences between these two is subtle, so I don't want to spend the time factoring 
+// that out.
+void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const sharedset& seen, const shared_variable* v)
 {
-	const shared_variable* v = *ois.begin();
 	const conditions& conds = v->conds();
 	const conditions& off = v->off();
 
@@ -1256,12 +1219,58 @@ void loop_flip(pt_node& outer_loop, const sharedset& ois)
 	rbrace.push_back(new buffer_loop_stop());
 	for_all(inner_loop.children, find_compound(conds, v));
 
-	append(outer_loop.value.xformations, fmap(make_reset_buf_sz(conds), ois));
-	append(outer_loop.value.xformations, fmap(make_reset_rem(conds, ""), ois));
-	append(outer_loop.value.xformations, fmap(make_reset_full(conds.stop), ois));
+	append(outer_loop.value.xformations, fmap(make_reset_buf_sz(outer_conds), seen));
+	append(outer_loop.value.xformations, fmap(make_reset_rem(outer_conds, ""), seen));
+	append(outer_loop.value.xformations, fmap(make_reset_full(outer_conds.stop), seen));
 
 	for_all(outer_loop.children, make_walk_conditions(ois_outer_loop(v, conds, off)));
 	for_all(inner_loop.children, make_walk_conditions(ois_inner_loop(v, conds, off)));
+
+	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(outer_loop, is_compound_expression);
+
+	// Point of duplication
+	pt_node::tree_iterator dupe = outer_loop.children.insert(find_if_all(outer_loop.children, bind(same_object<pt_node>, _1, outer_loop)), *left_cmpd.second);
+	dupe->value.xformations.push_back(new if_clause(rem_adaptor(v).name()));
+
+	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *dupe);
+}
+
+void loop_mitosis(pt_node& for_loop, const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)
+{
+	const shared_variable* max = for_all(seen, max_buffer()).max;
+	const string& max_factor = max->math().factor(conds.induction);
+
+	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
+	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
+
+	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
+	rbrace.push_back(new buffer_loop_stop());
+	for_all(for_loop.children, find_compound(conds, max));
+
+	append(for_loop.value.xformations, fmap(make_reset_buf_sz(speconds), seen));
+	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
+	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
+
+	for_all(for_loop.children, make_walk_conditions(on_loop_mod(max, conds, buffer_size)));
+
+	pt_node::tree_iterator nested = find_shallow(for_loop, is_for_loop).second;
+	if (nested != for_loop.children.end()) {
+		call_descend(make_for_all_xformations(mem_fn(&xformer::nest_me)), *nested);
+	}
+
+	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(for_loop, is_compound_expression);
+
+	// Point of duplication
+	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
+	pt_node::tree_iterator rem = next(loop_cmpd, left_cmpd.first->children);
+
+	rem->value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
+	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *rem, ids::for_loop);
+}
+
+void loop_mitosis(pt_node& for_loop, const conditions& conds, const sharedset& seen, const string& buffer_size)
+{
+	loop_mitosis(for_loop, conds, conds, seen, buffer_size);
 }
 
 struct for_compound_op {
@@ -1340,14 +1349,17 @@ struct for_compound_op {
 			append(nested, fmap(make_choice<gen_in_first<row_access>, gen_in_first<column_access> >(cons(above, inner), local_depths), seen_ins));
 
 			if (!below_seen_ois.empty() && (*below_seen_ois.begin())->off() == inner) {
-				loop_flip(node, below_seen_ois);
+				const shared_variable* rep = *below_seen_ois.begin();
+
+				// FIXME: this will only work if the two loops are deepest nested
+				loop_flip(node, rep->conds(), set_union_all(global_in, global_out), rep);
 			}
 			else if ((!seen_in_ons.empty() || !seen_outs.empty()) && seen_ois.empty()) {
 				const sharedset& seen_all = set_union_all(seen_in_ons, seen_outs);
 				const shared_variable* first = *seen_all.begin();
 				const string& buffer_size = buffer_adaptor(first).size();
 
-				loop_mitosis(node, shared_symbols, priv_symbols, inner, seen_all, buffer_size);
+				loop_mitosis(node, inner, seen_all, buffer_size);
 			}
 
 			for_all(below_seen_ois, mem_fn(&shared_variable::in_generated));
@@ -1450,7 +1462,10 @@ struct parallel_for_op {
 			lbrace.push_back(new define_variable(index_adapt()(parcond.induction)));
 		
 			if (!below_seen_ois.empty() && (*below_seen_ois.begin())->off() == parcond) {
-				loop_flip(parent, below_seen_ois);
+				shared_variable* rep = *below_seen_ois.begin();
+				const conditions conds = rep->conds();
+				loop_flip(parent, conditions(spe_start.name(), conds.induction, spe_stop.name(), conds.step), 
+						set_union_all(global_in, global_out), rep);
 			}
 			else if (!flat_all.empty()) {
 				const shared_variable* first = *flat_all.begin();
@@ -1461,7 +1476,7 @@ struct parallel_for_op {
 					buffer_size = hug(buffer_size + "/" + factor);
 				}
 
-				loop_mitosis(parent, shared_symbols, priv_symbols, parcond, specond, flat_all, buffer_size);
+				loop_mitosis(parent, parcond, specond, flat_all, buffer_size);
 			}
 
 			for_all(below_seen_ois, mem_fn(&shared_variable::in_generated));
