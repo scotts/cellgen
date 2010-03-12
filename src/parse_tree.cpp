@@ -1200,7 +1200,7 @@ pair<pt_node*, pt_node::tree_iterator> find_off_loop(pt_node& outer, const condi
 	}
 }
 
-// loop_flip and loop_mitosis are obviously similar both in structure and because loop_mitosis 
+// loop_flip and loop_mitosis are obviously similar both in structure and function. loop_mitosis 
 // splits the loop body for "normal" code, and loop_flip inverts two loops for off-induction 
 // stencil accesses. There exists a function that is the generalization of these two functions. 
 // But the differences between these two is subtle, so I don't want to spend the time factoring 
@@ -1226,13 +1226,15 @@ void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const shareds
 	for_all(outer_loop.children, make_walk_conditions(ois_outer_loop(v, conds, off)));
 	for_all(inner_loop.children, make_walk_conditions(ois_inner_loop(v, conds, off)));
 
-	pair<pt_node*, pt_node::tree_iterator> left_cmpd = find_shallow(outer_loop, is_compound_expression);
+	pair<pt_node*, pt_node::tree_iterator> cmpd = find_shallow(outer_loop, is_compound_expression);
 
 	// Point of duplication
-	pt_node::tree_iterator dupe = outer_loop.children.insert(find_if_all(outer_loop.children, bind(same_object<pt_node>, _1, outer_loop)), *left_cmpd.second);
+	pt_node::tree_iterator dupe = outer_loop.children.insert(find_if_all(outer_loop.children, bind(same_object<pt_node>, _1, outer_loop)), *cmpd.second);
 	dupe->value.xformations.push_back(new if_clause(rem_adaptor(v).name()));
+	append(dupe->children.front().value.xformations, fmap(make_zero_next(), seen));
 
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *dupe);
+	call_descend(make_for_all_xformations(mem_fn(&xformer::infect_me)), *dupe);
 }
 
 void loop_mitosis(pt_node& for_loop, const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)

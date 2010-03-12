@@ -38,7 +38,7 @@ void jacobi_on_spe(int16b_t (*a)[N], int16b_t (*b)[N])
 	// pragma cell shared(int16b_t* aim = a[N][N], int16b_t* aip = a[N][N], int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
 	#pragma cell shared(int16b_t* a = a[N][N], int16b_t* b = b[N][N])
 	{
-		unsigned int i, j;
+		int i, j;
 		for (i = 1; i < N-1; ++i) {
 			for (j = 1; j < N-1; ++j) {
 				//b[i][j].num = ai[i-1][j].num + ai[i+1][j].num + aj[i][j-1].num + aj[i][j+1].num;

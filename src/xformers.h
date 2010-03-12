@@ -13,7 +13,8 @@ using namespace std;
 struct xformer: public unary_function<const string&, string> {
 	virtual ~xformer() {}
 	virtual void remainder_me() {} // Sigh. It's a hack to put this here, but it makes life so much easier.
-	virtual void nest_me() {} // Double sigh, double hack.
+	virtual void infect_me() {} // Double sigh, double hack. 
+	virtual void nest_me() {} // Trip!
 	virtual string operator()(const string& old) = 0;
 	virtual xformer* clone() const = 0;
 	virtual string class_name() const = 0; // For debugging purposes only.
@@ -80,6 +81,17 @@ public:
 	}
 };
 
+class ois_infected: virtual public xformer {
+protected:
+	bool is_ois_infected;
+public:
+	ois_infected(): is_ois_infected(false) {}
+	virtual void infect_me()
+	{
+		is_ois_infected = true;
+	}
+};
+
 class nested_xformer: virtual public xformer {
 protected:
 	bool nested;
@@ -105,29 +117,59 @@ class to_buffer_space: virtual public xformer {
 	const add_expr math;
 	const condslist above;
 	const variable index;
+
+	string factor()
+	{
+		string f = math.factor(above.back().induction);
+		if (f != "") {
+			return "*" + f;
+		}
+
+		return "";
+	}
+
+	string on_offset()
+	{
+		string o = math.non_ihs(above.back().induction).str();
+		if (o != "") {
+			return "+" + o;
+		}
+
+		return "";
+	}
+
+	string factor_on_offset()
+	{
+		if (v->is_flat() && v->math().factor(above.back().induction) != "") {
+			return factor() + on_offset();
+		}
+		else if (v->stencil_low(above.back().induction) != v->stencil_high(above.back().induction)) {
+			return "+" + to_string(from_string<int>(math.stencil_offset(above.back().induction)) - v->stencil_low(above.back().induction));
+		}
+
+		return "";
+	}
+
+	int off_offset()
+	{
+		if (v->is_off_induction_stencil()) {
+			try {
+				return from_string<int>(math.stencil_offset(v->off().induction));
+			}
+			catch (ivar_not_found) {
+				return 0;
+			}
+		}
+
+		return 0;
+	}
+
 public:
 	to_buffer_space(const shared_variable* _v, const add_expr& m, const condslist& a, const variable& i): 
 		v(_v), math(m), above(a), index(i) {}
 	string operator()(const string& old)
 	{
-		string offset;
-		string factor;
-		if (v->is_flat() && v->math().factor(above.back().induction) != "") {
-			offset = math.non_ihs(above.back().induction).str();
-			if (offset != "") {
-				offset = "+" + offset;
-			}
-
-			factor = math.factor(above.back().induction);
-			if (factor != "") {
-				factor = "*" + factor;
-			}
-		}
-		else if (v->stencil_low(above.back().induction) != v->stencil_high(above.back().induction)) {
-			offset = "+" + to_string(from_string<int>(math.stencil_offset(above.back().induction)) - v->stencil_low(above.back().induction));
-		}
-
-		return old + orig_adaptor(v).name() + "[" + index.name() + factor + offset + "]";
+		return old + orig_adaptor(v).off_stencil_name(off_offset()) + "[" + index.name() + factor_on_offset() + "]";
 	}
 
 	xformer* clone() const { return new to_buffer_space(*this); }
@@ -448,13 +490,6 @@ public:
 
 			alloc = buff.declare() + "=" + hug(buff.type() + "*") + "_malloc_align(sizeof(" + buff.type() + ")*" + to_string(num_buffs) + 
 					"*" + row_size + ",7);";
-
-			if (v->is_off_induction_stencil()) {
-				for (int i = v->stencil_low(v->off().induction), count = 0; i < v->stencil_high(v->off().induction) + 1; ++i, ++count) {
-					alloc += buff.type() + "* " + orig_adaptor(v).off_stencil_name(i) + "=" + 
-						buff.name() + "+" + row_size + "*" + to_string(count) + ";";
-				}
-			}
 		}
 
 		return old + alloc;
@@ -538,11 +573,32 @@ public:
 	define_next(const shared_variable* _v): v(_v) {}
 	string operator()(const string& old)
 	{
-		return old + next_adaptor(v).declare() + " = 0; \n";
+		return old + next_adaptor(v).declare() + "= 0;";
 	}
 
 	xformer* clone() const { return new define_next(*this); }
 	string class_name() const { return "define_next"; }
+};
+
+class zero_next: public xformer {
+	shared_variable* v;
+
+public:
+	zero_next(shared_variable* _v): v(_v) {}
+	string operator()(const string& old)
+	{
+		return old + next_adaptor(v).name() + "= 0;";
+	}
+
+	xformer* clone() const { return new zero_next(*this); }
+	string class_name() const { return "zero_next"; }
+};
+
+struct make_zero_next: public unary_function<shared_variable*, xformer*> {
+	xformer* operator()(shared_variable* v)
+	{
+		return new zero_next(v);
+	}
 };
 
 class define_buffer: public xformer {
@@ -555,9 +611,19 @@ public:
 		buffer_adaptor buff(v);
 		orig_adaptor orig(v);
 
-		return	old + 
-			orig.declare() + "; \n" +
-			orig.name() + " = " + buff.name() + "; \n";
+		string alloc;
+		if (v->is_off_induction_stencil()) {
+			const string row_size = hug(buff.size() + "+" + to_string(v->stencil_row_spread()));
+			for (int i = v->stencil_low(v->off().induction), count = 0; i < v->stencil_high(v->off().induction) + 1; ++i, ++count) {
+				alloc += buff.type() + "* " + orig_adaptor(v).off_stencil_name(i) + "=" + 
+					buff.name() + "+" + row_size + "*" + to_string(count) + ";";
+			}
+		}
+		else {
+			alloc = orig.declare() + ";" + orig.name() + " = " + buff.name() + ";";
+		}
+
+		return	old + alloc;
 	}
 
 	xformer* clone() const { return new define_buffer(*this); }
@@ -1167,7 +1233,7 @@ public:
 
 			string buff_step;
 			for (int i = low, count = 0; i < v->stencil_high(v->off().induction) + 1; ++i, ++count) {
-				buff_step += orig.off_stencil_name(i) + "=" + buff.name() + hug(buff.abs() + "+" + spread) + "*" + 
+				buff_step += orig.off_stencil_name(i) + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + 
 					hug(hug(prev.name() + "+" + to_string(count)) + "%" + to_string(off_spread + 2)) + ";";
 			}
 
@@ -1201,8 +1267,10 @@ public:
 	string class_name() const { return "gen_in<" + Access::class_name() + ">"; }
 };
 
+// Shared variables cannot be both ois AND an out variable. But, an out variable may be used 
+// in the same loop as an ois variable. If that happens, we consider the gen_out to be ois-infected.
 template <class Access>
-struct gen_out: public conditions_xformer, public remainder_xformer, public nested_xformer, public Access {
+struct gen_out: public conditions_xformer, public remainder_xformer, public nested_xformer, public ois_infected, public Access {
 	gen_out(shared_variable* v, const condslist& a, const int d): conditions_xformer(v, a, d), Access(v, a) {}
 	string operator()(const string& old)
 	{
@@ -1219,7 +1287,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 		const string wait = "dma_wait(" + next.name() + ", fn_id);";
 
 		string dma;
-		if (is_remainder) {
+		if (is_remainder && !is_ois_infected) {
 			dma = dma_out(hug(v->name() + "+" + Access::final_buffer()), depth, Access::remainder_size(), next.name()); 
 			return dma + wait + old;
 		}

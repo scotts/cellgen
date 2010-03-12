@@ -23,4 +23,4 @@ inline unsigned int prev16(const unsigned int x)
 	}
 }
 
-void compute_bounds (unsigned int *start, unsigned int *stop, size_t element_sz);
+void compute_bounds (int *start, int *stop, size_t element_sz);
