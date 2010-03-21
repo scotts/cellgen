@@ -54,17 +54,14 @@ unsigned long long time_loop[NUM_FNs];
 unsigned long long loop_time;
 unsigned int cnt_loop[NUM_FNs];
 unsigned int loop_started;
-unsigned long long time_ppu_start;
-unsigned long long time_ppu_between_loops;
-unsigned long long time_cellgen_start;
+unsigned long long ppu_start;
+unsigned long long ppu_between_loops;
+unsigned long long total_start;
 #endif
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
-
-void cellgen_start();
-void cellgen_finish();
 
 void spe_offloads(void);
 void spe_start(unsigned int i, int value);
@@ -87,6 +84,7 @@ int sched_yield();
 		} \
 		*c op##= ((struct signal_t *)sig[i])->result;  \
 	} \
+	profile_end_fn(fn_id); \
 })
 
 static inline unsigned long mftb()
@@ -131,7 +129,7 @@ static inline void profile_start_fn()
 	#ifdef PROFILING
 	loop_time = get_tb();
 	if (loop_started) {
-		time_ppu_between_loops += loop_time - time_ppu_start;
+		ppu_between_loops += loop_time - ppu_start;
 	}
 	else {
 		loop_started = 1;
@@ -144,7 +142,7 @@ static inline void profile_end_fn(unsigned int fn_id __attribute__((unused)))
 	#ifdef PROFILING
 	cnt_loop[fn_id-1]++;
 	time_loop[fn_id-1] += get_tb() - loop_time;
-	time_ppu_start = get_tb();
+	ppu_start = get_tb();
 	#endif
 }
 

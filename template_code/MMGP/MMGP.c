@@ -247,19 +247,19 @@ inline void wait_for_spes(int fn_id)
 }
 
 
-inline void cellgen_start(void)
+static void cellgen_start(void)
 {
 	#ifdef PROFILING
-	time_cellgen_start = get_tb();
+	total_start = get_tb();
 	#endif
 }
 
-inline void cellgen_finish(void)
+static void cellgen_finish(void)
 {
 	unsigned int i;
 
 	#ifdef PROFILING
-	unsigned long long time_cellgen_end = get_tb();
+	unsigned long long total_stop = get_tb();
 	unsigned int loop;
 	unsigned int loop_cnt_all = 0;
 	unsigned long long loop_time_all = 0UL;
@@ -274,34 +274,26 @@ inline void cellgen_finish(void)
 	unsigned long long T_idle_spe[spe_threads];
 	unsigned long long T_L_all, T_DMA_all, T_total_all;
 
-	/*
-	printf("\n\nTotal Time: %f (sec)\n\n", (double)(time_cellgen_end-time_cellgen_start) / timebase);
-	printf("\n========== PPE stats ==========\n\n");
-	*/
+	printf("\ntotal time: %f s\n", (double)(total_stop - total_start) / timebase);
 
-	for (i=0; i<NUM_FNs; i++) {
-		//printf("fn%u call count: %u\n", i+1, cnt_loop[i]);
+	for (i = 0; i < NUM_FNs; i++) {
+		printf("loop%u call count: %u\n", i+1, cnt_loop[i]);
 		loop_cnt_all += cnt_loop[i];
 	}
+	printf("loop count total: %u\n", loop_cnt_all);
 
-	//printf("fn count total = %u\n\n", loop_cnt_all);
-
-	for (i=0; i<NUM_FNs; i++) {
-		//printf("L%u: %.6f (sec)\n", i+1, ((double)time_loop[i])/timbebase);
+	for (i = 0; i < NUM_FNs; i++) {
+		printf("loop%u: %.6f s\n", i+1, (double)time_loop[i] / timebase);
 		loop_time_all += time_loop[i];
 	}
+	printf("loop time total: %.6f s\n", (double)loop_time_all / timebase);
 
-	/*
-	printf("time spent on PPU workload between offloaded loops: %.6f (sec)\n",((double)time_ppu_between_loops)/timebase);
-	printf("time spend on prolog and epilog: %.6f (sec)\n", ((double)(time_cellgen_end-time_cellgen_start)-(loop_time_all+time_ppu_between_loops))/timebase );
-
-	printf("\n========== SPE stats ==========\n");
-	*/
+	printf("time spent on PPU workload between offloaded loops: %.6f s\n",((double)ppu_between_loops)/timebase);
+	printf("time spent on prolog and epilogue: %.6f s\n", ((double)(total_stop-total_start)-(loop_time_all+ppu_between_loops))/timebase );
 
 	for (i = 0; i < spe_threads; i++) {
 		spe_start(i, GET_TIMES);
 	}
-
 	wait_for_spes(GET_TIMES);
 
 	for (i = 0; i < spe_threads; i++) { 
@@ -315,44 +307,29 @@ inline void cellgen_finish(void)
 	for (loop = 0; loop < NUM_FNs; loop++) {
 		T_L_all = T_DMA_all = T_total_all = 0;
 
-		//printf("loop%u model %f\n", loop + 1, model_estimate[loop]);
-		//printf("\nL%d :          Loop      DMA     Comp\n", loop+1);
+		printf("\nloop%d:\tLoop\t\tDMA\t\tComp\n", loop+1);
 		for (i = 0; i < spe_threads; i++) {
 			T_L_all += (T_L[i][loop] = ((struct signal_t *)sig[i])->T_fn[loop]);
 			T_DMA_all += (T_DMA[i][loop] = ((struct signal_t *)sig[i])->T_DMA[loop]);
 			T_total_all += (T_total[i][loop] = ((struct signal_t *)sig[i])->T_total[loop]);
-			//printf("%d %f\n", i, (((double)T_L[i][loop] / timebase) * 3.2e9) / offload_count[loop]);
-			//printf("     SPE%u %8.6f %8.6f %8.6f\n",i+1, (double)T_L[i][loop] /timebase, (double)T_DMA[i][loop] /timebase, (double)T_total[i][loop] /timebase);
+			printf("spe%u:\t%8.6f\t%8.6f\t%8.6f\n",i+1, (double)T_L[i][loop] /timebase, (double)T_DMA[i][loop] /timebase, (double)T_total[i][loop] /timebase);
 		}
-		//printf("\n");
-		printf("%e ", (double)(T_total_all)/ timebase / spe_threads / cnt_loop[loop]);
-		printf("%e\n", (double)(T_DMA_all)/ timebase / spe_threads / cnt_loop[loop]);
-		//printf("avg L%u computation time: %8.6f (sec)\n", loop+1, (double)(T_total_all)/ timebase / spe_threads);
+		printf("avg time per offload: %e s\n", (double)(T_total_all)/ timebase / spe_threads / cnt_loop[loop]);
+		printf("avg DMA per offload: %e s\n", (double)(T_DMA_all)/ timebase / spe_threads / cnt_loop[loop]);
+		printf("avg comp per offload: %8.6f s\n", loop+1, (double)(T_total_all) / timebase / spe_threads);
 	}
 
-	//printf("\n\n           --- Summary ---            \n");
-	#ifndef DMA_PREP_REPORT
-	//printf("SPE         fn fn_kernel   DMA_all      idle\n");
-	for (i = 0; i < spe_threads; i++) {
-		//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
-		//(double)T_DMA_spe[i] / timebase, (double)T_idle_spe[i] / timebase);
-	}
-	#else
-	//printf("SPE         fn fn_kernel   DMA_all      DMA_prep  idle\n");
-	for (i = 0; i < spe_threads; i++) {
-	//printf("SPE%u  %7.6f  %7.6f  %7.6f  %7.6f  %7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
-	//(double)T_DMA_spe[i] / timebase, (double)T_DMA_prep_spe[i] / timebase, (double)T_idle_spe[i] / timebase);
-	}
-	#endif // DMA_PREP_REPORT
-	/*
-	printf("\n\n");
-	printf("========== Time legend ==========\n");
-	printf("Loop: total time spent on loops\n");
-	printf("DMA:  non-overlapped DMA time\n");
-	printf("Comp: time spent on the computing results\n");
-	printf("idle: idle SPE time due to signaling mechanism and ppu workload while switching between different loops due to signaling and ppu workload\n");
 	printf("\n");
-	*/
+
+	printf("SPE\tfn\t\tfn_kernel\tDMA_all\t\tDMA_prep\tidle\n");
+	for (i = 0; i < spe_threads; i++) {
+		printf("spe%u\t%7.6f\t%7.6f\t%7.6f\t%7.6f\t%7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
+			(double)T_DMA_spe[i] / timebase, (double)T_DMA_prep_spe[i] / timebase, (double)T_idle_spe[i] / timebase);
+	}
+
+	// For easy parsing when multiple runs are in the same output file
+	printf(".\n");
+
 	#endif // PROFILING
 
 	for (i = 0; i < spe_threads; i++) {
@@ -381,8 +358,8 @@ static void spe_init(unsigned int num_threads)
 	}
 	loop_time = 0UL;
 	loop_started = 0;
-	time_ppu_start = 0UL;
-	time_ppu_between_loops = 0UL;
+	ppu_start = 0UL;
+	ppu_between_loops = 0UL;
 	#endif
 }
 
@@ -429,6 +406,8 @@ __attribute__((constructor)) void __initialize()
 
 	spe_init(NUM_THREADS_HOOK);
 	spe_create_threads();
+
+	cellgen_start();
 }
 
 __attribute__((destructor)) void __finalize()
