@@ -406,8 +406,8 @@ public:
 				def = buffer;
 			}
 
-			declaration += variable("unsigned int", buffer_adaptor(v).size(), def + factor).define() + ";" + 
-				const_variable("unsigned int", buffer_adaptor(v).abs(), def + factor).define() + ";";
+			declaration += variable("unsigned int", buffer_adaptor(v).size(), hug(def) + factor).define() + ";" + 
+				const_variable("unsigned int", buffer_adaptor(v).abs(), hug(def) + factor).define() + ";";
 		}
 
 		return old + declaration;
@@ -691,13 +691,12 @@ struct make_reset_buf_sz: public unary_function<shared_variable*, xformer*> {
 class reset_rem: public xformer {
 	const shared_variable* v;
 	const conditions conds;
-	const string max_factor;
 
 public:
-	reset_rem(const shared_variable* _v, const conditions& c, const string& m): v(_v), conds(c), max_factor(m) {}
+	reset_rem(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
 	string operator()(const string& old)
 	{
-		return old + rem_adaptor(v).reset(conds, max_factor) + ";";
+		return old + rem_adaptor(v).reset(conds) + ";";
 	}
 
 	xformer* clone() const { return new reset_rem(*this); }
@@ -706,24 +705,23 @@ public:
 
 struct make_reset_rem: public unary_function<shared_variable*, xformer*> {
 	const conditions& conds;
-	const string& max_factor;
-	make_reset_rem(const conditions& c, const string& m): conds(c), max_factor(m) {}
+	make_reset_rem(const conditions& c): conds(c) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new reset_rem(v, conds, max_factor);
+		return new reset_rem(v, conds);
 	}
 };
 
 class reset_full: public xformer {
 	const shared_variable* v;
-	const string stop;
+	const conditions conds;
 
 public:
-	reset_full(const shared_variable* _v, const string& b): v(_v), stop(b) {}
+	reset_full(const shared_variable* _v, const conditions& c): v(_v), conds(c) {}
 	string operator()(const string& old)
 	{
-		return old + full_adaptor(v).reset(stop) + ";";
+		return old + full_adaptor(v).reset(conds) + ";";
 	}
 
 	xformer* clone() const { return new reset_full(*this); }
@@ -731,12 +729,12 @@ public:
 };
 
 struct make_reset_full: public unary_function<shared_variable*, xformer*> {
-	const string stop;
-	make_reset_full(const string& e): stop(e) {}
+	const conditions conds;
+	make_reset_full(const conditions& c): conds(c) {}
 
 	xformer* operator()(shared_variable* v)
 	{
-		return new reset_full(v, stop);
+		return new reset_full(v, conds);
 	}
 };
 
@@ -903,7 +901,7 @@ public:
 	{
 		const string spread = to_string(v->stencil_spread(conds.induction));
 		return hug(bounds() + "<" + full_adaptor(v).name() + "?" + 
-			buffer_adaptor(v).size() + "+" + spread + ":" + remainder_size() + "+" + spread);
+			buffer_adaptor(v).size() + "+" + spread + ": next16(" + remainder_size() + ") +" + spread);
 	}
 };
 
@@ -1015,7 +1013,7 @@ public:
 		else {
 			return v->math().remove_stencil(conds.induction).
 				replace_induction(conds.induction, hug(conds.start + "+" + rep)).
-				replace_induction(v->off().induction, v->off().start + "+" + to_string(v->stencil_low(conds.induction))).
+				replace_induction(v->off().induction, hug(v->off().start + "+" + to_string(v->stencil_low(conds.induction)))).
 				expand_all_inductions(remove_back(above), nested).str();
 		}
 	}
@@ -1036,6 +1034,7 @@ public:
 	{
 		const string& factor = v->math().factor(conds.induction);
 		if (v->is_flat() && factor != "") {
+			//return "next16(" + rem_adaptor(v).name() + "*" + factor + ")";
 			return rem_adaptor(v).name() + "*" + factor;
 		}
 		else {
@@ -1110,7 +1109,7 @@ public:
 	{
 		return v->math().remove_stencil(conds.induction).
 			replace_induction(conds.induction, hug(conds.start + "+" + rep)).
-			replace_induction(v->off().induction, v->off().start + "+" + to_string(v->stencil_low(v->off().induction))).
+			replace_induction(v->off().induction, hug(v->off().start + "+" + to_string(v->stencil_low(v->off().induction)))).
 			expand_all_inductions(remove_back(above), nested).str();
 	}
 

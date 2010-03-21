@@ -322,7 +322,7 @@ public:
 		return "unsigned int " + name();
 	}
 
-	string reset(const conditions& conds, const string& max_factor) const
+	string reset_value(const conditions& conds) const
 	{
 		string factor;
 		if (v->is_flat()) {
@@ -332,14 +332,12 @@ public:
 			}
 		}
 		
-		const string base = "(((" + conds.stop + ") - (" + conds.start + ") ) % (" + buffer_adaptor(v).size() + factor + "))";
+		return hug(conds.stop + "-" + conds.start) + "%" + hug(buffer_adaptor(v).size() + factor);
+	}
 
-		string correction;
-		if (factor == "" && max_factor != "" && from_string<int>(factor) < from_string<int>(max_factor)) {
-			correction = "+(" + base + "% 16)";
-		}
-
-		return name() + "= " + base + correction;
+	string reset(const conditions& conds) const
+	{
+		return name() + "=" + reset_value(conds);
 	}
 };
 
@@ -353,9 +351,9 @@ public:
 		return "unsigned int " + name(); 
 	}
 
-	string reset(const string& stop) const
+	string reset(const conditions& conds) const
 	{
-		return name() + "= (" + stop + ") -" + rem_adaptor(v).name();
+		return name() + "= (" + conds.stop + ") -" + rem_adaptor(v).reset_value(conds);
 	}
 };
 

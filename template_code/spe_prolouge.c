@@ -23,4 +23,20 @@ inline unsigned int prev16(const unsigned int x)
 	}
 }
 
+inline unsigned int next16(const unsigned int x)
+{
+	if (x == 0) {
+		return 0;
+	}
+	if (x <= 16) {
+		return 16;
+	}
+	else if (x % 16 == 0) {
+		return x;
+	}
+	else {
+		return (x - (x % 16)) + 16;
+	}
+}
+
 void compute_bounds (int *start, int *stop, size_t element_sz);

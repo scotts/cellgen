@@ -1220,8 +1220,8 @@ void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const shareds
 	for_all(inner_loop.children, find_compound(conds, v));
 
 	append(outer_loop.value.xformations, fmap(make_reset_buf_sz(outer_conds), seen));
-	append(outer_loop.value.xformations, fmap(make_reset_rem(outer_conds, ""), seen));
-	append(outer_loop.value.xformations, fmap(make_reset_full(outer_conds.stop), seen));
+	append(outer_loop.value.xformations, fmap(make_reset_rem(outer_conds), seen));
+	append(outer_loop.value.xformations, fmap(make_reset_full(outer_conds), seen));
 
 	for_all(outer_loop.children, make_walk_conditions(ois_outer_loop(v, conds, off)));
 	for_all(inner_loop.children, make_walk_conditions(ois_inner_loop(v, conds, off)));
@@ -1240,20 +1240,21 @@ void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const shareds
 void loop_mitosis(pt_node& for_loop, const conditions& conds, const conditions& speconds, const sharedset& seen, const string& buffer_size)
 {
 	const shared_variable* max = for_all(seen, max_buffer()).max;
-	const string& max_factor = max->math().factor(conds.induction);
 
 	xformerlist& lbrace = for_loop.children.back().children.front().value.xformations;
 	xformerlist& rbrace = for_loop.children.back().children.back().value.xformations;
 
-	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_size, rem_adaptor(max).name(), conds.induction, conds.step));
+	lbrace.push_back(new buffer_loop_start(index_adapt()(conds), buffer_size, rem_adaptor(*seen.begin()).name(), conds.induction, conds.step));
 	rbrace.push_back(new buffer_loop_stop());
 	for_all(for_loop.children, find_compound(conds, max));
 
 	append(for_loop.value.xformations, fmap(make_reset_buf_sz(speconds), seen));
-	append(for_loop.value.xformations, fmap(make_reset_rem(speconds, max_factor), seen));
-	append(for_loop.value.xformations, fmap(make_reset_full(speconds.stop), seen));
+	append(for_loop.value.xformations, fmap(make_reset_rem(speconds), seen));
+	append(for_loop.value.xformations, fmap(make_reset_full(speconds), seen));
 
-	for_all(for_loop.children, make_walk_conditions(on_loop_mod(max, conds, buffer_size)));
+	// *seen.begin() really should be any shared variable that does not have a factor - that is, 
+	// anything other than max
+	for_all(for_loop.children, make_walk_conditions(on_loop_mod(*seen.begin(), conds, buffer_size)));
 
 	pt_node::tree_iterator nested = find_shallow(for_loop, is_for_loop).second;
 	if (nested != for_loop.children.end()) {
@@ -1266,7 +1267,7 @@ void loop_mitosis(pt_node& for_loop, const conditions& conds, const conditions& 
 	pt_node::tree_iterator loop_cmpd = left_cmpd.first->children.insert(left_cmpd.second, *left_cmpd.second);
 	pt_node::tree_iterator rem = next(loop_cmpd, left_cmpd.first->children);
 
-	rem->value.xformations.push_back(new if_clause(rem_adaptor(max).name()));
+	rem->value.xformations.push_back(new if_clause(rem_adaptor(*seen.begin()).name()));
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *rem, ids::for_loop);
 }
 
