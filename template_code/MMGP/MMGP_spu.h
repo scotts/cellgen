@@ -197,14 +197,19 @@ inline void ppe_exchange()
 inline void spe_stop(int fn_id __attribute__((unused)))
 {
 	sig.start = 0;
+
 	#ifdef PROFILING
 	cellgen_dma_start();
 	#endif
+
 	spu_dsync();
+
 	#ifdef PROFILING
 	cellgen_dma_stop(fn_id);
 	#endif
-	sig.stop=1;
+
+	sig.stop = 1;
+
 	#ifdef PROFILING
 	sig.T_fn[fn_id-1] += GET_TIME() - total_time_start;
 	cellgen_idle_start();

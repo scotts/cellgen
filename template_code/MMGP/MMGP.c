@@ -41,6 +41,8 @@ spe_spu_control_area_t* mbox_ps_area[MAX_NUM_SPEs];
 spe_sig_notify_1_area_t* sig_notify_ps_area[MAX_NUM_SPEs];
 spe_mssync_area_t* mssync_ps_area[MAX_NUM_SPEs];
 
+unsigned int spe_threads;
+unsigned int num_physical_spes;
 unsigned int phys_map[MAX_NUM_SPEs];
 int has_numa = 1;
 unsigned int page_shift;

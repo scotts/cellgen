@@ -41,18 +41,16 @@ struct signal_t {
 volatile unsigned int pass[MAX_NUM_SPEs];
 volatile unsigned int sig[MAX_NUM_SPEs];
 
-unsigned int spe_threads;
-unsigned int num_physical_spes;
-
+extern unsigned int spe_threads;
 extern unsigned int phys_map[MAX_NUM_SPEs];
 extern int has_numa;
 extern unsigned int page_shift;
 extern unsigned long long timebase;
 
 #ifdef PROFILING
-unsigned long long time_loop[NUM_FNs];
+unsigned long long time_loop[NUM_FNs + 1];
+unsigned int cnt_loop[NUM_FNs + 1];
 unsigned long long loop_time;
-unsigned int cnt_loop[NUM_FNs];
 unsigned int loop_started;
 unsigned long long ppu_start;
 unsigned long long ppu_between_loops;
