@@ -29,7 +29,7 @@ extern "C" {
 
 #define TB 79800000UL
 unsigned long long total_time_start, loop_time_start;
-unsigned long long dma_time_start, idle_time_start;
+unsigned long long dma_time_start, dma_prep_start, idle_time_start;
 int idle_has_begun;
 
 #endif // PROFILING
@@ -44,6 +44,7 @@ struct signal_t {
 	#ifdef PROFILING
 	unsigned long long T_fn[NUM_FNs];
 	unsigned long long T_DMA[NUM_FNs];
+	unsigned long long T_DMA_prep[NUM_FNs];
 	unsigned long long T_total[NUM_FNs];
 	unsigned long long idle_time;
 	unsigned long long all_fn;
@@ -77,6 +78,7 @@ inline void cellgen_report(void)
 	for (i = 0; i < NUM_FNs; i++) {
 		sig.all_fn += sig.T_fn[i];
 		sig.all_dma += sig.T_DMA[i];
+		sig.all_dma_prep += sig.T_DMA_prep[i];
 		sig.all_total += sig.T_total[i];
 	}
 
@@ -117,14 +119,14 @@ inline void cellgen_total_stop(int loop __attribute__((unused)))
 inline void cellgen_dma_prep_start()
 {
 	#ifdef PROFILING
-	dma_time_start = GET_TIME();
+	dma_prep_start = GET_TIME();
 	#endif
 }
 
-inline void cellgen_dma_prep_stop()
+inline void cellgen_dma_prep_stop(int loop __attribute__((unused)))
 {
 	#ifdef PROFILING
-	sig.all_dma_prep += GET_TIME() - dma_time_start;
+	sig.T_DMA_prep[loop-1] += GET_TIME() - dma_prep_start;
 	#endif
 }
 

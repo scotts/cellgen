@@ -29,6 +29,7 @@ struct signal_t {
 	#ifdef PROFILING
 	unsigned long long T_fn[NUM_FNs];
 	unsigned long long T_DMA[NUM_FNs];
+	unsigned long long T_DMA_prep[NUM_FNs];
 	unsigned long long T_total[NUM_FNs];
 	unsigned long long idle_time;
 	unsigned long long all_fn;

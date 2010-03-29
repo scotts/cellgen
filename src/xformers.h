@@ -1197,7 +1197,7 @@ public:
 					tsize + "-" + Access::more(is_remainder));
 		}
 
-		return old + "cellgen_dma_prep_start();" + dma + "cellgen_dma_prep_stop();";
+		return old + "cellgen_dma_prep_start(fn_id);" + dma + "cellgen_dma_prep_stop(fn_id);";
 	}
 
 	xformer* clone() const { return new gen_in_first<Access>(*this); }
@@ -1238,12 +1238,12 @@ public:
 
 			const string buf = hug(hug(prev.name() + "+" + to_string(off_spread + 1)) + "%" + to_string(off_spread + 2)) + "+" + Access::more(is_remainder);
 
-			return old + "cellgen_dma_prep_start();" + 
+			return old + "cellgen_dma_prep_start(fn_id);" + 
 				prev_assign + rotate_next(to_string(off_spread + 2)) + wait_next + 
 				dma_in(hug(v->name() + "+" + Access::next_buffer(conds.induction + "+" + Access::less(is_remainder), nested)), 
 					Access::local_buffer(buf), Access::bounds_check()) +
 				buff_step + wait_prev + 
-				"cellgen_dma_prep_stop();";
+				"cellgen_dma_prep_stop(fn_id);";
 		}
 		else {
 			if (is_remainder) {
@@ -1252,12 +1252,12 @@ public:
 					wait_next;
 			}
 			else {
-				return old + "cellgen_dma_prep_start();" + 
+				return old + "cellgen_dma_prep_start(fn_id);" + 
 					prev_assign + rotate_next(to_string(depth)) + wait_next + 
 					dma_in(hug(v->name() + "+" + Access::next_buffer(conds.induction + "+" + buff.size() + "+" + to_string(low), nested)), 
 						Access::local_buffer(next.name()), Access::bounds_check()) +
 					orig.name() + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + prev.name() + ";" +
-					wait_prev + "cellgen_dma_prep_stop();";
+					wait_prev + "cellgen_dma_prep_stop(fn_id);";
 			}
 		}
 	}
@@ -1292,7 +1292,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 		}
 		else {
 			dma = dma_out(hug(v->name() + "+" + Access::this_buffer(nested)), depth);
-			return "cellgen_dma_prep_start();" + dma + var_switch + wait + "cellgen_dma_prep_stop();" + old;
+			return "cellgen_dma_prep_start(fn_id);" + dma + var_switch + wait + "cellgen_dma_prep_stop(fn_id);" + old;
 		}
 	}
 

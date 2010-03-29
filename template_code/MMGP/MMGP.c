@@ -268,6 +268,7 @@ static void cellgen_finish(void)
 
 	unsigned long long T_L[MAX_NUM_SPEs][NUM_FNs];
 	unsigned long long T_DMA[MAX_NUM_SPEs][NUM_FNs];
+	unsigned long long T_DMA_prep[MAX_NUM_SPEs][NUM_FNs];
 	unsigned long long T_total[MAX_NUM_SPEs][NUM_FNs];
 	unsigned long long T_L_spe[spe_threads];
 	unsigned long long T_DMA_spe[spe_threads];
@@ -323,10 +324,10 @@ static void cellgen_finish(void)
 
 	printf("\n");
 
-	printf("SPE\tfn\t\tfn_kernel\tDMA_all\t\tDMA_prep\tidle\n");
+	printf("SPE\t\tfn\t\tfn_kernel\tDMA_all\t\tDMA_prep\tidle\n");
 	for (i = 0; i < spe_threads; i++) {
-		printf("spe%u\t%7.6f\t%7.6f\t%7.6f\t%7.6f\t%7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
-			(double)T_DMA_spe[i] / timebase, (double)T_DMA_prep_spe[i] / timebase, (double)T_idle_spe[i] / timebase);
+		printf("spe%u total\t%7.6f\t%7.6f\t%7.6f\t%7.6f\t%7.6f\n", i+1, (double)T_L_spe[i] / timebase, (double)T_total_spe[i] / timebase, 
+			(double)T_DMA_spe[i] / timebase, (double)(T_DMA_prep_spe[i] - T_DMA_spe[i]) / timebase, (double)T_idle_spe[i] / timebase);
 	}
 
 	// For easy parsing when multiple runs are in the same output file
