@@ -775,13 +775,15 @@ public:
 			buffer_adaptor buff(v);
 			orig_adaptor orig(v);
 
-			ret =	"dma_get(" +
+			ret =	"cellgen_dma_prep_start(fn_id);"
+				"dma_get(" +
 					buff.name() + "," +
 					"(unsigned long)" + orig.name() + "," +
 					"sizeof(" + buff.type() + ")*" + buff.size() + ","
 					"3); \n" + 
 				orig.name() + "=" + buff.name() + ";"
-				"dma_wait(3, fn_id); \n";
+				"dma_wait(3, fn_id); "
+				"cellgen_dma_prep_stop(fn_id);";
 		}
 
 		return old + ret;
@@ -1288,7 +1290,7 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 		string dma;
 		if (is_remainder && !is_ois_infected) {
 			dma = dma_out(hug(v->name() + "+" + Access::final_buffer()), depth, Access::remainder_size(), next.name()); 
-			return dma + wait + old;
+			return "cellgen_dma_prep_start(fn_id);" + dma + wait + "cellgen_dma_prep_stop(fn_id);" + old;
 		}
 		else {
 			dma = dma_out(hug(v->name() + "+" + Access::this_buffer(nested)), depth);
