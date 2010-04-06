@@ -17,11 +17,16 @@ const int N = __N;
 const int QN = __N / 4;
 const int PN = __PN;
 const int FN = __FN;
+const int FOUR = 4;
 
 double root[__N] __attribute__((aligned(128)));
 double l[__N] __attribute__((aligned(128)));
 double r[__N] __attribute__((aligned(128)));
 double pp[__N] __attribute__((aligned(128)));
+
+double root_m[__N / 4][4] __attribute__((aligned(128)));
+double l_m[__N / 4][4] __attribute__((aligned(128)));
+double r_m[__N / 4][4] __attribute__((aligned(128)));
 
 double root_ref[__N];
 
@@ -43,6 +48,20 @@ void assert_equal()
 	}
 }
 
+void assert_multi_equal()
+{
+	int i;
+	for (i = 0; i < QN; ++i) {
+
+		int j;
+		for (j = 0; j < 4; ++j) {
+			if (root_m[i][j] != root_ref[i*4+j]) {
+				printf("multi fail at (%d,%d): ref %f, m %f\n", i, j, root_ref[i*4+j], root_m[i][j]);
+			}
+		}
+	}
+}
+
 int double_eq(double a, double b)
 {
 	return fabs(a - b) < 0.00001;
@@ -53,16 +72,37 @@ int main()
 	int i;
 	for (i = 0; i < N; ++i) {
 		root[i] = root_ref[i] = 1;
-		l[i] = 3.14 * (i+1);
-		r[i] = 2.71 * (i+1);
-		pp[i] = 1.41 * (i+1);
+		l[i] = 3 * (i+1);
+		r[i] = 2 * (i+1);
+		pp[i] = 1 * (i+1);
 	}
 
-	for (i = 0; i < PN; ++i) {
-		tl[i] = (i+1) + (i+1);
-		tr[i] = (i+1) * (i+1);
-		tp[i] = 1 / (i + 1);
+	for (i = 0; i < QN; ++i) {
+
+		int j;
+		for (j = 0; j < 4; ++j) {
+			l_m[i][j] = l[i*4+j];
+			r_m[i][j] = r[i*4+j];
+		}
 	}
+
+	tl[0] =  tl[5]  = tl[10] = tl[15] = 3;
+	tl[1] =  tl[2]  = tl[3]  = 2;
+	tl[4] =  tl[6]  = tl[7]  = 2;
+	tl[8] =  tl[9]  = tl[11] = 2;
+	tl[12] = tl[13] = tl[14] = 2;
+
+	tr[0] =  tr[5]  = tr[10] = tr[15] = 2 * 3;
+	tr[1] =  tr[2]  = tr[3]  = 2 * 2;
+	tr[4] =  tr[6]  = tr[7]  = 2 * 2;
+	tr[8] =  tr[9]  = tr[11] = 2 * 2;
+	tr[12] = tr[13] = tr[14] = 2 * 2;
+
+	tp[0] =  tp[5]  = tp[10] = tp[15] = 3 * 3;
+	tp[1] =  tp[2]  = tp[3]  = 3 * 2;
+	tp[4] =  tp[6]  = tp[7]  = 3 * 2;
+	tp[8] =  tp[9]  = tp[11] = 3 * 2;
+	tp[12] = tp[13] = tp[14] = 3 * 2;
 
 	for (i = 0; i < FN; ++i) {
 		freq[i] = 0.69 * (i+1);
@@ -71,6 +111,7 @@ int main()
 	for (i = 0; i < QN; ++i) {
 		weight[i] = i;
 	}
+
 
 	for (i = 0; i < QN; ++i) {
 		double t1;
@@ -92,6 +133,7 @@ int main()
 		t2 = r[(i*4)] * tr[12] + r[(i*4)+1] * tr[13] + r[(i*4)+2] * tr[14] + r[(i*4)+3] * tr[15];
 		root_ref[(i*4)+3] = t1 * t2;
 	}
+
 
 	#pragma cell private(double* tl = tl, double* tr = tr, int QN = QN) shared(double* pn = root, double* pl = l, double* pr = r)
 	{
@@ -119,6 +161,29 @@ int main()
 	}
 
 	assert_equal();
+
+	#pragma cell private(double* tl = tl, double* tr = tr) shared(double* root_m = root_m[QN][FOUR], double* l_m = l_m[QN][FOUR], double* r_m = r_m[QN][FOUR])
+	{
+		int i;
+		for (i = 0; i < QN; ++i) {
+
+			int j;
+			for (j = 0; j < FOUR; ++j) {
+				double t1 = 0.0;
+				double t2 = 0.0;
+
+				int k;
+				for (k = 0; k < FOUR; ++k) {
+					t1 += l_m[i][k] * tl[j == k ? 0 : 1];
+					t2 += r_m[i][k] * tr[j == k ? 0 : 1];
+				}
+
+				root_m[i][j] = t1 * t2;
+			}
+		}
+	}
+
+	assert_multi_equal();
 
 	for (i = 0; i < QN; i++) {
 		double t1;
