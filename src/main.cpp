@@ -66,6 +66,7 @@ struct cmdline_options {
 	bool print_pt;
 	int num_threads;
 	string inc_name;
+	string spe_inc_name;
 
 	cmdline_options(): print_pt(false), num_threads(0) {}
 };
@@ -277,7 +278,7 @@ void print_pass_struct(spelist& regions)
 	out << regex_replace(pass.str(), regex(pass_struct_hook), vars.str());
 }
 
-void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions, const string& inc_name)
+void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main, spelist& regions, const string& inc_name, const string& spe_inc_name)
 {
 	ofstream file(name.c_str());
 	open_check(file, name);
@@ -285,6 +286,9 @@ void print_spe(const string& name, stringstream& spe_dec, stringstream& spe_main
 	stringstream ss;
 	if (inc_name != "") {
 		ss << "#include \"../" << inc_name << "\"" << endl;
+	}
+	if (spe_inc_name != "") {
+		ss << "#include \"../" << spe_inc_name << "\"" << endl;
 	}
 	ss << spe_dec.str() << endl;
 
@@ -309,6 +313,7 @@ cmdline_options parse_command_line(int argc, char* argv[])
 		("infile,i", value<string>(&options.src_name), "input filename")
 		("ptout,p", value<bool>(&options.print_pt)->zero_tokens()->default_value(false), "print the pt")
 		("Include,I", value<string>(&options.inc_name), "filename to include in ppe and spe source")
+		("spe-include,s", value<string>(&options.spe_inc_name), "filename to include in spe source only")
 		("num_threads,n", value<int>(&options.num_threads)->default_value(0), "set number of SPE threads; default is all physical");
 
 		positional_options_description p;
@@ -372,7 +377,7 @@ int main(int argc, char* argv[])
 		print_pass_struct(spe_regions);
 		print_ppe(ppe_oname, ppe_src_blocks, ppe_prolouge, ppe_fork, spe_regions, opts.inc_name);
 
-		print_spe(spe_oname, spe_declarations, spe_main, spe_regions, opts.inc_name);
+		print_spe(spe_oname, spe_declarations, spe_main, spe_regions, opts.inc_name, opts.spe_inc_name);
 	
 		system(string("cp " + spe_profiler + " spu/").c_str());
 		system(string("cp " + cellstrider_dma_iname + " spu/").c_str());

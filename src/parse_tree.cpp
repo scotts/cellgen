@@ -724,6 +724,13 @@ struct assignment_search {
 		else if (node_is(node, ids::relational_expression)) {
 			try_expression_analysis(node.children.begin(), node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, in);
 		}
+		else if (node_is(node, ids::postfix_expression)) {
+			// Design decision or hack? This is for function calls. We're saying, through using a sharedset 
+			// we forget about, that we don't consider buffers passed to function calls as part of the in/out 
+			// analysis.
+			sharedset nop;
+			try_expression_analysis(node.children.begin(), node.children.end(), shared_symbols, priv_symbols, locals, conds, outer, ops, LOAD, nop);
+		}
 		else {
 			for_all(node.children, this);
 		}
