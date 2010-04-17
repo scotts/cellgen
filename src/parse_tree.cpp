@@ -1234,11 +1234,11 @@ void loop_flip(pt_node& outer_loop, const conditions& outer_conds, const shareds
 	for_all(inner_loop.children, make_walk_conditions(ois_inner_loop(v, conds, off)));
 
 	pair<pt_node*, pt_node::tree_iterator> cmpd = find_shallow(outer_loop, is_compound_expression);
+	append(cmpd.second->children.front().value.xformations, fmap(make_zero_next(), seen));
 
 	// Point of duplication
 	pt_node::tree_iterator dupe = outer_loop.children.insert(find_if_all(outer_loop.children, bind(same_object<pt_node>, _1, outer_loop)), *cmpd.second);
 	dupe->value.xformations.push_back(new if_clause(rem_adaptor(v).name()));
-	append(dupe->children.front().value.xformations, fmap(make_zero_next(), seen));
 
 	call_descend(make_for_all_xformations(mem_fn(&xformer::remainder_me)), *dupe);
 	call_descend(make_for_all_xformations(mem_fn(&xformer::infect_me)), *dupe);
