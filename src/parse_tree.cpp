@@ -1751,8 +1751,8 @@ struct cell_region {
 			sharedset::iterator ois = find_if_all(shared, mem_fn(&shared_variable::is_off_induction_stencil));
 			if (ois != shared.end()) {
 				// FIXME: search in privs, not priv_symbols
-				priv_symbols[spe_start.name()]->definition((*ois)->off().start);
-				priv_symbols[spe_stop.name()]->definition((*ois)->off().stop);
+				//priv_symbols[spe_start.name()]->definition((*ois)->off().start);
+				//priv_symbols[spe_stop.name()]->definition((*ois)->off().stop);
 			}
 
 			xformerlist& front = node.children.front().value.xformations;
