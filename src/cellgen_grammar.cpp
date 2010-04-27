@@ -297,8 +297,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	string buffer;
 	push_back_op<sslist> ppe_op;
 	vars_op<private_variable> priv_op;
-	special_assign<private_variable> start_op;
-	special_assign<private_variable> stop_op;
 	vars_op<shared_variable> shared_op;
 	vars_op<reduction_variable> reduce_def_op;
 	scalar_op<string> reduce_op_op;
@@ -308,8 +306,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 	cellgen_grammar(sslist& ppe, spelist& regions):
 		ppe_op(ppe),
 		priv_op(privs, private_symbols, regions),
-		start_op(priv_op, private_symbols, "spe_start", regions),
-		stop_op(priv_op, private_symbols, "spe_stop", regions),
 		shared_op(shared, shared_symbols, privs, private_symbols, regions),
 		reduce_def_op(reduces, reduction_symbols, regions),
 		reduce_op_op(op),
@@ -328,7 +324,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 		rule<ScannerT> 
 			program, options, ppe_code, spe_code,
 			reduction, operation, reduce_list, reduce_dec, reduce_dec_f,
-			start_code, start_priv, stop_code, stop_priv,
 			priv_code, priv_list, priv_dec, priv_dec_f,
 			shared_code, shared_list, shared_dec, shared_dec_f,
 			buffer_code, buffer_num;
@@ -359,27 +354,10 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 
 			options = 
 				priv_code 
-			| 	start_code
-			| 	stop_code
 			|	reduction
 			| 	shared_code
 			|	buffer_code
 			;
-
-			start_code = 
-				no_node_d[strlit<>("spe_start(")] >> start_priv >> no_node_d[chlit<>(')')];
-
-			start_priv = no_node_d[
-					lexeme_d[ (*(anychar_p - ')')) ]
-					[self.start_op]
-				];
-
-			stop_code = no_node_d[strlit<>("spe_stop(")] >> stop_priv >> no_node_d[chlit<>(')')];
-
-			stop_priv = no_node_d[
-					lexeme_d[ (*(anychar_p - ')')) ]
-					[self.stop_op]
-				];
 
 			priv_code = no_node_d[strlit<>("private(")] >> priv_list >> no_node_d[chlit<>(')')];
 
@@ -442,7 +420,6 @@ struct cellgen_grammar: public grammar<cellgen_grammar> {
 
 			buffer_code = no_node_d[strlit<>("buffer(")] >> buffer_num[self.buffer_op] >> no_node_d[chlit<>(')')];
 
-			//buffer_num = no_node_d[int_p];
 			buffer_num = no_node_d[*(anychar_p - ',' - ')')];
 		}
 	};

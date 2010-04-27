@@ -987,7 +987,7 @@ public:
 		}
 		else {
 			return v->math().remove_stencil(conds.induction).
-					replace_induction(v->off().induction, hug(v->off().induction + "+" + to_string(v->stencil_spread(v->off().induction)))).
+					replace_induction(v->off().induction, hug(v->off().induction + "+" + to_string(v->stencil_high(v->off().induction) + 1))).
 					replace_induction(conds.induction, hug(rep)).
 					expand_all_inductions(remove_back(above), nested).str();
 		}
@@ -1104,7 +1104,7 @@ public:
 	{
 		return v->math().remove_stencil(conds.induction).
 			expand_all_inductions(remove_back(above), nested).
-			replace_induction(v->off().induction, hug(v->off().induction + "+" + to_string(v->stencil_spread(v->off().induction)))).
+			replace_induction(v->off().induction, hug(v->off().induction + "+" + to_string(v->stencil_high(v->off().induction) + 1))).
 			replace_induction(conds.induction, hug(rep)).str();
 	}
 
@@ -1199,7 +1199,7 @@ public:
 		if (v->is_off_induction_stencil()) {
 			for (int i = 0; i < v->stencil_spread(v->off().induction) + 1; ++i) {
 				dma += dma_in(hug(v->name() + "+" + 
-					Access::first_buffer(Access::less(conds.induction, is_remainder), to_string(v->stencil_low(conds.induction) + i), nested)), 
+					Access::first_buffer(Access::less(conds.induction, is_remainder), to_string(v->stencil_low(v->off().induction) + i), nested)), 
 					Access::local_buffer(to_string(i)) + "+" + Access::more(is_remainder), 
 					tsize + "-" + Access::more(is_remainder));
 			}
@@ -1298,13 +1298,12 @@ struct gen_out: public conditions_xformer, public remainder_xformer, public nest
 
 		const string wait = "dma_wait(" + next.name() + ", fn_id);";
 
-		string dma;
-		if (is_remainder && !is_ois_infected) {
-			dma = dma_out(hug(v->name() + "+" + Access::final_buffer()), depth, Access::remainder_size(), next.name()); 
+		if (is_remainder/* && !is_ois_infected*/) {
+			string dma = dma_out(hug(v->name() + "+" + Access::final_buffer()), depth, Access::remainder_size(), next.name()); 
 			return "cellgen_dma_prep_start(fn_id);" + dma + wait + "cellgen_dma_prep_stop(fn_id);" + old;
 		}
 		else {
-			dma = dma_out(hug(v->name() + "+" + Access::this_buffer(nested)), depth);
+			string dma = dma_out(hug(v->name() + "+" + Access::this_buffer(nested)), depth);
 			return "cellgen_dma_prep_start(fn_id);" + dma + var_switch + wait + "cellgen_dma_prep_stop(fn_id);" + old;
 		}
 	}

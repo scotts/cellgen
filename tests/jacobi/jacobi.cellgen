@@ -24,26 +24,21 @@ void init(int (*a_p)[N], int (*b_p)[N], int16b_t (*a_s)[N], int16b_t (*b_s)[N])
 void jacobi_on_ppe(int (*a)[N], int (*b)[N])
 {
 	unsigned int i, j;
-	for (i = 1; i < N-1; ++i) {
-		for (j = 1; j < N-1; ++j) {
-			b[i][j] = a[i-1][j] + a[i+1][j] + a[i][j-1] + a[i][j+1];
-			//b[i][j] = a[i][j-1] + a[i][j+1];
+	for (i = 3; i < N-1; ++i) {
+		for (j = 2; j < N-1; ++j) {
+			b[i][j] = a[i-3][j] + a[i+1][j] + a[i][j-2] + a[i][j+1];
 		}
 	}
 }
 
 void jacobi_on_spe(int16b_t (*a)[N], int16b_t (*b)[N])
 {
-	// pragma cell shared(int16b_t* ai = a[N][N], int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
-	// pragma cell shared(int16b_t* aim = a[N][N], int16b_t* aip = a[N][N], int16b_t* aj = a[N][N], int16b_t* b = b[N][N])
 	#pragma cell shared(int16b_t* a = a[N][N], int16b_t* b = b[N][N])
 	{
 		int i, j;
-		for (i = 1; i < N-1; ++i) {
-			for (j = 1; j < N-1; ++j) {
-				//b[i][j].num = ai[i-1][j].num + ai[i+1][j].num + aj[i][j-1].num + aj[i][j+1].num;
-				b[i][j].num = a[i-1][j].num + a[i+1][j].num + a[i][j-1].num + a[i][j+1].num;
-				//b[i][j].num = aj[i][j-1].num + aj[i][j+1].num;
+		for (i = 3; i < N-1; ++i) {
+			for (j = 2; j < N-1; ++j) {
+				b[i][j].num = a[i-3][j].num + a[i+1][j].num + a[i][j-2].num + a[i][j+1].num;
 			}
 		}
 	}
@@ -52,10 +47,10 @@ void jacobi_on_spe(int16b_t (*a)[N], int16b_t (*b)[N])
 void check_results(int (*b_p)[N], int16b_t (*b_s)[N])
 {
 	int i, j;
-	for (i = 1; i < N-1; ++i) {
-		for (j = 1; j < N-1; ++j) {
+	for (i = 3; i < N-1; ++i) {
+		for (j = 2; j < N-1; ++j) {
 			if (b_p[i][j] != b_s[i][j].num) {
-				printf("(%d,%d) ppe %d, spe %d\n", i, j, b_p[i][j], b_s[i][j].num);
+				printf("fail at (%d,%d) ppe %d, spe %d\n", i, j, b_p[i][j], b_s[i][j].num);
 			}
 		}
 	}

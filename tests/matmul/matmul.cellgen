@@ -12,7 +12,7 @@ int double_eq(double a, double b)
 
 unsigned long long spe_matmul(double (*a)[N], double16b_t (*b)[N], double (*c)[N])
 {
-	const unsigned long long before = get_tb();
+	const unsigned long long start = get_tb();
 
 	#pragma cell shared(double* a = a[N][N], double16b_t* b = b[N][N], double* c = c[N][N])
 	{
@@ -29,13 +29,13 @@ unsigned long long spe_matmul(double (*a)[N], double16b_t (*b)[N], double (*c)[N
 		}
 	}
 
-	const unsigned long long after = get_tb();
-
-	return after - before;
+	return get_tb() - start;
 }
 
-void ppe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
+unsigned long long ppe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
 {
+	const unsigned long long start = get_tb();
+
 	int i, j, k;
 
 	for (i = 0; i < N; ++i) {
@@ -47,6 +47,8 @@ void ppe_matmul(double (*a)[N], double (*b)[N], double (*c)[N])
 			c[i][j] = sum;
 		}
 	}
+
+	return get_tb() - start;
 }
 
 void check_results(double (*spe)[N], double (*ppe)[N])
@@ -55,20 +57,15 @@ void check_results(double (*spe)[N], double (*ppe)[N])
 	for (i = 0; i < N; ++i) {
 		for (j = 0; j < N; ++j) {
 			if (!double_eq(spe[i][j], ppe[i][j])) {
-				printf("failure at (%d,%d); spe %d, ppe %d\n", i, j, spe[i][j], ppe[i][j]);
+				printf("failure at (%d,%d); spe %f, ppe %f\n", i, j, spe[i][j], ppe[i][j]);
 				return;
 			}
 		}
 	}
 }
 
-int main(int argc, char** argv)
+int main()
 {
-	int do_timing = 0;
-	if (argc > 1) {
-		do_timing = 1;
-	}
-
 	double (*a_spe)[N] = cellgen_malloc(N * N * sizeof(double));
 	double16b_t (*b_spe)[N] = cellgen_malloc(N * N * sizeof(double16b_t));
 	double (*c_spe)[N] = cellgen_malloc(N * N * sizeof(double));
@@ -77,6 +74,7 @@ int main(int argc, char** argv)
 	double (*b_ppe)[N] = malloc(N * N * sizeof(double));
 	double (*c_ppe)[N] = malloc(N * N * sizeof(double));
 
+	printf("initializing.\n");
 
 	int i, j;
 	for (i = 0; i < N; ++i) {
@@ -87,15 +85,24 @@ int main(int argc, char** argv)
 		}
 	}
 
-	unsigned long long time = 0;
+	unsigned long long spe_time = 0;
+	unsigned long long ppe_time = 0;
 	for (i = 0; i < ITERATIONS; ++i) {
-		time += spe_matmul(a_spe, b_spe, c_spe);
+		printf("%d: ", i);
+		unsigned long long t;
+		
+		t = spe_matmul(a_spe, b_spe, c_spe);
+		printf("spe %f, ", (double)t / timebase);
+		spe_time += t;
 
-		if (!do_timing) {
-			ppe_matmul(a_ppe, b_ppe, c_ppe);
-			check_results(c_spe, c_ppe);
-		}
+		t = ppe_matmul(a_ppe, b_ppe, c_ppe);
+		printf("ppe %f\n", (double)t / timebase);
+		ppe_time += t;
+
+		check_results(c_spe, c_ppe);
 	}
+
+	printf("spe avg %f\nppe avg %f\n", (double)(spe_time / ITERATIONS) / timebase, (double)(ppe_time / ITERATIONS) / timebase);
 
 	return 0;
 }
