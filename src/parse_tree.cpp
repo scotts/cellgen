@@ -1009,9 +1009,10 @@ struct ois_inner_loop {
 	{
 		switch (seen) {
 			case 1: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
+				for_all(node.children, replace_node(conds.start, new naked_string(off.start)));
 				break;
 			case 2: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
-				for_all(node.children, find_and_replace_xform<variable_name>(new naked_string(full_adaptor(v).name())));
+				for_all(node.children, replace_node(conds.stop, new naked_string(off.stop)));
 				break;
 			case 3: for_all(node.children, replace_node(conds.induction, new naked_string(off.induction)));
 				break;
@@ -1750,9 +1751,8 @@ struct cell_region {
 
 			sharedset::iterator ois = find_if_all(shared, mem_fn(&shared_variable::is_off_induction_stencil));
 			if (ois != shared.end()) {
-				// FIXME: search in privs, not priv_symbols
-				//priv_symbols[spe_start.name()]->definition((*ois)->off().start);
-				//priv_symbols[spe_stop.name()]->definition((*ois)->off().stop);
+				(*find_if_all(privs, make_val_equal(&private_variable::name, spe_start.name())))->definition((*ois)->conds().start);
+				(*find_if_all(privs, make_val_equal(&private_variable::name, spe_stop.name())))->definition((*ois)->conds().stop);
 			}
 
 			xformerlist& front = node.children.front().value.xformations;

@@ -1242,9 +1242,10 @@ public:
 
 		if (v->is_off_induction_stencil()) {
 			const int off_spread = v->stencil_spread(v->off().induction);
+			const int off_low = v->stencil_low(v->off().induction);
 
 			string buff_step;
-			for (int i = low, count = 0; i < v->stencil_high(v->off().induction) + 1; ++i, ++count) {
+			for (int i = off_low, count = 0; i < v->stencil_high(v->off().induction) + 1; ++i, ++count) {
 				buff_step += orig.off_stencil_name(i) + "=" + buff.name() + "+" + hug(buff.abs() + "+" + spread) + "*" + 
 					hug(hug(prev.name() + "+" + to_string(count)) + "%" + to_string(off_spread + 2)) + ";";
 			}

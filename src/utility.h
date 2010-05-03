@@ -369,6 +369,23 @@ fn_not<T> make_fn_not(bool (T::*f)() const)
 	return fn_not<T>(f);
 }
 
+template <class T, class V>
+struct val_equal: public unary_function<bool, const T*> {
+	V (T::*func)() const;
+	const V val;
+	val_equal(V (T::*f)() const, const V& v): func(f), val(v) {}
+	bool operator()(const T* t) const
+	{
+		return (t->*func)() == val;
+	}
+};
+
+template <class T, class V>
+val_equal<T, V> make_val_equal(V (T::*f)() const, const V& v)
+{
+	return val_equal<T, V>(f, v);
+}
+
 template <class T>
 bool same_object(const T& a, const T& b)
 {
