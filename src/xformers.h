@@ -986,7 +986,7 @@ public:
 				ihs(conds.induction).str(); 
 		}
 		else {
-			return v->math().remove_stencil(conds.induction).
+			return v->math().remove_stencil(conds.induction).remove_stencil(v->off().induction).
 					replace_induction(v->off().induction, hug(v->off().induction + "+" + to_string(v->stencil_high(v->off().induction) + 1))).
 					replace_induction(conds.induction, hug(rep)).
 					expand_all_inductions(remove_back(above), nested).str();
@@ -1019,7 +1019,7 @@ public:
 			return on;
 		}
 		else {
-			return v->math().remove_stencil(conds.induction).
+			return v->math().remove_stencil(conds.induction).remove_stencil(v->off().induction).
 				replace_induction(conds.induction, hug(on)).
 				replace_induction(v->off().induction, hug(v->off().start + "+" + off_count)).
 				expand_all_inductions(remove_back(above), nested).str();
@@ -1102,7 +1102,7 @@ public:
 
 	string next_buffer(const string& rep, const bool nested) const
 	{
-		return v->math().remove_stencil(conds.induction).
+		return v->math().remove_stencil(conds.induction).remove_stencil(v->off().induction).
 			expand_all_inductions(remove_back(above), nested).
 			replace_induction(v->off().induction, hug(v->off().induction + "+" + to_string(v->stencil_high(v->off().induction) + 1))).
 			replace_induction(conds.induction, hug(rep)).str();
@@ -1120,7 +1120,7 @@ public:
 
 	string first_buffer(const string& on, const string& off_count, const bool nested) const
 	{
-		return v->math().remove_stencil(conds.induction).
+		return v->math().remove_stencil(conds.induction).remove_stencil(v->off().induction).
 			replace_induction(conds.induction, hug(on)).
 			replace_induction(v->off().induction, hug(v->off().start + "+" + off_count)).
 			expand_all_inductions(remove_back(above), nested).str();

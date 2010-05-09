@@ -311,7 +311,7 @@ cmdline_options parse_command_line(int argc, char* argv[])
 		desc.add_options()
 		("help,h", "print usage message")
 		("infile,i", value<string>(&options.src_name), "input filename")
-		("ptout,p", value<bool>(&options.print_pt)->zero_tokens()->default_value(false), "print the pt")
+		("ptout,p", value<bool>(&options.print_pt)->zero_tokens()->default_value(false), "print the parse tree")
 		("Include,I", value<string>(&options.inc_name), "filename to include in ppe and spe source")
 		("spe-include,s", value<string>(&options.spe_inc_name), "filename to include in spe source only")
 		("num_threads,n", value<int>(&options.num_threads)->default_value(0), "set number of SPE threads; default is all physical");
