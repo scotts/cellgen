@@ -400,7 +400,7 @@ static unsigned long long get_timebase()
 __attribute__((constructor)) void __initialize()
 {
 	if (numa_available() < 0) {
-		fprintf(stderr, "numa is not available.\n");
+		//fprintf(stderr, "numa is not available.\n");
 		has_numa = 0;
 	}
 

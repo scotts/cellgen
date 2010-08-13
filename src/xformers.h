@@ -1254,8 +1254,10 @@ public:
 
 			return old + "cellgen_dma_prep_start(fn_id);" + 
 				prev_assign + rotate_next(to_string(off_spread + 2)) + wait_next + 
+				"if (" + v->off().induction + "<" + v->off().stop + "-1) {" +
 				dma_in(hug(v->name() + "+" + Access::next_buffer(Access::less(conds.induction, is_remainder), nested)), 
 					Access::local_buffer(buf), buffer_adaptor(v).size() + "+" + spread + "-" + Access::more(is_remainder)) +
+				"}" +
 				buff_step + wait_prev + 
 				"cellgen_dma_prep_stop(fn_id);";
 		}
